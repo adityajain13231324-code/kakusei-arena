@@ -18,8 +18,12 @@ import { HudScreen } from '../ui/screens/hud';
 import { PauseScreen, MoveListScreen } from '../ui/screens/pause';
 import { SettingsScreen, RemapScreen } from '../ui/screens/settings';
 import { HowToScreen } from '../ui/screens/howto';
+import { OnlineMenuScreen, OnlineLobbyScreen } from '../ui/screens/online';
+import { OnlineController } from '../net/online';
+import { JOIN_HASH_RE } from '../net/protocol';
 import { SettingsStore } from './settings';
 import { MatchSession } from './session';
+import type { SessionHooks } from './session';
 import type { AppApi, Flow, Mode } from './api';
 
 const ARCADE_STAGES: StageId[] = ['rooftop', 'shrine', 'rooftop'];
@@ -33,6 +37,7 @@ export class App implements AppApi {
   vfx: VfxSystem | null = null;
   readonly ui: UI;
   session: MatchSession | null = null;
+  readonly online: OnlineController;
   flow: Flow = {
     mode: 'arcade', difficulty: 'normal', p1: 'kaito', p2: 'shiori', stage: 'rooftop',
     schemes: ['pro', 'pro'], ladder: [], ladderIndex: 0, arcadeFrames: 0,
@@ -61,6 +66,7 @@ export class App implements AppApi {
     setSfx((s) => this.audio.ui(s));
 
     this.ui = new UI(uiRoot);
+    this.online = new OnlineController(this);
     this.hud = new HudScreen(this);
     this.vs = new VsScreen(this);
     this.ui.register('title', new TitleScreen(this));
@@ -78,6 +84,8 @@ export class App implements AppApi {
     this.ui.register('settings', new SettingsScreen(this));
     this.ui.register('remap', new RemapScreen(this));
     this.ui.register('credits', new CreditsScreen(this));
+    this.ui.register('online', new OnlineMenuScreen(this));
+    this.ui.register('onlinelobby', new OnlineLobbyScreen(this));
 
     this.toastEl = h('div', { class: 'toast' });
     this.debugEl = h('pre', { class: 'debug' });
@@ -105,6 +113,8 @@ export class App implements AppApi {
     this.applySettings();
     this.resize();
     this.ui.go('title');
+    this.checkJoinHash();
+    window.addEventListener('hashchange', () => this.checkJoinHash());
     requestAnimationFrame(this.loop);
   }
 
@@ -167,6 +177,7 @@ export class App implements AppApi {
     this.ui.handleMenu(a, slot);
   }
   private autoPause(): void {
+    if (this.session?.mode === 'online') return; // online matches never pause
     if (this.session && this.ui.top() === 'hud' && !this.session.paused && !this.session.ended) this.pause();
   }
 
@@ -178,6 +189,7 @@ export class App implements AppApi {
     window.setTimeout(() => this.ui.go('menu'), 380);
   }
   goMenu(): void {
+    this.online.shutdown();
     this.endSession();
     this.input.setContext('menu');
     this.input.setVersus(false);
@@ -187,6 +199,7 @@ export class App implements AppApi {
   chooseMode(m: Mode): void {
     this.flow.mode = m;
     this.input.setVersus(m === 'versus');
+    if (m === 'online') { this.ui.go('online'); return; }
     if (m === 'arcade') this.ui.go('difficulty'); else this.ui.go('charselect', { mode: m });
   }
   setDifficulty(d: Difficulty): void { this.flow.difficulty = d; this.ui.go('charselect', { mode: 'arcade' }); }
@@ -308,12 +321,68 @@ export class App implements AppApi {
     });
   }
 
+  // ------------------------------------------------------------ online (src/net drives these)
+  private checkJoinHash(): void {
+    const m = JOIN_HASH_RE.exec(location.hash);
+    if (!m) return;
+    const code = m[1].toUpperCase();
+    if (this.online.active && this.online.code === code) return;
+    this.endSession();
+    this.flow.mode = 'online';
+    this.input.setVersus(false);
+    this.input.setContext('menu');
+    this.safe('audio.music', () => this.audio.music('menu'));
+    this.ui.go('onlinelobby');
+    this.online.join(code);
+  }
+  startNetMatch(o: { cfg: MatchConfig; label: string; create(onEvents: SessionHooks['onEvents']): MatchSession; onShown(): void }): void {
+    void (async () => {
+      this.endSession();
+      const my = this.token;
+      const { cfg } = o;
+      const session = o.create((ev, st) => {
+        this.safe('vfx.handleEvents', () => this.vfx?.handleEvents(ev, st));
+        this.safe('audio.handleEvents', () => this.audio.handleEvents(ev, st));
+        this.hud.handleEvents(ev, st);
+      });
+      this.ui.go('vs', { p1: cfg.p1, p2: cfg.p2, stage: cfg.stage, label: o.label, cpu: false });
+      this.input.setContext('menu');
+      const load = this.safe('loadMatch', () => this.renderer?.loadMatch(session.state));
+      await Promise.all([Promise.resolve(load).catch((e) => console.warn('[app] loadMatch failed', e)), sleep(2000)]);
+      if (my !== this.token) return;
+      this.vs.setReady();
+      await sleep(260);
+      if (my !== this.token) return;
+      this.session = session;
+      this.menuKey = '';
+      this.hud.begin(session);
+      this.ui.go('hud');
+      this.input.setContext('game');
+      this.safe('audio.music', () => this.audio.music(cfg.stage === 'training' ? 'training' : cfg.stage));
+      this.updateTouch();
+      o.onShown();
+    })();
+  }
+  finishNetMatch(): void {
+    this.safe('vfx.clear', () => this.vfx?.clear());
+    this.input.setContext('menu');
+    this.updateTouch();
+    this.safe('audio.music', () => this.audio.music('victory'));
+  }
+  leaveNetMatch(screen: 'online' | 'onlinelobby'): void {
+    this.endSession();
+    this.input.setContext('menu');
+    this.input.setVersus(false);
+    this.safe('audio.music', () => this.audio.music('menu'));
+    this.ui.go(screen);
+  }
+
   // ------------------------------------------------------------ pause
   pause(): void {
     const s = this.session;
     if (!s || s.paused || this.ui.top() !== 'hud' || s.ended) return;
-    s.paused = true;
-    this.safe('audio.setPaused', () => this.audio.setPaused(true));
+    s.paused = true; // online: menu only, the match keeps running (NetSession sends neutral input)
+    if (s.mode !== 'online') this.safe('audio.setPaused', () => this.audio.setPaused(true));
     this.input.setContext('menu');
     this.ui.push('pause');
     this.updateTouch();

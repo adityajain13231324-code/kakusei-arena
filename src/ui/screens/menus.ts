@@ -56,7 +56,7 @@ export class MainMenuScreen extends BaseScreen {
       { label: 'ARCADE', sub: 'アーケード', desc: 'Fight your way through every rival. Beat the ladder against the CPU.', act: () => app.chooseMode('arcade') },
       { label: 'VERSUS', sub: '対戦', desc: 'Local 2-player: two keyboards layouts, two gamepads, or keyboard + pad.', act: () => app.chooseMode('versus') },
       { label: 'TRAINING', sub: '修行', desc: 'Hitboxes, frame data, input display and a dummy to punish.', act: () => app.chooseMode('training') },
-      { label: 'ONLINE', sub: 'COMING SOON', desc: 'Online rooms with rollback netcode are coming in a later update.', act: () => {}, off: true },
+      { label: 'ONLINE', sub: 'オンライン', desc: 'Play a friend online: create a room, share the link, rollback netcode.', act: () => app.chooseMode('online') },
       { label: 'HOW TO PLAY', sub: '遣い方', desc: 'Controls for keyboard, gamepad and touch, plus every system explained.', act: () => app.ui.push('howto') },
       { label: 'SETTINGS', sub: '設定', desc: 'Volume, graphics quality, accessibility, touch controls and key remapping.', act: () => app.ui.push('settings') },
       { label: 'CREDITS', sub: '制作', desc: 'Who built this.', act: () => app.ui.push('credits') },
