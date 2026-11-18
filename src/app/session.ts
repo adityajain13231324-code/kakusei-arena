@@ -2,7 +2,7 @@
 import { Btn } from '../sim/types';
 import type { GameState, InputBits, MatchConfig, SimEvent } from '../sim/types';
 import { cloneState, createMatch, getMove, step } from '../sim';
-import { CpuController } from '../ai';
+import { CpuController, dummyInput as aiDummyInput } from '../ai';
 import type { Difficulty } from '../ai';
 import type { Mode } from './api';
 
@@ -75,22 +75,9 @@ export class MatchSession {
   }
 
   private dummyInput(): InputBits {
-    const f1 = this.state.fighters[1];
-    const back = f1.side === -1 ? Btn.Left : Btn.Right;
-    switch (this.dummy) {
-      case 'stand': return 0;
-      case 'crouch': return Btn.Down;
-      case 'jump': return this.state.frame % 100 < 4 ? Btn.Up : 0;
-      case 'guardAll': return back | Btn.Guard;
-      case 'randomGuard': {
-        if (--this.guardLeft <= 0) {
-          this.guardLeft = 30 + Math.floor(Math.random() * 50);
-          this.guardOn = Math.random() < 0.6;
-        }
-        return this.guardOn ? back | Btn.Guard : 0;
-      }
-      case 'cpu': return this.trainingCpu ? this.trainingCpu.think(this.state) : 0;
-    }
+    // deterministic dummy behaviours live in the AI module (replay/rollback safe)
+    if (this.dummy === 'cpu') return this.trainingCpu ? this.trainingCpu.think(this.state) : 0;
+    return aiDummyInput(this.state, 1, this.dummy);
   }
 
   private inputs(): [InputBits, InputBits] {
