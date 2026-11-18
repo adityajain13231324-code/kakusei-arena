@@ -9,7 +9,7 @@ KAKUSEI ARENA: a browser 3D anime fighting game (Tekken-style 3D movement + anim
 | Branch | What's in it |
 |---|---|
 | `main` | Stable, tested modules: sim + roster data, CPU AI, VFX, synth audio, UI/menus/HUD/touch, online rollback, Astra's v1 models. |
-| `claude-wip` | Snapshot of work still in progress: GLB-skinned renderer (`src/render/`), upgraded v2 models (`public/characters/`), UI polish v2 (fightkaro-style select, broadcast commentator/ticker). May be unfinished. The lead may push a newer snapshot or merge it into `main` — always fetch first and start from the newest of the two. |
+| `claude-wip` | Old snapshot — now fully MERGED into `main`. Ignore it; start from `main`. |
 | `astra/*` | Your work. **Never commit to `main` directly.** Open a PR into `main`. |
 
 ## 3. Commands
@@ -37,7 +37,7 @@ Online dev without internet: open two tabs with `?net=local` (add `&lag=40&jitte
 10. Don't rewrite working modules. Fix in place. If unsure, write the question in `DECISIONS.md` and pick the simpler option.
 
 ## 5. Task list (do in order, tick as you go)
-- [ ] **T1 Sync.** `git fetch`, branch `astra/continue` from the newest of `main` / `claude-wip`. Run all commands in §3. Fix any errors first.
+- [ ] **T1 Sync.** `git fetch`, branch `astra/continue` from `main`. Run all commands in §3. Fix any errors first.
 - [ ] **T2 Renderer finish.** In a live match (Versus or Training): GLB fighters load, every pose in `POSES` reads correctly on the bones, attacks line up with hitboxes (F2 hitbox view in Training), toon shading + outlines, awakened texture swap (+ Goro shoulder plates), hair/scarf secondary motion, Ren's katana in hand only during sword poses, P2 mirror-match palette tint. Title + character-select menu scenes show posed fighters. *Done when:* screenshots of all 4 fighters fighting on both stages look polished.
 - [ ] **T3 Models.** Compare `public/characters/previews/*` for all 4 fighters. Any fighter still looking blocky/toyish → improve via `tools/assets/` build script (same rules as §4.5). Re-export + re-check in game.
 - [ ] **T4 Stages.** Rooftop + Shrine rich and lit: crowd that cheers on KO/ultimate/counter, banners with original text, props, petals/neon. Walls visible at `arenaHalfSize`. ≤80k tris each.
@@ -68,4 +68,4 @@ Online dev without internet: open two tabs with `?net=local` (add `&lag=40&jitte
 Commit on `astra/continue`, push, and add a line under "Log" below: date, task, what changed, anything left.
 
 ## Log
-- 2026-11-18 — Claude (lead): v0.1 modules merged to `main`; v2 renderer/models/UI polish snapshot on `claude-wip`.
+- 2026-11-18 — Claude (lead): all modules on `main`. The v2 renderer, model upgrade and UI polish helpers were STOPPED mid-work and their work committed as-is. State at handoff: typecheck 0 errors, sim tests 256/256, build OK, a live match runs with GLB fighters, HUD, commentator + ticker, crowd (see `docs/screenshots/live-match-v2.png`), no console errors in a smoke test. NOT verified: every pose on bones, awakened swap, Goro plates, menu 3D scenes, phone layout, and whether all 4 models got the v2 upgrade (compare `public/characters/previews/`). Match camera looked close/dark in the smoke test — check framing + lighting in T2/T4.

@@ -1,191 +1,384 @@
 import type { AppApi, Mode } from '../../app/api';
+import type { Difficulty } from '../../ai';
 import type { MenuAction } from '../../input';
 import { ALL_CHARS, ALL_STAGES } from '../../sim/types';
 import type { CharId, ControlScheme, StageId } from '../../sim/types';
 import { h, sfx } from '../dom';
 import { BaseScreen } from './base';
-import { META, STAGES, charName, charTitle, fillPortrait, portraitEl, refreshPortraits, stars } from '../meta';
+import { CHAPTER2, META, STAGES, ULT_DESC, charName, charTitle, portraitEl, refreshPortraits, ultName } from '../meta';
+import { ICON_GLOBE, ICON_LOCK, audioTools } from '../widgets';
 
 const RANDOM = 4;
+const SIL =
+  '<svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMax meet"><path d="M50 14c-12 0-20 9-20 22 0 8 3 14 8 18-14 4-26 12-28 30l-2 36h84l-2-36c-2-18-14-26-28-30 5-4 8-10 8-18 0-13-8-22-20-22z" /></svg>';
+const DIFFS: { id: Difficulty; name: string }[] = [
+  { id: 'easy', name: 'EASY' }, { id: 'normal', name: 'NORMAL' }, { id: 'hard', name: 'HARD' }, { id: 'nightmare', name: 'NIGHTMARE' },
+];
+type Zone = 'tabs' | 'grid' | 'chips' | 'btns';
+const ZONES: Zone[] = ['tabs', 'grid', 'chips', 'btns'];
 
-interface Panel {
-  root: HTMLElement; tag: HTMLElement; given: HTMLElement; family: HTMLElement; title: HTMLElement;
-  tags: HTMLElement; stars: HTMLElement; scheme: HTMLButtonElement; blurb: HTMLElement; lock: HTMLElement;
+interface Info {
+  root: HTMLElement; tag: HTMLElement; name: HTMLElement; title: HTMLElement; ult: HTMLElement; desc: HTMLElement;
+  scheme: HTMLElement; lock: HTMLElement; rnd: HTMLElement;
 }
 
 export class CharSelectScreen extends BaseScreen {
-  private mode: Mode = 'versus';
-  private players = 2;
+  private mode: Mode = 'arcade';
+  private players = 1;
+  private active: 0 | 1 = 0;
   private cursor: [number, number] = [0, 1];
+  private rolled: [CharId, CharId] = ['kaito', 'shiori'];
   private locked: [boolean, boolean] = [false, false];
-  private picked: [CharId, CharId] = ['kaito', 'shiori'];
   private schemes: [ControlScheme, ControlScheme] = ['pro', 'pro'];
   private cards: HTMLElement[] = [];
-  private marks: [HTMLElement, HTMLElement][] = [];
-  private panels: [Panel, Panel];
+  private tabs: HTMLElement[] = [];
+  private tabLbl: HTMLElement[] = [];
+  private stageChips: HTMLElement[] = [];
+  private cpuChips: HTMLElement[] = [];
+  private cpuGroup: HTMLElement;
+  private stageIds: StageId[] = [];
+  private friendBtn: HTMLElement; private fightBtn: HTMLElement;
+  private info: [Info, Info];
+  private zone: Zone = 'grid';
+  private zi: Record<Zone, number> = { tabs: 1, grid: 0, chips: 0, btns: 1 };
   private finishing = false;
   private timer = 0;
   private lastPreview = '';
-  private head: HTMLElement;
-  private ladder: HTMLElement;
-  private hint: HTMLElement;
+  private sub: HTMLElement;
+  private chipsRow: HTMLElement;
 
   constructor(app: AppApi) {
     super(app, '');
     this.el.classList.add('charselect');
-    this.head = h('h2', { class: 'scr-head' });
-    const strip = h('div', { class: 'cs-strip' });
+    // ---- header
+    const title = h('h2', { class: 'cx-title' }, h('span', null, 'SELECT YOUR '), 'FIGHTER');
+    this.sub = h('div', { class: 'cx-sub' });
+    const back = h('button', { class: 'cx-pill', type: 'button', onclick: () => { sfx('back'); this.back(); } }, '◀ BACK');
+    const how = h('button', { class: 'cx-pill alt', type: 'button', onclick: () => { sfx('select'); this.app.ui.push('howto'); } }, '? HOW TO PLAY');
+    const left = h('div', { class: 'cx-tl' }, back, how);
+    const vs = h('div', { class: 'cx-vs' }, h('span', null, 'VS'));
+    // ---- tabs
+    const mkTab = (p: 0 | 1) => {
+      const lbl = h('span', { class: 'cx-tab-l' });
+      const badge = h('i', null, p === 0 ? '1P' : 'CPU');
+      const t = h('button', { class: 'cx-tab' + (p === 1 ? ' b' : ''), type: 'button' }, badge, lbl);
+      t.addEventListener('click', () => { if (this.finishing) return; sfx('select'); this.setActive(p); this.zone = 'grid'; this.paintFocus(); });
+      this.tabLbl.push(lbl); this.tabs.push(t);
+      return t;
+    };
+    const tabsRow = h('div', { class: 'cx-tabs' }, mkTab(0), mkTab(1));
+    // ---- chapter 1 grid
+    const grid = h('div', { class: 'cx-grid' });
     for (let i = 0; i <= RANDOM; i++) {
       const isR = i === RANDOM;
-      const card = h('button', { class: 'cs-card' + (isR ? ' random' : ''), type: 'button', style: isR ? '--c:#ffffff' : `--c:${META[ALL_CHARS[i]].color}` });
-      if (isR) card.append(h('div', { class: 'portrait rnd' }, h('span', { class: 'kanji' }, '?')));
+      const card = h('button', { class: 'cx-card' + (isR ? ' random' : ''), type: 'button', style: isR ? '--c:#ffffff' : `--c:${META[ALL_CHARS[i]].color}` });
+      if (isR) card.append(h('div', { class: 'portrait rnd' }, h('span', { class: 'q' }, '?')));
       else card.append(portraitEl(ALL_CHARS[i], '', 256));
-      card.append(h('div', { class: 'cs-name' }, isR ? 'RANDOM' : META[ALL_CHARS[i]].given));
-      const m1 = h('span', { class: 'mk p1' }, 'P1'), m2 = h('span', { class: 'mk p2' }, 'P2');
-      card.append(m1, m2);
+      card.append(h('div', { class: 'cx-nm' }, isR ? 'RANDOM' : META[ALL_CHARS[i]].given),
+        h('span', { class: 'cx-tag t1' }, '1P'), h('span', { class: 'cx-tag t2' }, 'CPU'));
       card.addEventListener('pointerenter', (e) => { if ((e as PointerEvent).pointerType !== 'touch') this.hover(i); });
       card.addEventListener('click', () => this.click(i));
-      strip.appendChild(card);
+      grid.appendChild(card);
       this.cards.push(card);
-      this.marks.push([m1, m2]);
     }
-    this.panels = [this.makePanel(0), this.makePanel(1)];
-    this.ladder = h('div', { class: 'cs-ladder' }, h('b', null, 'CPU LADDER'), h('span', null, 'Defeat every rival to clear Arcade'),
-      h('div', { class: 'ladder-icons' }, h('i', null, '?'), h('i', null, '?'), h('i', null, '?')));
-    this.hint = h('div', { class: 'hint' });
-    this.el.append(this.head, this.panels[0].root, this.panels[1].root, this.ladder, strip, this.hint);
+    // ---- chapter 2 (locked)
+    const grid2 = h('div', { class: 'cx-grid two' });
+    CHAPTER2.forEach((f, i) => {
+      const c = h('button', { class: 'cx-card lockc' + (f.boss ? ' boss' : ''), type: 'button', style: `--c:${f.color}`, title: f.name },
+        h('div', { class: 'portrait' }, h('div', { class: 'sil', html: SIL })),
+        h('span', { class: 'cx-lock', html: ICON_LOCK }),
+        h('div', { class: 'cx-nm' }, f.short),
+        f.boss ? h('span', { class: 'cx-boss' }, 'BOSS') : i === 0 ? h('span', { class: 'cx-next' }, 'NEXT') : null);
+      c.addEventListener('click', () => { sfx('error'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); this.app.toast(`${f.name} unlocks in Chapter 2. Clear Arcade to prepare.`); });
+      grid2.appendChild(c);
+    });
+    // ---- chips
+    const stageGroup = h('div', { class: 'cx-chipgrp' }, h('small', null, 'STAGE'));
+    for (const st of ALL_STAGES) {
+      const meta = STAGES.find((x) => x.id === st);
+      const c = h('button', { class: 'cx-chip', type: 'button', 'data-st': st }, meta ? meta.name : st);
+      c.addEventListener('click', () => { sfx('select'); this.setStage(st); this.zone = 'chips'; this.zi.chips = this.stageIds.indexOf(st); this.paintFocus(); });
+      stageGroup.appendChild(c);
+      this.stageChips.push(c);
+    }
+    this.cpuGroup = h('div', { class: 'cx-chipgrp' }, h('small', null, 'CPU'));
+    DIFFS.forEach((d, i) => {
+      const c = h('button', { class: 'cx-chip', type: 'button' }, d.name);
+      c.addEventListener('click', () => { sfx('select'); this.setCpu(d.id); this.zone = 'chips'; this.zi.chips = this.stageIds.length + i; this.paintFocus(); });
+      this.cpuGroup.appendChild(c);
+      this.cpuChips.push(c);
+    });
+    this.chipsRow = h('div', { class: 'cx-chips' }, stageGroup, this.cpuGroup);
+    // ---- buttons
+    this.friendBtn = h('button', { class: 'cx-big blue', type: 'button' }, h('i', { html: ICON_GLOBE }), h('b', null, 'PLAY WITH A FRIEND'));
+    this.fightBtn = h('button', { class: 'cx-big orange', type: 'button' }, h('b', null, 'FIGHT!'));
+    this.friendBtn.addEventListener('click', () => { if (this.finishing) return; sfx('select'); this.app.chooseMode('online'); });
+    this.fightBtn.addEventListener('click', () => { if (this.finishing) return; this.fight(); });
+    const panel = h('div', { class: 'cx-panel' }, tabsRow,
+      h('div', { class: 'cx-chap' }, h('div', { class: 'cx-chap-h' }, h('b', null, 'CHAPTER 1'), ' · AWAKENING'), grid),
+      h('div', { class: 'cx-chap two' }, h('div', { class: 'cx-chap-h' }, h('b', null, 'CHAPTER 2'), ' · COMING SOON'), grid2),
+      this.chipsRow, h('div', { class: 'cx-btns' }, this.friendBtn, this.fightBtn));
+    this.info = [this.makeInfo(0), this.makeInfo(1)];
+    this.el.append(title, this.sub, left, audioTools(app), vs, this.info[0].root, this.info[1].root, panel);
   }
 
-  private makePanel(p: 0 | 1): Panel {
-    const tag = h('div', { class: 'pn-tag' }, p === 0 ? 'P1' : 'P2');
-    const given = h('div', { class: 'pn-given' }), family = h('div', { class: 'pn-family' });
-    const title = h('div', { class: 'pn-title' }), tags = h('div', { class: 'pn-tags' });
-    const st = h('div', { class: 'pn-stars' });
-    const scheme = h('button', { class: 'scheme', type: 'button' }) as HTMLButtonElement;
-    scheme.addEventListener('click', () => this.toggleScheme(p));
-    const blurb = h('p', { class: 'pn-blurb' });
-    const lock = h('div', { class: 'pn-lock' }, 'LOCKED IN');
-    const root = h('div', { class: 'cs-panel p' + (p + 1) }, tag, given, family, title, tags, st, scheme, blurb, lock);
-    return { root, tag, given, family, title, tags, stars: st, scheme, blurb, lock };
+  private makeInfo(p: 0 | 1): Info {
+    const tag = h('div', { class: 'ci-tag' });
+    const name = h('div', { class: 'ci-name' }), title = h('div', { class: 'ci-title' });
+    const ult = h('div', { class: 'ci-ult' }), desc = h('p', { class: 'ci-desc' });
+    const rnd = h('span', { class: 'ci-rnd' }, 'RANDOM');
+    const mkSeg = (v: ControlScheme) => h('button', { class: 'seg', type: 'button', 'data-v': v }, v.toUpperCase());
+    const e = mkSeg('easy'), pr = mkSeg('pro');
+    const scheme = h('div', { class: 'ci-scheme' }, h('small', null, 'CONTROLS'), e, pr);
+    for (const b of [e, pr]) b.addEventListener('click', () => this.setScheme(p, b.getAttribute('data-v') as ControlScheme));
+    const lock = h('div', { class: 'ci-lock' }, 'LOCKED IN');
+    const root = h('div', { class: 'cx-info p' + (p + 1) }, tag, name, rnd, title, ult, desc, scheme, lock);
+    return { root, tag, name, title, ult, desc, scheme, lock, rnd };
   }
 
+  // ------------------------------------------------------------ lifecycle
   enter(params?: { mode?: Mode }): void {
     const f = this.app.flow;
     this.mode = params?.mode ?? f.mode;
-    this.players = this.mode === 'arcade' ? 1 : 2;
+    if (this.mode === 'online') this.mode = 'arcade';
+    this.players = this.mode === 'versus' ? 2 : 1;
     this.locked = [false, false];
     this.finishing = false;
+    this.active = 0;
     this.cursor = [Math.max(0, ALL_CHARS.indexOf(f.p1)), Math.max(0, ALL_CHARS.indexOf(f.p2))];
-    if (this.players === 2 && this.cursor[0] === this.cursor[1]) this.cursor[1] = (this.cursor[0] + 1) % 4;
+    if (this.cursor[0] === this.cursor[1]) this.cursor[1] = (this.cursor[0] + 1) % 4;
+    this.rolled = [ALL_CHARS[this.cursor[0]], ALL_CHARS[this.cursor[1]]];
     this.schemes = [...this.app.settings.data.scheme];
-    this.picked = [ALL_CHARS[this.cursor[0]], ALL_CHARS[this.cursor[1] % 4]];
     this.app.input.setVersus(this.mode === 'versus');
-    this.head.replaceChildren(h('span', null, this.mode === 'arcade' ? 'ARCADE' : this.mode === 'versus' ? 'VERSUS' : 'TRAINING'), ' SELECT YOUR FIGHTER');
-    this.el.classList.toggle('one', this.players === 1);
-    this.panels[1].root.style.display = this.players === 1 ? 'none' : '';
-    this.ladder.style.display = this.players === 1 ? '' : 'none';
-    this.panels[1].tag.textContent = this.mode === 'training' ? 'DUMMY' : 'P2';
-    this.hint.textContent = this.mode === 'versus'
-      ? 'P1: WASD + J  /  Pad 1        P2: ARROWS + , or Num1  /  Pad 2        ↑ toggles EASY / PRO'
-      : '← → choose    ENTER / A lock in    ↑ EASY / PRO    ESC / B back';
+    this.stageIds = ALL_STAGES.filter((s) => this.mode === 'training' || s !== 'training');
+    if (!this.stageIds.includes(f.stage)) f.stage = this.stageIds[0];
+    this.stageChips.forEach((c) => { c.style.display = this.stageIds.includes(c.getAttribute('data-st') as StageId) ? '' : 'none'; });
+    this.cpuGroup.style.display = this.mode === 'arcade' ? '' : 'none';
+    this.el.classList.toggle('versus', this.mode === 'versus');
+    this.el.classList.toggle('training', this.mode === 'training');
+    this.tabLbl[0].textContent = 'PLAY AS';
+    this.tabLbl[1].textContent = this.mode === 'arcade' ? 'FIGHT AGAINST' : this.mode === 'versus' ? 'PLAY AS' : 'DUMMY AGAINST';
+    (this.tabs[1].firstChild as HTMLElement).textContent = this.mode === 'arcade' ? 'CPU' : this.mode === 'versus' ? '2P' : 'DUM';
+    (this.el.querySelectorAll('.cx-tag.t2') as NodeListOf<HTMLElement>).forEach((t) => { t.textContent = this.mode === 'arcade' ? 'CPU' : this.mode === 'versus' ? '2P' : 'DUM'; });
+    const modeName = this.mode === 'arcade' ? 'ARCADE' : this.mode === 'versus' ? 'VERSUS' : 'TRAINING';
+    this.sub.textContent = this.mode === 'versus'
+      ? 'P1  WASD + J     P2  ARROWS + ,     PAD 1 / PAD 2     ·     ↑ EASY / PRO'
+      : `${modeName} MODE   ·   ← → CHOOSE   ·   ENTER LOCK IN   ·   ESC BACK`;
+    this.zone = 'grid'; this.zi = { tabs: 1, grid: this.cursor[0], chips: 0, btns: 1 };
+    this.setActive(0, true);
+    this.paintChips();
     refreshPortraits();
     this.refresh();
+    this.paintFocus();
   }
   exit(): void { clearTimeout(this.timer); }
 
-  private activeSlot(): 0 | 1 {
-    if (this.players === 1) return 0;
-    return this.locked[0] ? 1 : 0;
+  // ------------------------------------------------------------ state helpers
+  private id(p: 0 | 1): CharId { const c = this.cursor[p]; return c === RANDOM ? this.rolled[p] : ALL_CHARS[c]; }
+  private roll(p: 0 | 1): void {
+    const other = this.players === 2 ? this.id(1 - p as 0 | 1) : null;
+    let c: CharId;
+    let guard = 0;
+    do { c = ALL_CHARS[Math.floor(Math.random() * ALL_CHARS.length)]; } while ((c === this.rolled[p] || (other && c === other && this.cursor[1 - p] !== RANDOM && this.mode === 'versus')) && guard++ < 12);
+    this.rolled[p] = c;
   }
-  private hoverId(p: 0 | 1): CharId { const c = this.cursor[p]; return c === RANDOM ? this.picked[p] : ALL_CHARS[c]; }
-
-  private hover(i: number): void {
+  private setCursor(p: 0 | 1, i: number): void {
+    const was = this.cursor[p];
+    this.cursor[p] = i;
+    if (i === RANDOM && was !== RANDOM) this.roll(p);
+    this.zi.grid = i;
+  }
+  private setActive(p: 0 | 1, silent = false): void {
+    this.active = p;
+    this.tabs.forEach((t, i) => t.classList.toggle('on', i === p));
+    this.zi.grid = this.cursor[p];
+    if (!silent) this.refresh();
+  }
+  private setStage(s: StageId): void { this.app.flow.stage = s; this.paintChips(); this.lastPreview = ''; this.refresh(); }
+  private setCpu(d: Difficulty): void { this.app.flow.difficulty = d; this.paintChips(); this.refresh(); }
+  private setScheme(p: 0 | 1, v: ControlScheme): void {
     if (this.finishing) return;
-    const p = this.mode === 'versus' ? (this.locked[0] ? 1 : 0) : this.activeSlot();
-    if (this.locked[p] || this.cursor[p] === i) return;
-    this.cursor[p] = i; sfx('move'); this.refresh();
+    if (this.schemes[p] !== v) sfx('move');
+    this.schemes[p] = v;
+    this.app.settings.data.scheme[p] = v;
+    this.app.settings.save();
+    this.refresh();
+  }
+  private paintChips(): void {
+    const f = this.app.flow;
+    this.stageChips.forEach((c) => c.classList.toggle('sel', c.getAttribute('data-st') === f.stage));
+    this.cpuChips.forEach((c, i) => c.classList.toggle('sel', DIFFS[i].id === f.difficulty));
+  }
+  private back(): void { this.app.goMenu(); }
+
+  // ------------------------------------------------------------ pointer
+  private hover(i: number): void {
+    if (this.finishing || this.locked[this.active]) return;
+    if (this.cursor[this.active] === i) return;
+    this.setCursor(this.active, i); sfx('move');
+    this.zone = 'grid'; this.refresh(); this.paintFocus();
   }
   private click(i: number): void {
     if (this.finishing) return;
-    const p = this.mode === 'versus' ? (this.locked[0] ? 1 : 0) : this.activeSlot();
-    if (this.locked[p]) return;
-    this.cursor[p] = i;
-    this.lock(p);
+    if (this.mode === 'versus') {
+      const p = this.locked[0] ? 1 : this.active;
+      if (this.locked[p]) return;
+      this.setCursor(p, i);
+      this.lock(p);
+      return;
+    }
+    this.setCursor(this.active, i);
+    if (i === RANDOM) this.roll(this.active);
+    this.commit();
   }
-  private toggleScheme(p: 0 | 1): void {
-    if (p >= this.players || this.finishing) return;
-    this.schemes[p] = this.schemes[p] === 'pro' ? 'easy' : 'pro';
-    this.app.settings.data.scheme[p] = this.schemes[p];
-    this.app.settings.save();
-    sfx('move'); this.refresh();
+  /** single-player pick confirmed (click/enter on a card) */
+  private commit(): void {
+    sfx('select');
+    if (this.active === 0) { this.setActive(1); this.zone = 'grid'; this.zi.grid = this.cursor[1]; }
+    else { this.zone = 'btns'; this.zi.btns = 1; this.refresh(); }
+    this.refresh(); this.paintFocus();
   }
+
+  // ------------------------------------------------------------ versus lock
   private lock(p: 0 | 1): void {
-    if (this.cursor[p] === RANDOM) {
-      this.picked[p] = ALL_CHARS[Math.floor(Math.random() * ALL_CHARS.length)];
-    } else this.picked[p] = ALL_CHARS[this.cursor[p]];
     this.locked[p] = true;
     sfx('select');
+    if (!this.locked[1 - p as 0 | 1]) this.setActive((1 - p) as 0 | 1, true);
     this.refresh();
-    if (this.locked[0] && (this.players === 1 || this.locked[1])) {
+    if (this.locked[0] && this.locked[1]) {
       this.finishing = true;
-      this.timer = window.setTimeout(() => {
-        this.app.pickChars(this.picked[0], this.players === 1 ? this.picked[1] : this.picked[1], [this.schemes[0], this.schemes[1]]);
-      }, 650);
+      this.timer = window.setTimeout(() => this.go(), 650);
     }
+  }
+  private fight(): void {
+    if (this.finishing) return;
+    sfx('start');
+    this.finishing = true;
+    this.fightBtn.classList.add('go');
+    this.timer = window.setTimeout(() => this.go(), 320);
+  }
+  private go(): void {
+    this.app.pickChars(this.id(0), this.id(1), [this.schemes[0], this.schemes[1]]);
+  }
+
+  // ------------------------------------------------------------ keyboard / pad
+  private zoneItems(z: Zone): HTMLElement[] {
+    switch (z) {
+      case 'tabs': return [this.info[0].scheme, this.tabs[0], this.tabs[1], this.info[1].scheme].filter((e) => e.offsetParent !== null || e === this.tabs[0] || e === this.tabs[1]);
+      case 'grid': return this.cards;
+      case 'chips': return [...this.stageChips.filter((c) => c.style.display !== 'none'), ...(this.mode === 'arcade' ? this.cpuChips : [])];
+      case 'btns': return [this.friendBtn, this.fightBtn];
+    }
+  }
+  private paintFocus(): void {
+    for (const z of ZONES) this.zoneItems(z).forEach((e) => e.classList.remove('focus'));
+    const items = this.zoneItems(this.zone);
+    const i = Math.min(this.zi[this.zone], items.length - 1);
+    this.zi[this.zone] = Math.max(0, i);
+    // tabs zone: keep the focus ring on the active tab by default
+    items[Math.max(0, i)]?.classList.add('focus');
   }
 
   onMenu(a: MenuAction, slot: 0 | 1): void {
     if (this.finishing) return;
-    const p: 0 | 1 = this.players === 1 ? 0 : this.mode === 'versus' ? slot : this.activeSlot();
-    if (a === 'back') {
-      if (this.locked[p]) { this.locked[p] = false; sfx('back'); this.refresh(); return; }
-      if (this.mode === 'training' && p === 1 && this.locked[0]) { this.locked[0] = false; sfx('back'); this.refresh(); return; }
-      sfx('back');
-      if (this.mode === 'arcade') this.app.ui.go('difficulty'); else this.app.goMenu();
+    if (this.mode === 'versus') { this.onVersus(a, slot); return; }
+    if (a === 'back') { sfx('back'); this.back(); return; }
+    const items = this.zoneItems(this.zone);
+    const z = ZONES.indexOf(this.zone);
+    switch (a) {
+      case 'up': if (z > 0) { this.zone = ZONES[z - 1]; this.entering(); sfx('move'); } break;
+      case 'down': if (z < ZONES.length - 1) { this.zone = ZONES[z + 1]; this.entering(); sfx('move'); } break;
+      case 'left': case 'right': {
+        const d = a === 'left' ? -1 : 1;
+        if (this.zone === 'grid') {
+          const n = items.length;
+          this.setCursor(this.active, (this.cursor[this.active] + d + n) % n);
+          sfx('move'); this.refresh();
+        } else {
+          const n = items.length;
+          const ni = Math.min(n - 1, Math.max(0, this.zi[this.zone] + d));
+          if (ni !== this.zi[this.zone]) { this.zi[this.zone] = ni; sfx('move'); }
+        }
+        break;
+      }
+      case 'confirm': this.confirmZone(items); return;
+      default: return;
+    }
+    this.paintFocus();
+  }
+  private entering(): void {
+    if (this.zone === 'grid') this.zi.grid = this.cursor[this.active];
+    if (this.zone === 'tabs') this.zi.tabs = this.zoneItems('tabs').indexOf(this.tabs[this.active]);
+  }
+  private confirmZone(items: HTMLElement[]): void {
+    const el = items[Math.min(this.zi[this.zone], items.length - 1)];
+    if (!el) return;
+    if (this.zone === 'grid') {
+      if (this.cursor[this.active] === RANDOM) this.roll(this.active);
+      this.commit();
       return;
+    }
+    if (this.zone === 'tabs') {
+      if (el === this.tabs[0] || el === this.tabs[1]) { sfx('select'); this.setActive(el === this.tabs[0] ? 0 : 1); this.zone = 'grid'; this.zi.grid = this.cursor[this.active]; this.paintFocus(); return; }
+      const p: 0 | 1 = el === this.info[0].scheme ? 0 : 1;
+      this.setScheme(p, this.schemes[p] === 'pro' ? 'easy' : 'pro');
+      return;
+    }
+    el.click();
+  }
+
+  private onVersus(a: MenuAction, slot: 0 | 1): void {
+    const p: 0 | 1 = slot;
+    if (a === 'back') {
+      if (this.locked[p]) { this.locked[p] = false; this.setActive(p, true); sfx('back'); this.refresh(); return; }
+      sfx('back'); this.back(); return;
     }
     if (this.locked[p]) return;
     switch (a) {
-      case 'left': this.cursor[p] = (this.cursor[p] + RANDOM) % (RANDOM + 1); sfx('move'); break;
-      case 'right': this.cursor[p] = (this.cursor[p] + 1) % (RANDOM + 1); sfx('move'); break;
-      case 'up': this.toggleScheme(p); return;
-      case 'confirm': this.lock(p); return;
+      case 'left': this.setCursor(p, (this.cursor[p] + RANDOM) % (RANDOM + 1)); sfx('move'); break;
+      case 'right': this.setCursor(p, (this.cursor[p] + 1) % (RANDOM + 1)); sfx('move'); break;
+      case 'up': this.setScheme(p, this.schemes[p] === 'pro' ? 'easy' : 'pro'); return;
+      case 'confirm': this.setActive(p, true); if (this.cursor[p] === RANDOM) this.roll(p); this.lock(p); return;
       default: return;
     }
+    this.active = p; this.tabs.forEach((t, i) => t.classList.toggle('on', i === p));
     this.refresh();
   }
 
+  // ------------------------------------------------------------ render
   private refresh(): void {
+    const f = this.app.flow;
     for (let i = 0; i <= RANDOM; i++) {
       const c = this.cards[i];
-      const s1 = this.cursor[0] === i, s2 = this.players === 2 && this.cursor[1] === i;
+      const s1 = this.cursor[0] === i, s2 = this.cursor[1] === i;
       c.classList.toggle('s1', s1); c.classList.toggle('s2', s2);
+      c.classList.toggle('act', this.cursor[this.active] === i);
       c.classList.toggle('l1', s1 && this.locked[0]); c.classList.toggle('l2', s2 && this.locked[1]);
-      this.marks[i][0].style.display = s1 ? '' : 'none';
-      this.marks[i][1].style.display = s2 ? '' : 'none';
-      this.marks[i][1].textContent = this.mode === 'training' ? 'DUM' : 'P2';
     }
     for (const p of [0, 1] as const) {
-      if (p >= this.players) continue;
-      const pn = this.panels[p];
-      const rnd = this.cursor[p] === RANDOM && !this.locked[p];
-      const id = this.hoverId(p);
+      const pn = this.info[p];
+      const id = this.id(p);
       const m = META[id];
-      pn.root.style.setProperty('--c', rnd ? '#ffffff' : m.color);
+      const rnd = this.cursor[p] === RANDOM;
+      pn.root.style.setProperty('--c', m.color);
       pn.root.classList.toggle('locked', this.locked[p]);
-      pn.given.textContent = rnd ? 'RANDOM' : m.given;
-      pn.family.textContent = rnd ? '??????' : charName(id).split(' ').slice(1).join(' ') || m.family;
-      pn.title.textContent = rnd ? 'Fate decides' : charTitle(id);
-      pn.tags.replaceChildren(...(rnd ? [] : m.tags.map((t) => h('span', null, t))));
-      pn.stars.replaceChildren(h('small', null, 'DIFFICULTY'), stars(rnd ? 0 : m.stars));
-      pn.scheme.replaceChildren(h('b', null, this.schemes[p].toUpperCase()), h('small', null, this.schemes[p] === 'pro' ? 'motion inputs' : 'simple specials'));
-      pn.scheme.className = 'scheme ' + this.schemes[p];
-      pn.blurb.textContent = rnd ? 'Let the arena choose your fighter.' : m.blurb;
+      pn.root.classList.toggle('cur', this.active === p);
+      const who = p === 0 ? '1P' : this.mode === 'arcade' ? 'CPU' : this.mode === 'versus' ? '2P' : 'DUMMY';
+      const extra = p === 0 ? 'PLAYER' : this.mode === 'arcade' ? f.difficulty.toUpperCase() : this.mode === 'versus' ? 'PLAYER 2' : 'TRAINING';
+      pn.tag.replaceChildren(h('b', null, who), ` · ${extra}`);
+      pn.name.textContent = m.given;
+      pn.rnd.style.display = rnd ? '' : 'none';
+      pn.title.textContent = charTitle(id);
+      pn.ult.replaceChildren(h('b', null, 'ULTIMATE'), ' · ', ultName(id));
+      pn.desc.textContent = ULT_DESC[id];
+      const showScheme = p === 0 || this.mode === 'versus';
+      pn.scheme.style.display = showScheme ? '' : 'none';
+      pn.scheme.querySelectorAll('.seg').forEach((b) => b.classList.toggle('on', b.getAttribute('data-v') === this.schemes[p]));
     }
-    const key = this.players === 1 ? this.hoverId(0) : this.hoverId(0) + '|' + this.hoverId(1);
+    const key = this.id(0) + '|' + this.id(1) + '|' + f.stage;
     if (key !== this.lastPreview) {
       this.lastPreview = key;
-      this.app.menuScene(this.players === 1 ? [this.hoverId(0)] : [this.hoverId(0), this.hoverId(1)]);
+      this.app.menuScene([this.id(0), this.id(1)], f.stage);
     }
   }
 }

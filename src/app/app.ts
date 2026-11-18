@@ -200,7 +200,7 @@ export class App implements AppApi {
     this.flow.mode = m;
     this.input.setVersus(m === 'versus');
     if (m === 'online') { this.ui.go('online'); return; }
-    if (m === 'arcade') this.ui.go('difficulty'); else this.ui.go('charselect', { mode: m });
+    this.ui.go('charselect', { mode: m }); // difficulty + stage are chips on the select screen now
   }
   setDifficulty(d: Difficulty): void { this.flow.difficulty = d; this.ui.go('charselect', { mode: 'arcade' }); }
   toCharSelect(): void {
@@ -214,10 +214,12 @@ export class App implements AppApi {
     f.p1 = p1; f.p2 = p2; f.schemes = schemes;
     if (f.mode === 'arcade') {
       const i = ALL_CHARS.indexOf(p1);
-      f.ladder = [1, 2, 3].map((k) => ALL_CHARS[(i + k) % ALL_CHARS.length]);
+      // the CPU fighter picked on the select screen is the first rival; the rest follow in roster order
+      const rest = [1, 2, 3].map((k) => ALL_CHARS[(i + k) % ALL_CHARS.length]).filter((c) => c !== p2);
+      f.ladder = [p2, ...rest].slice(0, 3);
       f.ladderIndex = 0; f.arcadeFrames = 0;
       void this.startMatch();
-    } else this.ui.go('stage');
+    } else void this.startMatch(); // stage was chosen with the chips on the select screen
   }
   pickStage(s: StageId): void { this.flow.stage = s; void this.startMatch(); }
   rematch(): void { void this.startMatch(); }
@@ -243,7 +245,7 @@ export class App implements AppApi {
     const my = this.token;
     const arcade = f.mode === 'arcade';
     const p2 = arcade ? f.ladder[f.ladderIndex] : f.p2;
-    const stage: StageId = arcade ? ARCADE_STAGES[f.ladderIndex % ARCADE_STAGES.length] : f.stage;
+    const stage: StageId = arcade ? (f.ladderIndex === 0 && f.stage !== 'training' ? f.stage : ARCADE_STAGES[(f.ladderIndex + (f.stage === 'shrine' ? 1 : 0)) % ARCADE_STAGES.length]) : f.stage;
     const cfg: MatchConfig = {
       p1: f.p1, p2, stage, seed: (Math.random() * 0x7fffffff) | 0, roundsToWin: 2,
       training: f.mode === 'training', schemes: [f.schemes[0], arcade ? 'pro' : f.schemes[1]],

@@ -11,6 +11,8 @@ export interface SettingsData {
   quality: QualitySetting;
   reduceFlashing: boolean;
   announcer: boolean;
+  /** broadcast flavor layer: live commentators + news ticker */
+  broadcast: boolean;
   touch: TouchSetting;
   scheme: [ControlScheme, ControlScheme];
   keys: { p1: Bindings; p2: Bindings };
@@ -21,7 +23,7 @@ const KEY = 'kakusei-arena.settings.v1';
 export function defaultSettings(): SettingsData {
   return {
     master: 0.8, music: 0.7, sfx: 0.9,
-    quality: 'auto', reduceFlashing: false, announcer: true, touch: 'auto',
+    quality: 'auto', reduceFlashing: false, announcer: true, broadcast: true, touch: 'auto',
     scheme: ['pro', 'pro'],
     keys: { p1: cloneBindings(DEFAULT_P1), p2: cloneBindings(DEFAULT_P2) },
   };
@@ -51,6 +53,7 @@ export class SettingsStore {
       if (j.quality === 'auto' || j.quality === 'low' || j.quality === 'medium' || j.quality === 'high') d.quality = j.quality;
       if (typeof j.reduceFlashing === 'boolean') d.reduceFlashing = j.reduceFlashing;
       if (typeof j.announcer === 'boolean') d.announcer = j.announcer;
+      if (typeof j.broadcast === 'boolean') d.broadcast = j.broadcast;
       if (j.touch === 'auto' || j.touch === 'on' || j.touch === 'off') d.touch = j.touch;
       if (Array.isArray(j.scheme) && j.scheme.length === 2) {
         d.scheme = [j.scheme[0] === 'easy' ? 'easy' : 'pro', j.scheme[1] === 'easy' ? 'easy' : 'pro'];

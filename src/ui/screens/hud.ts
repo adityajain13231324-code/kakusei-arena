@@ -6,13 +6,14 @@ import type { MatchSession } from '../../app/session';
 import { h, sfx } from '../dom';
 import { BaseScreen } from './base';
 import { META, charName, fillPortrait, portraitEl } from '../meta';
+import { Broadcast } from '../broadcast';
 
 function secsOf(t: number): number { return t > 99 ? Math.ceil(t / 60) : Math.max(0, Math.ceil(t)); }
 
 interface SideEls {
   root: HTMLElement; fill: HTMLElement; trail: HTMLElement; name: HTMLElement; family: HTMLElement; scheme: HTMLElement;
-  portrait: HTMLElement; pips: HTMLElement; ki: HTMLElement[]; kiFill: HTMLElement[]; awk: HTMLElement; awkTxt: HTMLElement; combo: HTMLElement;
-  comboHits: HTMLElement; comboDmg: HTMLElement;
+  portrait: HTMLElement; pips: HTMLElement; ki: HTMLElement[]; kiFill: HTMLElement[]; kiBlock: HTMLElement; kiNum: HTMLElement;
+  awk: HTMLElement; awkTxt: HTMLElement; combo: HTMLElement; comboHits: HTMLElement; comboDmg: HTMLElement; pct: HTMLElement;
 }
 
 export class HudScreen extends BaseScreen {
@@ -30,6 +31,7 @@ export class HudScreen extends BaseScreen {
   private comboShow: { hits: number; dmg: number; hold: number }[] = [{ hits: 0, dmg: 0, hold: 0 }, { hits: 0, dmg: 0, hold: 0 }];
   private training: TrainingPanel;
   private chars: [CharId, CharId] = ['kaito', 'shiori'];
+  private bc = new Broadcast();
   awakenReady = false;
 
   constructor(app: AppApi) {
@@ -40,6 +42,7 @@ export class HudScreen extends BaseScreen {
       const name = h('b', { class: 'hn-given' }), family = h('span', { class: 'hn-family' });
       const scheme = h('i', { class: 'hn-scheme' });
       const fill = h('div', { class: 'hp-fill' }), trail = h('div', { class: 'hp-trail' });
+      const pct = h('span', { class: 'hp-pct' }, '100');
       const pips = h('div', { class: 'pips' });
       const ki: HTMLElement[] = [], kiFill: HTMLElement[] = [];
       const kiWrap = h('div', { class: 'ki' });
@@ -49,19 +52,28 @@ export class HudScreen extends BaseScreen {
         kiWrap.appendChild(s); ki.push(s); kiFill.push(f);
       }
       const awkTxt = h('small', null, '');
-      const awk = h('div', { class: 'awk', title: 'Awakening' }, h('b', null, '覚'), awkTxt);
+      const awk = h('div', { class: 'awk', title: 'Awakening' }, h('b', null, '覚'), h('span', null, 'AWAKEN'), awkTxt);
+      const kiNum = h('em', null, '0');
+      const kiBlock = h('div', { class: 'kiblock p' + (p + 1) },
+        h('div', { class: 'ki-head' }, h('b', null, 'KI'), kiNum, awk), kiWrap);
       const comboHits = h('b', null, ''), comboDmg = h('span', null, '');
       const combo = h('div', { class: 'combo' }, comboHits, comboDmg);
+      const frame = h('div', { class: 'frame' }, portrait);
       const root = h('div', { class: 'side p' + (p + 1) },
-        h('div', { class: 'who' }, portrait, h('div', { class: 'hn' }, name, family), scheme),
-        h('div', { class: 'hp' }, h('div', { class: 'hp-bg' }), trail, fill, h('div', { class: 'hp-gloss' })),
-        h('div', { class: 'sub' }, pips, kiWrap, awk));
-      return { root, fill, trail, name, family, scheme, portrait, pips, ki, kiFill, awk, awkTxt, combo, comboHits, comboDmg };
+        frame,
+        h('div', { class: 'col' },
+          h('div', { class: 'who' }, h('div', { class: 'hn' }, name, family), scheme),
+          h('div', { class: 'hp' }, h('div', { class: 'hp-bg' }), trail, fill, h('div', { class: 'hp-gloss' }), pct),
+          h('div', { class: 'sub' }, pips)));
+      return { root, fill, trail, name, family, scheme, portrait, pips, ki, kiFill, kiBlock, kiNum, awk, awkTxt, combo, comboHits, comboDmg, pct };
     };
     this.sides = [mk(0), mk(1)];
     this.timer = h('div', { class: 'timer' }, '60');
     this.roundLbl = h('div', { class: 'rnd' }, 'ROUND 1');
-    const mid = h('div', { class: 'mid' }, h('div', { class: 'timer-frame' }, this.timer), this.roundLbl);
+    const pauseBtn = h('button', { class: 'pause-btn', type: 'button', 'aria-label': 'Pause' }, h('i', null), h('i', null));
+    for (const ev of ['pointerdown', 'touchstart', 'mousedown']) pauseBtn.addEventListener(ev, (e) => e.stopPropagation());
+    pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); sfx('select'); app.pause(); });
+    const mid = h('div', { class: 'mid' }, h('div', { class: 'timer-frame' }, this.timer), this.roundLbl, pauseBtn);
     this.callouts = h('div', { class: 'callouts' });
     this.clashMark = h('i', { class: 'clash-mark' });
     this.clashP1 = h('b', null, '0'); this.clashP2 = h('b', null, '0');
@@ -69,8 +81,12 @@ export class HudScreen extends BaseScreen {
       h('div', { class: 'clash-row' }, this.clashP1, h('div', { class: 'clash-bar' }, this.clashMark), this.clashP2));
     this.training = new TrainingPanel(app);
     this.el.append(h('div', { class: 'hud-top' }, this.sides[0].root, mid, this.sides[1].root),
-      this.sides[0].combo, this.sides[1].combo, this.callouts, this.clash, this.training.root);
+      this.sides[0].kiBlock, this.sides[1].kiBlock,
+      this.sides[0].combo, this.sides[1].combo, this.callouts, this.clash, this.training.root,
+      this.bc.panel, this.bc.ticker);
     this.sides[0].combo.classList.add('c1'); this.sides[1].combo.classList.add('c2');
+    app.settings.onChange(() => this.bc.setEnabled(app.settings.data.broadcast));
+    this.bc.setEnabled(app.settings.data.broadcast);
   }
 
   begin(session: MatchSession): void {
@@ -83,6 +99,7 @@ export class HudScreen extends BaseScreen {
       const s = this.sides[p];
       fillPortrait(s.portrait, id, 256);
       s.root.style.setProperty('--c', META[id].color);
+      s.kiBlock.style.setProperty('--c', META[id].color);
       s.name.textContent = META[id].given;
       s.family.textContent = charName(id).split(' ').slice(1).join(' ');
       const tag = session.mode === 'training' && p === 1 ? 'DUMMY' : cpu1 && p === 1 ? 'CPU' : st.schemes[p].toUpperCase();
@@ -98,6 +115,8 @@ export class HudScreen extends BaseScreen {
     this.clash.classList.remove('on');
     this.el.classList.toggle('training', session.mode === 'training');
     this.training.begin(session);
+    this.bc.setEnabled(this.app.settings.data.broadcast);
+    this.bc.begin(this.chars, session.mode);
   }
 
   private set(key: string, el: HTMLElement, v: string | number, prop: 'text' | 'scale' | 'class', cls?: string): void {
@@ -129,13 +148,15 @@ export class HudScreen extends BaseScreen {
       else this.trail[p] = Math.max(target, this.trail[p] - dt * 0.7);
       this.set(k + 'hp', s.fill, Math.round(hp * 1000) / 1000, 'scale');
       this.set(k + 'tr', s.trail, Math.round(this.trail[p] * 1000) / 1000, 'scale');
+      this.set(k + 'pct', s.pct, String(Math.ceil(hp * 100)), 'text');
       this.set(k + 'low', s.root, hp < 0.35 ? 1 : 0, 'class', 'danger');
       for (let i = 0; i < 3; i++) {
         const frac = Math.min(1, Math.max(0, (f.ki - i * 100) / 100));
         this.set(k + 'ki' + i, s.kiFill[i], Math.round(frac * 50) / 50, 'scale');
         this.set(k + 'kif' + i, s.ki[i], frac >= 1 ? 1 : 0, 'class', 'full');
       }
-      this.set(k + 'kiall', s.root, f.ki >= 300 ? 1 : 0, 'class', 'kimax');
+      this.set(k + 'kin', s.kiNum, String(Math.min(3, Math.floor(f.ki / 100))), 'text');
+      this.set(k + 'kiall', s.kiBlock, f.ki >= 300 ? 1 : 0, 'class', 'kimax');
       const awkReady = hp * 100 < 35 && !f.awakenUsed && !f.awakened && f.hp > 0;
       if (p === 0 && awkReady) ready = true;
       this.set(k + 'awr', s.awk, awkReady ? 1 : 0, 'class', 'ready');
@@ -168,6 +189,7 @@ export class HudScreen extends BaseScreen {
       this.set('cm1', this.clashP2, c.mash[1], 'text');
     }
     this.training.update(session);
+    this.bc.update(dt, st);
   }
 
   // ------------------------------------------------------------ callouts
@@ -180,6 +202,7 @@ export class HudScreen extends BaseScreen {
   }
 
   handleEvents(events: SimEvent[], st: GameState): void {
+    this.bc.onEvents(events, st);
     for (const e of events) {
       switch (e.type) {
         case 'roundStart': {

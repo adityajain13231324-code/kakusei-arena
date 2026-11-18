@@ -1,33 +1,63 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KAKUSEI ARENA | Asset inspection</title>
-<style>body{margin:0;background:#141b2a;color:#e8edf7;font:14px system-ui}header{padding:18px 24px;display:flex;gap:18px;align-items:center}h1{font-size:17px;margin:0}select,button{background:#29354a;color:white;border:1px solid #627087;border-radius:5px;padding:8px}#status{margin-left:auto;color:#b7c5dc}canvas{display:block}footer{position:fixed;bottom:12px;left:24px;color:#a9b8cc}</style>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KAKUSEI ARENA | Asset inspection v2</title>
+<style>body{margin:0;background:#141b2a;color:#e8edf7;font:14px system-ui;overflow:hidden}header{padding:12px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}h1{font-size:16px;margin:0}select,button{background:#29354a;color:white;border:1px solid #627087;border-radius:5px;padding:7px}#status{margin-left:auto;color:#b7c5dc}canvas{display:block}</style>
 <script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script></head>
-<body><header><h1>KAKUSEI ARENA / asset inspection</h1><select id="fighter"><option>kaito</option><option>shiori</option><option>ren</option><option>goro</option></select><button id="awake">Awaken</button><button id="pose">Stress pose</button><button id="view">Rotate view</button><span id="status">Loading</span></header><footer>Original low-poly fighter assets • exported GLB • three.js toon shading</footer>
+<body><header><h1>KAKUSEI ARENA / fighter v2</h1>
+<select id="fighter"><option>kaito</option><option>shiori</option><option>ren</option><option>goro</option></select>
+<select id="expr"><option>neutral</option><option>shout</option><option>pain</option><option>determined</option></select>
+<select id="pose"><option>rest</option><option>punch</option><option>kick</option><option>crouch</option></select>
+<button id="awake">Awaken</button><button id="view">Rotate view</button><button id="zoom">Face</button><span id="status">Loading</span></header>
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {configureFighter} from '/characters/toon-materials.js';
-const scene=new THREE.Scene();scene.background=new THREE.Color('#202b3c');
-const camera=new THREE.PerspectiveCamera(32,innerWidth/(innerHeight-74),.01,100);
-const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight-74);document.body.append(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xffffff,0x59617a,2));const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(-3,5,4);scene.add(light);
-let root,style,awakened=false,posed=false,view=0;const rest=new Map();
+const q=new URLSearchParams(location.search);
+const H=()=>innerHeight-(q.has('bare')?0:54);
+if(q.has('bare'))document.querySelector('header').style.display='none';
+const scene=new THREE.Scene();scene.background=new THREE.Color('#25314a');
+const camera=new THREE.PerspectiveCamera(30,innerWidth/H(),.01,100);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,H());document.body.append(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x6a7390,1.6));const light=new THREE.DirectionalLight(0xffffff,2.6);light.position.set(-2,4,4);scene.add(light);
+const rim=new THREE.DirectionalLight(0x9fc4ff,1.2);rim.position.set(2,2,-4);scene.add(rim);
+const ground=new THREE.Mesh(new THREE.CircleGeometry(1.2,48),new THREE.MeshBasicMaterial({color:'#1b2436'}));ground.rotation.x=-Math.PI/2;scene.add(ground);
+let cur='kaito',root,style,awakened=false,view=0,zoom=false,faceUV=null,faceMesh=null;const rest=new Map();
 const loader=new GLTFLoader(),status=document.querySelector('#status');
+const EX={neutral:0,shout:.25,pain:.5,determined:.75};
 async function load(name){
- status.textContent='Loading';window.assetReady=false;
+ status.textContent='Loading';window.assetReady=false;cur=name;document.querySelector('#fighter').value=name;
  if(root){scene.remove(root);style.dispose()}
  root=(await loader.loadAsync(`/characters/${name}/model.glb`)).scene;scene.add(root);
  style=await configureFighter(root,name);
  if(name==='goro')style.attachShoulderPlates((await loader.loadAsync('/characters/goro/shoulder_plates.glb')).scene);
  rest.clear();root.traverse(o=>{if(o.isBone)rest.set(o.name,o.quaternion.clone())});
- awakened=false;posed=false;view=0;setView();status.textContent=name.toUpperCase();window.assetReady=true;
+ faceMesh=null;root.traverse(o=>{if(o.isMesh&&o.name==='Face_Expressions'&&!faceMesh)faceMesh=o});
+ faceUV=faceMesh?faceMesh.geometry.attributes.uv.array.slice():null;
+ awakened=false;setView();setExpr(document.querySelector('#expr').value);setPose(document.querySelector('#pose').value);
+ status.textContent=name.toUpperCase();window.assetReady=true;
 }
-function setView(){const s=document.querySelector('#fighter').value==='goro'?1.2:1;const a=view*Math.PI/2;camera.position.set(Math.sin(a)*4.7*s,1*s,Math.cos(a)*4.7*s);camera.lookAt(0,.98*s,0)}
+function setExpr(e){if(!faceMesh)return;const a=faceMesh.geometry.attributes.uv;for(let i=0;i<a.count;i++){a.array[i*2]=faceUV[i*2]+EX[e]}a.needsUpdate=true}
+const R=(x,y,z)=>new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(x),THREE.MathUtils.degToRad(y),THREE.MathUtils.degToRad(z)));
+const POSES={rest:{},
+ punch:{RightArm:[0,0,62],RightForeArm:[0,0,18],LeftArm:[-35,0,-20],LeftForeArm:[-110,0,0],Spine1:[8,-15,0],LeftUpLeg:[-25,0,0],LeftLeg:[30,0,0],RightUpLeg:[15,0,0],fist:1},
+ kick:{LeftUpLeg:[-95,0,0],LeftLeg:[20,0,0],RightLeg:[15,0,0],RightUpLeg:[-10,0,0],LeftArm:[-30,0,-25],LeftForeArm:[-100,0,0],RightArm:[-30,0,25],RightForeArm:[-100,0,0],fist:1},
+ crouch:{LeftUpLeg:[-80,0,-10],LeftLeg:[110,0,0],RightUpLeg:[-80,0,10],RightLeg:[110,0,0],Hips:[0,0,0],Spine:[25,0,0],LeftArm:[-40,0,-30],LeftForeArm:[-100,0,0],RightArm:[-40,0,30],RightForeArm:[-100,0,0],fist:1}};
+function setPose(p){if(!root)return;for(const [n,qq] of rest){const b=root.getObjectByName(n);if(b)b.quaternion.copy(qq)}
+ const P=POSES[p];for(const [n,v] of Object.entries(P)){if(n==='fist')continue;const b=root.getObjectByName(n);if(b)b.quaternion.multiply(R(...v))}
+ if(P.fist)for(const s of ['Left','Right'])for(const f of ['Index','Middle','Ring','Pinky','Thumb'])for(const j of [1,2,3]){const b=root.getObjectByName(`${s}Hand${f}${j}`);if(b)b.quaternion.multiply(R(f==='Thumb'?(j===1?20:45):(j===1?75:95),0,0))}
+ if(root){const box=new THREE.Box3().setFromObject(root);/* keep feet on floor for crouch */}
+ if(p==='crouch'){root.position.y=-.28*(cur==='goro'?1.2:1)}else root.position.y=0;
+}
+function setView(){const s=cur==='goro'?1.2:1;const a=view*Math.PI/4;
+ if(zoom){camera.fov=16;camera.position.set(Math.sin(a)*1.7*s,1.68*s,Math.cos(a)*1.7*s);camera.updateProjectionMatrix();camera.lookAt(0,1.66*s,0)}
+ else{camera.fov=30;camera.updateProjectionMatrix();camera.position.set(Math.sin(a)*4.6*s,1.05*s,Math.cos(a)*4.6*s);camera.lookAt(0,.95*s,0)}}
 document.querySelector('#fighter').onchange=e=>load(e.target.value);
+document.querySelector('#expr').onchange=e=>setExpr(e.target.value);
+document.querySelector('#pose').onchange=e=>setPose(e.target.value);
 document.querySelector('#awake').onclick=()=>{awakened=!awakened;style.setAwakened(awakened)};
-document.querySelector('#view').onclick=()=>{view=(view+1)%4;setView()};
-document.querySelector('#pose').onclick=()=>{posed=!posed;for(const [n,a]of [['LeftForeArm',-95],['RightForeArm',-70],['LeftUpLeg',-55],['LeftLeg',90]]){const b=root.getObjectByName(n);b.quaternion.copy(rest.get(n));if(posed)b.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(a)))}};
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/(innerHeight-74);camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight-74)});
+document.querySelector('#view').onclick=()=>{view=(view+1)%8;setView()};
+document.querySelector('#zoom').onclick=()=>{zoom=!zoom;setView()};
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/H();camera.updateProjectionMatrix();renderer.setSize(innerWidth,H())});
 renderer.setAnimationLoop(()=>renderer.render(scene,camera));
-window.assetApp={load,scene,renderer,get root(){return root},get style(){return style}};
-load('kaito');
+window.assetApp={load,scene,renderer,setExpr,setPose,get root(){return root},get style(){return style},
+ set(o){if('view'in o)view=o.view;if('zoom'in o)zoom=o.zoom;if('awake'in o){awakened=o.awake;style.setAwakened(awakened)}if('expr'in o)setExpr(o.expr);if('pose'in o)setPose(o.pose);setView()}};
+load(q.get('fighter')||'kaito');
 </script></body></html>

@@ -5,20 +5,19 @@ import * as THREE from 'three';
 export async function configureFighter(root, name, {resolution=2048, baseURL='/characters/'}={}) {
   const loader=new THREE.TextureLoader();
   const suffix=resolution===1024?'_1024':'';
-  const [normal,awakened]=await Promise.all(['tex','tex_awakened'].map(async file=>{
-    const t=await loader.loadAsync(`${baseURL}${name}/${file}${suffix}.png`);
+  const load=async file=>{
+    const t=await loader.loadAsync(`${baseURL}${name}/${file}`);
     t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;
-    t.magFilter=THREE.NearestFilter;t.minFilter=THREE.LinearMipmapLinearFilter;
+    t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.anisotropy=4;
     return t;
-  }));
-  const gradient=new THREE.DataTexture(new Uint8Array([70,155,255]),3,1,THREE.RedFormat);
+  };
+  const [normal,awakened]=await Promise.all([`tex${suffix}.png`,`tex_awakened${suffix}.png`].map(load));
+  // v2 atlases are painted (cel shadow shapes baked in), so a soft 2-step ramp reads best.
+  const gradient=new THREE.DataTexture(new Uint8Array([150,255]),2,1,THREE.RedFormat);
   gradient.minFilter=gradient.magFilter=THREE.NearestFilter;gradient.generateMipmaps=false;gradient.needsUpdate=true;
-  // Separate tiny emission mask avoids illuminating the whole body.
-  // glTF V coordinates are the inverse of Blender's atlas coordinates.
-  const maskBytes=new Uint8Array(8*8*4);
-  const glowCells=name==='kaito'?[3,4,8]:name==='ren'?[7,8,9,10]:[];
-  for(const cell of glowCells){const i=((7-Math.floor(cell/8))*8+cell%8)*4;maskBytes.set([255,255,255,255],i);}
-  const mask=new THREE.DataTexture(maskBytes,8,8);mask.magFilter=mask.minFilter=THREE.NearestFilter;mask.needsUpdate=true;
+  // Emission mask (white = glows when awakened): hair tips, ember marks, Ren's eyes and blade, etc.
+  const mask=await loader.loadAsync(`${baseURL}${name}/tex_glow.png`);
+  mask.flipY=false;mask.colorSpace=THREE.NoColorSpace;
   const toon=new THREE.MeshToonMaterial({map:normal,gradientMap:gradient,emissiveMap:mask});
   const outlineMaterial=new THREE.ShaderMaterial({
     side:THREE.BackSide,
@@ -57,8 +56,8 @@ export async function configureFighter(root, name, {resolution=2048, baseURL='/c
   return {
     setAwakened(value){
       isAwakened=Boolean(value);toon.map=isAwakened?awakened:normal;
-      toon.emissive.set(isAwakened?(name==='kaito'?'#ff8b28':name==='ren'?'#a8eaff':'#000000'):'#000000');
-      toon.emissiveIntensity=isAwakened?.8:0;
+      toon.emissive.set(isAwakened?({kaito:'#ff9a3a',ren:'#a8eaff',shiori:'#e8e4ff',goro:'#ffb65a'}[name]||'#ffffff'):'#000000');
+      toon.emissiveIntensity=isAwakened?.9:0;
       outlineMaterial.uniforms.outlineColor.value.set(name==='shiori'&&isAwakened?'#ffffff':'#101522');
       outlineMaterial.uniforms.thickness.value=name==='shiori'&&isAwakened?.004:.003;
       for(const [mesh,line]of platePairs)mesh.visible=line.visible=isAwakened;

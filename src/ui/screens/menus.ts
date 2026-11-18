@@ -1,41 +1,62 @@
 import type { AppApi } from '../../app/api';
 import type { MenuAction } from '../../input';
 import { ALL_CHARS } from '../../sim/types';
+import type { CharId } from '../../sim/types';
+import { audioTools } from '../widgets';
 import type { Difficulty } from '../../ai';
 import { h, sfx } from '../dom';
 import { BaseScreen, mbtn } from './base';
 import { stars } from '../meta';
 
 // ------------------------------------------------------------------ title
+// pairs that pose over the stage in turn (title layout needs >2 ids; the first two are the ones shown)
+const TITLE_PAIRS: CharId[][] = [
+  ['kaito', 'ren', 'shiori', 'goro'], ['shiori', 'goro', 'kaito', 'ren'], ['ren', 'shiori', 'goro', 'kaito'], ['goro', 'kaito', 'ren', 'shiori'],
+];
+
 export class TitleScreen extends BaseScreen {
   private off: (() => void) | null = null;
   private started = false;
   private pressEl: HTMLElement;
+  private pair = 0;
+  private clock = 0;
   constructor(app: AppApi) {
     super(app, '');
     this.el.classList.add('title');
-    this.pressEl = h('div', { class: 'press' }, h('span', null, 'PRESS START'));
+    this.pressEl = h('div', { class: 'press' }, h('span', null, 'PRESS ENTER / CLICK TO START'));
     this.el.append(
       h('div', { class: 'rays' }),
-      h('div', { class: 'ink ink-a' }), h('div', { class: 'ink ink-b' }),
       h('div', { class: 'big-kanji', 'aria-hidden': 'true' }, '覚醒'),
+      audioTools(app),
       h('div', { class: 'logo' },
-        h('div', { class: 'logo-top' }, h('span', null, 'KAKUSEI')),
-        h('div', { class: 'logo-bot' }, h('span', null, 'ARENA')),
-        h('div', { class: 'logo-sub' }, h('i', null), '覚醒 アリーナ', h('i', null))),
+        h('div', { class: 'logo-k' }, h('span', null, 'KAKUSEI')),
+        h('div', { class: 'logo-a' }, h('span', null, 'ARENA')),
+        h('div', { class: 'logo-seal', 'aria-hidden': 'true' }, h('span', null, '覚'), h('span', null, '醒'))),
+      h('div', { class: 'tagline' }, h('i', null), 'AWAKEN YOUR POWER', h('i', null)),
       this.pressEl,
-      h('div', { class: 'ver' }, 'v0.1  /  ANIME 3D FIGHTING'),
+      h('div', { class: 'ver' }, 'v0.2  /  ANIME 3D FIGHTING'),
+      h('div', { class: 'legal' }, 'An original game. All characters and stories are fictional.'),
     );
   }
   enter(): void {
     this.started = false;
-    this.pressEl.querySelector('span')!.textContent = this.app.input.touchCapable ? 'TAP TO START' : 'PRESS START';
-    this.app.menuScene([...ALL_CHARS]);
+    this.el.classList.remove('leaving');
+    this.clock = 0;
+    this.pressEl.querySelector('span')!.textContent = this.app.input.touchCapable ? 'TAP TO START' : 'PRESS ENTER / CLICK TO START';
+    this.app.menuScene(TITLE_PAIRS[this.pair % TITLE_PAIRS.length]);
     this.off = this.app.input.onAnyInput(() => this.go());
   }
   exit(): void { this.off?.(); this.off = null; }
+  update(dt: number): void {
+    if (this.started || this.app.ui.top() !== 'title') return;
+    this.clock += dt;
+    if (this.clock > 15) { this.clock = 0; this.pair++; this.app.menuScene(TITLE_PAIRS[this.pair % TITLE_PAIRS.length]); }
+  }
   private go(): void {
     if (this.started) return;
+    // taps on the sound / music buttons must not start the game
+    const ev = (window as unknown as { event?: Event }).event;
+    if (ev && (ev.target as HTMLElement | null)?.closest?.('.tools')) return;
     this.started = true;
     this.el.classList.add('leaving');
     this.app.startFromTitle();

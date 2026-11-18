@@ -1,0 +1,672 @@
+/**
+ * One on-screen fighter, driven from a skinned GLB (Mixamo-style bone names, A-pose, +Z forward).
+ *
+ * Posing: the shared pose library (anim/poses.ts) describes poses as IK targets for a canonical humanoid
+ * (hand targets in chest space, foot targets in ground space, elbow / knee poles, torso eulers). Every GLB bone
+ * gets a constant "canonical offset" O = inverse(C_rest) * Q_rest, where C_rest is the canonical frame the
+ * pose library assumes for that bone at rest (limbs: local -Y points from the child back to the joint,
+ * +Z forward; torso / feet: world aligned). A solved canonical world rotation C maps to the bone with
+ * W = C * O, so the A-pose arm angle, bone roll conventions and any extra bones in an upgraded model don't
+ * matter. Targets are rescaled to the model's real limb lengths.
+ *
+ * Also: spring (verlet) chains for hair / ponytail / scarf bones, Ren's katana drawn into the right hand,
+ * Shiori's kunai, Goro's awakened plates, awakening wipe + glow pulse, hit flash, outlines and sockets for
+ * getBoneWorld.
+ */
+import * as THREE from 'three';
+import type { CharId, FighterState, PoseName } from '../../sim/types';
+import { C, NCH } from '../anim/poses';
+import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
+import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
+import { charLook, type CharLook } from './looks';
+import { makeFighterUniforms, makeFighterToon, makeFighterOutline, type FighterUniforms } from './toon';
+
+export type SocketName = 'head' | 'chest' | 'hips' | 'handL' | 'handR' | 'footL' | 'footR' | 'weapon';
+type Q = 'low' | 'medium' | 'high';
+
+const D2R = Math.PI / 180;
+// pose-library reference skeleton (anim/poses.ts was authored for it)
+const REF_SHOULDER_L = new THREE.Vector3(0.17, 0.165, -0.01);
+const REF_SHOULDER_R = new THREE.Vector3(-0.17, 0.165, -0.01);
+/** the reference rig's wrists sat lower relative to the face: drop hand targets a little */
+const HAND_DROP = 0.05;
+const REF_ARM = 0.52, REF_LEG = 0.85, REF_HIPX = 0.095, REF_ANKLE = 0.05, REF_PIVOT = 0.9;
+
+// scratch (allocation-free per frame)
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3();
+const _S = new THREE.Vector3(), _T = new THREE.Vector3(), _E = new THREE.Vector3(), _pole = new THREE.Vector3();
+const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _qp = new THREE.Quaternion();
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
+const _qI = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _sc = new THREE.Vector3();
+const _AX = new THREE.Vector3(1, 0, 0), _AY = new THREE.Vector3(0, 1, 0);
+const _cA = new THREE.Vector3(), _cB = new THREE.Vector3();
+
+interface Limb {
+  up: THREE.Bone; lo: THREE.Bone; end: THREE.Bone;
+  a: number; b: number;
+  oUp: THREE.Quaternion; oLo: THREE.Quaternion; oEnd: THREE.Quaternion;
+}
+
+interface Chain {
+  bones: THREE.Bone[];
+  restQ: THREE.Quaternion[];
+  childLocal: THREE.Vector3[]; // rest local position of the next joint (or tail) in each bone's space
+  segLen: number[];
+  p: Float32Array; pp: Float32Array;
+  init: boolean;
+}
+
+function canon(along: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+  _y.copy(along).normalize().negate();
+  _z.set(0, 0, 1).addScaledVector(_y, -_y.z);
+  if (_z.lengthSq() < 1e-6) _z.set(0, -1, 0).addScaledVector(_y, _y.y);
+  _z.normalize();
+  _x.crossVectors(_y, _z).normalize();
+  _z.crossVectors(_x, _y);
+  _m.makeBasis(_x, _y, _z);
+  return out.setFromRotationMatrix(_m);
+}
+
+export class FighterView {
+  readonly group = new THREE.Group();
+  readonly rootObj = new THREE.Group();
+  readonly model: THREE.Object3D;
+  readonly look: CharLook;
+  readonly u: FighterUniforms = makeFighterUniforms();
+  readonly pose = new Float32Array(NCH);
+  readonly res: number;
+  private target = new Float32Array(NCH);
+  private info: SampleInfo = { snap: false, pose: 'idle', strike: false };
+  private bones = new Map<string, THREE.Bone>();
+  private restLocalQ = new Map<THREE.Bone, THREE.Quaternion>();
+  private oTorso = new Map<THREE.Bone, THREE.Quaternion>();
+  private hips: THREE.Bone | null = null;
+  private hipsRest = new THREE.Vector3();
+  private spine: THREE.Bone | null = null; private spine1: THREE.Bone | null = null; private chest: THREE.Bone | null = null;
+  private neck: THREE.Bone | null = null; private head: THREE.Bone | null = null;
+  private armL: Limb | null = null; private armR: Limb | null = null; private legL: Limb | null = null; private legR: Limb | null = null;
+  private shG_L = new THREE.Vector3(); private shG_R = new THREE.Vector3();
+  private sA = 1; private sL = 1; private rx = 1; private ankleY = 0.08;
+  private chains: Chain[] = [];
+  private fingers: { bone: THREE.Bone; rest: THREE.Quaternion; axis: THREE.Vector3; fist: number; open: number; left: boolean }[] = [];
+  private sockets = {} as Record<SocketName, THREE.Object3D>;
+  private toonMats: THREE.MeshToonMaterial[] = [];
+  private outlineMat: THREE.ShaderMaterial;
+  private bodyMeshes: THREE.Mesh[] = [];
+  private outlines: THREE.Mesh[] = [];
+  private skinnedKatana: THREE.Mesh[] = [];
+  private handWeapon: THREE.Mesh | null = null;
+  private handWeaponOutline: THREE.Mesh | null = null;
+  private plates: THREE.Mesh[] = [];
+  private height: number;
+  private wipe = -1;
+  private wasAwakened = false;
+  private popT = 0;
+  private flash = 0;
+  private hasPose = false;
+  private yaw = 0;
+  private lastAnchor = new THREE.Vector3(1e9, 0, 0);
+  private quality: Q = 'high';
+  private twoHand = false;
+  lookup: MoveLookup = defaultMoveLookup;
+  visibleWeapon = false;
+
+  constructor(readonly char: CharId, asset: CharAsset, opts: { alt?: boolean } = {}) {
+    this.look = charLook(char);
+    this.res = asset.res;
+    this.height = asset.height;
+    const L = this.look;
+    this.model = cloneCharacter(asset);
+    this.group.add(this.rootObj);
+    this.rootObj.add(this.model);
+    this.group.updateMatrixWorld(true);
+    // ---- uniforms
+    const u = this.u;
+    u.uShadowTint.value.set(L.shadowTint);
+    u.uRimColor.value.set(L.rim);
+    u.uRimStrength.value = L.rimStrength;
+    u.uGlowColor.value.set(L.glow);
+    u.uOutlineColor.value.set(opts.alt ? L.altOutline : L.outline);
+    u.uOutlineWidth.value = 0.0055 * L.outlineWidth;
+    u.uHue.value = opts.alt ? L.altHue : 0;
+    u.uMap2.value = asset.awakenTex;
+    u.uHasMap2.value = asset.awakenTex ? 1 : 0;
+    this.outlineMat = makeFighterOutline(u);
+    // ---- bones
+    this.model.traverse((o) => {
+      if ((o as THREE.Bone).isBone) {
+        const b = o as THREE.Bone;
+        const n = normBoneName(b.name);
+        if (!this.bones.has(n)) this.bones.set(n, b);
+        this.restLocalQ.set(b, b.quaternion.clone());
+      }
+    });
+    this.setupRig();
+    // ---- materials / meshes
+    const meshes: THREE.Mesh[] = [];
+    this.model.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+    const matByMap = new Map<THREE.Texture | null, THREE.MeshToonMaterial>();
+    const toonFor = (src: THREE.Material | THREE.Material[]): THREE.MeshToonMaterial => {
+      const s = (Array.isArray(src) ? src[0] : src) as THREE.MeshStandardMaterial;
+      const map = s?.map ?? null;
+      let m = matByMap.get(map);
+      if (!m) { m = makeFighterToon(map, u); matByMap.set(map, m); this.toonMats.push(m); }
+      return m;
+    };
+    for (const mesh of meshes) {
+      const name = `${mesh.name} ${mesh.parent?.name ?? ''}`;
+      mesh.material = toonFor(mesh.material);
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      const isFace = /face|expression|eye|brow|mouth/i.test(name);
+      const isKatana = /katana|sword|blade/i.test(name);
+      if (isKatana) this.skinnedKatana.push(mesh);
+      this.bodyMeshes.push(mesh);
+      if (!isFace) this.addOutline(mesh, isKatana ? this.skinnedKatana : null);
+    }
+    // ---- Goro awakened plates: rebind to this skeleton
+    const plateRoot = clonePlates(asset);
+    if (plateRoot) {
+      plateRoot.updateMatrixWorld(true);
+      const pm: THREE.SkinnedMesh[] = [];
+      plateRoot.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) pm.push(o as THREE.SkinnedMesh); });
+      for (const mesh of pm) {
+        const joints = mesh.skeleton.bones.map((b) => this.bones.get(normBoneName(b.name)) ?? null);
+        if (joints.some((j) => !j)) continue;
+        const bindMatrix = mesh.bindMatrix.clone();
+        const inv = mesh.skeleton.boneInverses.map((m) => m.clone());
+        const local = plateRoot.matrixWorld.clone().invert().multiply(mesh.matrixWorld);
+        mesh.removeFromParent();
+        this.model.add(mesh);
+        local.decompose(mesh.position, mesh.quaternion, mesh.scale);
+        mesh.bind(new THREE.Skeleton(joints as THREE.Bone[], inv), bindMatrix);
+        mesh.material = toonFor(mesh.material);
+        mesh.frustumCulled = false;
+        mesh.castShadow = true;
+        mesh.visible = false;
+        this.plates.push(mesh);
+        this.addOutline(mesh, this.plates);
+      }
+    }
+    // ---- hand weapons
+    const hs = this.sockets.handR;
+    if (L.weapon === 'katana' && hs) {
+      const kg = katanaGeometry();
+      const km = makeFighterToon(null, u);
+      km.vertexColors = true;
+      this.toonMats.push(km);
+      this.handWeapon = new THREE.Mesh(kg.geo, km);
+      this.handWeaponOutline = new THREE.Mesh(kg.geo, this.outlineMat);
+      (this.handWeapon.userData as { grip2: THREE.Vector3 }).grip2 = kg.grip2;
+      (this.handWeapon.userData as { len: number }).len = kg.length;
+    } else if (L.weapon === 'kunai' && hs) {
+      const km = makeFighterToon(null, u);
+      km.vertexColors = true;
+      this.toonMats.push(km);
+      this.handWeapon = new THREE.Mesh(kunaiGeometry(), km);
+      this.handWeaponOutline = new THREE.Mesh(kunaiGeometry(), this.outlineMat);
+      (this.handWeapon.userData as { len: number }).len = 0.2;
+    }
+    if (this.handWeapon && hs) {
+      this.handWeapon.castShadow = true;
+      this.handWeapon.frustumCulled = false;
+      this.handWeaponOutline!.frustumCulled = false;
+      hs.add(this.handWeapon, this.handWeaponOutline!);
+      this.handWeapon.visible = this.handWeaponOutline!.visible = false;
+    }
+    const wsock = new THREE.Object3D();
+    (this.handWeapon ?? hs ?? this.group).add(wsock);
+    if (this.handWeapon) wsock.position.set(0, 0, L.weapon === 'katana' ? 0.45 : 0.2);
+    this.sockets.weapon = wsock;
+    this.setQuality('high');
+  }
+
+  private addOutline(mesh: THREE.Mesh, list: THREE.Mesh[] | null): void {
+    let o: THREE.Mesh;
+    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+      const sm = mesh as THREE.SkinnedMesh;
+      const so = new THREE.SkinnedMesh(sm.geometry, this.outlineMat);
+      so.bindMode = sm.bindMode;
+      so.bind(sm.skeleton, sm.bindMatrix);
+      so.bindMatrixInverse.copy(sm.bindMatrixInverse);
+      o = so;
+    } else o = new THREE.Mesh(mesh.geometry, this.outlineMat);
+    o.position.copy(mesh.position); o.quaternion.copy(mesh.quaternion); o.scale.copy(mesh.scale);
+    o.frustumCulled = false;
+    o.castShadow = false;
+    o.userData.src = mesh;
+    mesh.parent!.add(o);
+    this.outlines.push(o);
+    if (list) list.push(o);
+  }
+
+  // --------------------------------------------------------------------------- rig setup
+  private b(...names: string[]): THREE.Bone | null {
+    for (const n of names) { const b = this.bones.get(n); if (b) return b; }
+    return null;
+  }
+
+  private setupRig(): void {
+    const restQ = (b: THREE.Bone) => b.getWorldQuaternion(new THREE.Quaternion());
+    const restP = (b: THREE.Bone) => b.getWorldPosition(new THREE.Vector3());
+    this.hips = this.b('Hips', 'hips', 'pelvis');
+    this.spine = this.b('Spine', 'spine');
+    this.spine1 = this.b('Spine1', 'spine1');
+    this.chest = this.b('Spine2', 'Chest', 'chest', 'UpperChest') ?? this.spine1 ?? this.spine;
+    if (this.chest === this.spine1) this.spine1 = null;
+    if (this.chest === this.spine) this.spine = null;
+    this.neck = this.b('Neck', 'neck');
+    this.head = this.b('Head', 'head');
+    if (this.hips) this.hipsRest.copy(this.hips.position);
+    for (const t of [this.hips, this.spine, this.spine1, this.chest, this.neck, this.head]) if (t) this.oTorso.set(t, restQ(t));
+    const limb = (u: string, l: string, e: string, isLeg: boolean): Limb | null => {
+      const up = this.b(u), lo = this.b(l), end = this.b(e);
+      if (!up || !lo || !end) return null;
+      const pu = restP(up), pl = restP(lo), pe = restP(end);
+      const cu = canon(_v1.subVectors(pl, pu), new THREE.Quaternion());
+      const cl = canon(_v1.subVectors(pe, pl), new THREE.Quaternion());
+      const oUp = cu.clone().invert().multiply(restQ(up));
+      const oLo = cl.clone().invert().multiply(restQ(lo));
+      // hand: canonical frame = forearm's; foot: world aligned
+      const oEnd = (isLeg ? new THREE.Quaternion() : cl.clone().invert()).multiply(restQ(end));
+      return { up, lo, end, a: pu.distanceTo(pl), b: pl.distanceTo(pe), oUp, oLo, oEnd };
+    };
+    this.armL = limb('LeftArm', 'LeftForeArm', 'LeftHand', false);
+    this.armR = limb('RightArm', 'RightForeArm', 'RightHand', false);
+    this.legL = limb('LeftUpLeg', 'LeftLeg', 'LeftFoot', true);
+    this.legR = limb('RightUpLeg', 'RightLeg', 'RightFoot', true);
+    const chestP = this.chest ? restP(this.chest) : new THREE.Vector3(0, 1.3, 0);
+    if (this.armL) { this.shG_L.copy(restP(this.armL.up)).sub(chestP); this.sA = (this.armL.a + this.armL.b) / REF_ARM; }
+    else this.shG_L.copy(REF_SHOULDER_L);
+    if (this.armR) this.shG_R.copy(restP(this.armR.up)).sub(chestP); else this.shG_R.copy(REF_SHOULDER_R);
+    if (this.legL) {
+      this.sL = (this.legL.a + this.legL.b) / REF_LEG;
+      this.rx = THREE.MathUtils.clamp(Math.abs(restP(this.legL.up).x) / REF_HIPX, 0.8, 1.7);
+      this.ankleY = restP(this.legL.end).y;
+    }
+    // sockets (canonical orientation, child of the bone)
+    const sock = (name: SocketName, bone: THREE.Bone | null, canonRest: THREE.Quaternion | null, off: [number, number, number]) => {
+      const o = new THREE.Object3D();
+      if (!bone) { this.group.add(o); o.position.set(0, 1.2, 0); this.sockets[name] = o; return; }
+      const lq = restQ(bone).invert();
+      if (canonRest) lq.multiply(canonRest);
+      o.quaternion.copy(lq);
+      o.position.set(off[0], off[1], off[2]).applyQuaternion(lq);
+      bone.add(o);
+      this.sockets[name] = o;
+    };
+    const canonOf = (l: Limb | null) => (l ? canon(_v4.subVectors(restP(l.end), restP(l.lo)), new THREE.Quaternion()) : null);
+    sock('head', this.head, null, [0, 0.09 * this.sA, 0.03]);
+    sock('chest', this.chest, null, [0, 0.03, 0.07]);
+    sock('hips', this.hips, null, [0, 0, 0]);
+    sock('handL', this.armL?.end ?? null, canonOf(this.armL), [0, -0.075 * this.sA, 0.0]);
+    sock('handR', this.armR?.end ?? null, canonOf(this.armR), [0, -0.075 * this.sA, 0.0]);
+    sock('footL', this.legL?.end ?? null, null, [0, -0.06, 0.08]);
+    sock('footR', this.legR?.end ?? null, null, [0, -0.06, 0.08]);
+    // finger curl (fists): per finger bone, a curl axis in its own rest frame
+    for (const left of [true, false]) {
+      const side = left ? 'Left' : 'Right';
+      const hand = left ? this.armL?.end : this.armR?.end;
+      const i1 = this.b(`${side}HandIndex1`), p1 = this.b(`${side}HandPinky1`) ?? this.b(`${side}HandRing1`);
+      if (!hand || !i1 || !p1) continue;
+      const hp = restP(hand);
+      const along = restP(i1).add(restP(p1)).multiplyScalar(0.5).sub(hp).normalize();
+      const across = restP(i1).sub(restP(p1)).normalize();
+      const palm = left ? new THREE.Vector3().crossVectors(along, across) : new THREE.Vector3().crossVectors(across, along);
+      palm.normalize();
+      const kW = new THREE.Vector3().crossVectors(along, palm).normalize();
+      for (const f of ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']) {
+        for (let k = 1; k <= 3; k++) {
+          const bone = this.b(`${side}Hand${f}${k}`);
+          if (!bone) continue;
+          const axis = kW.clone().applyQuaternion(restQ(bone).invert());
+          const thumb = f === 'Thumb';
+          const fist = (thumb ? [25, 30, 25] : [80, 90, 65])[k - 1] * D2R;
+          const open = (thumb ? [0, 5, 5] : [8, 10, 6])[k - 1] * D2R;
+          this.fingers.push({ bone, rest: bone.quaternion.clone(), axis, fist, open, left });
+        }
+      }
+    }
+    // spring chains
+    const isSpring = (n: string) => /hair|pony|scarf|tail|cape|ribbon|tassel|sash|skirt/i.test(n);
+    for (const [n, b] of this.bones) {
+      if (!isSpring(n)) continue;
+      const parent = b.parent as THREE.Bone | null;
+      if (parent && (parent as THREE.Bone).isBone && isSpring(normBoneName(parent.name))) continue; // not a chain root
+      const list: THREE.Bone[] = [b];
+      for (;;) {
+        const last = list[list.length - 1];
+        const next = last.children.find((c) => (c as THREE.Bone).isBone && isSpring(normBoneName(c.name))) as THREE.Bone | undefined;
+        if (!next || list.length > 12) break;
+        list.push(next);
+      }
+      const childLocal: THREE.Vector3[] = [], segLen: number[] = [];
+      for (let i = 0; i < list.length; i++) {
+        if (i + 1 < list.length) childLocal.push(list[i + 1].position.clone());
+        else {
+          const prev = i > 0 ? childLocal[i - 1] : new THREE.Vector3(0, 0.12, 0);
+          const len = Math.max(0.06, prev.length() * 0.8);
+          childLocal.push(new THREE.Vector3(0, len, 0));
+        }
+        segLen.push(childLocal[i].length());
+      }
+      const np = list.length + 1;
+      this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), init: false });
+    }
+  }
+
+  setQuality(q: Q): void {
+    this.quality = q;
+    const sh = q !== 'low';
+    for (const m of this.bodyMeshes) m.castShadow = sh;
+    if (this.handWeapon) this.handWeapon.castShadow = sh;
+  }
+
+  /** stage shadow tint blend */
+  setShadowTint(stageTint: THREE.Color | null): void {
+    this.u.uShadowTint.value.set(this.look.shadowTint);
+    if (stageTint) this.u.uShadowTint.value.lerp(stageTint, 0.5);
+  }
+
+  socket(name: SocketName): THREE.Object3D { return this.sockets[name]; }
+
+  get poseName(): PoseName { return this.info.pose; }
+
+  // --------------------------------------------------------------------------- update
+  /** time: seconds (monotonic); dt: real seconds since last frame */
+  update(f: FighterState, prev: FighterState | null, alpha: number, dt: number, time: number): void {
+    const p = prev ?? f;
+    const x = (p.pos.x + (f.pos.x - p.pos.x) * alpha) / 1000;
+    const y = (p.pos.y + (f.pos.y - p.pos.y) * alpha) / 1000;
+    const z = (p.pos.z + (f.pos.z - p.pos.z) * alpha) / 1000;
+    const fx = p.facing.x + (f.facing.x - p.facing.x) * alpha;
+    const fz = p.facing.z + (f.facing.z - p.facing.z) * alpha;
+    if (fx * fx + fz * fz > 1) this.yaw = Math.atan2(fx, fz);
+    this.group.position.set(x, y, z);
+    this.group.rotation.set(0, this.yaw, 0);
+    const L = this.look;
+    // ---- awakening (bottom→top atlas wipe, pop, plates)
+    if (f.awakened && !this.wasAwakened) { this.popT = 0.35; this.flash = Math.max(this.flash, 0.8); if (this.wipe < 0) this.wipe = -0.05; }
+    if (!f.awakened && this.wasAwakened) this.wipe = -1;
+    this.wasAwakened = f.awakened;
+    if (f.awakened && this.wipe < this.height + 0.3) this.wipe = Math.min(this.height + 0.3, this.wipe + dt * (this.height + 0.4) / 0.55);
+    const awk = this.wipe > this.height ? 1 : Math.max(0, this.wipe / this.height);
+    let s = 1 + (L.awakenScale - 1) * awk;
+    if (this.popT > 0) {
+      this.popT = Math.max(0, this.popT - dt);
+      s *= 1 + Math.sin((this.popT / 0.35) * Math.PI) * 0.08;
+    }
+    this.group.scale.setScalar(s);
+    // ---- pose
+    sampleFighter(this.char, f, alpha, time, this.target, this.info, this.lookup);
+    if (!this.hasPose || this.info.snap) {
+      this.pose.set(this.target);
+      this.hasPose = true;
+    } else {
+      const k = 1 - Math.exp(-dt * 16);
+      for (let i = 0; i < NCH; i++) this.pose[i] += (this.target[i] - this.pose[i]) * k;
+      this.pose[C.weapon] = this.target[C.weapon]; this.pose[C.twoHand] = this.target[C.twoHand];
+    }
+    let wv = this.pose[C.weapon] > 0.5;
+    if (this.char === 'shiori') wv = !!(f.moveId && /kunai|throw|shuriken/i.test(f.moveId)) || this.info.pose === 'throwProjectile';
+    this.visibleWeapon = wv && !!this.handWeapon;
+    this.twoHand = this.visibleWeapon && this.pose[C.twoHand] > 0.5 && L.weapon === 'katana';
+    if (this.handWeapon) this.handWeapon.visible = this.handWeaponOutline!.visible = this.visibleWeapon;
+    for (const m of this.skinnedKatana) m.visible = !(this.visibleWeapon && L.weapon === 'katana');
+    const plateOn = f.awakened && awk > 0.3;
+    for (const m of this.plates) m.visible = plateOn;
+    this.group.updateMatrixWorld(true);
+    this.applyPose(this.pose);
+    this.simChains(dt);
+    // ---- material uniforms
+    const u = this.u;
+    u.uWipe.value = this.wipe;
+    u.uEdge.value = this.wipe > -0.5 && this.wipe < this.height + 0.25 ? 1 : 0;
+    u.uGlow.value = awk * L.glowStrength * (0.75 + 0.25 * Math.sin(time * 6.5));
+    u.uRimColor.value.set(awk > 0.5 ? L.rimAwk : L.rim);
+    u.uRimStrength.value = L.rimStrength + (L.rimStrengthAwk - L.rimStrength) * awk * (0.85 + 0.15 * Math.sin(time * 9));
+    u.uRimWidth.value = 0.62 - 0.1 * awk;
+    if (f.counterHitFlash > 0) this.flash = Math.max(this.flash, 0.45);
+    this.flash = Math.max(0, this.flash - dt * 5);
+    u.uFlash.value = this.flash;
+    if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.set(awk > 0.5 ? L.outlineAwk : L.outline);
+  }
+
+  /** register a hit on this fighter (flash) */
+  onHit(strength: number): void {
+    this.flash = Math.max(this.flash, 0.25 + strength * 0.25);
+  }
+
+  // --------------------------------------------------------------------------- pose → bones
+  private setWorldQ(bone: THREE.Object3D, w: THREE.Quaternion): void {
+    const parent = bone.parent!;
+    parent.getWorldQuaternion(_qp);
+    bone.quaternion.copy(_qp.invert().multiply(w));
+    bone.updateMatrixWorld(true);
+  }
+
+  private applyPose(c: Float32Array): void {
+    if (!this.hips) return;
+    const sL = this.sL;
+    // root (yaw / pitch around the pelvis pivot)
+    const pivot = REF_PIVOT * sL;
+    _q1.setFromAxisAngle(_AY, c[C.rootYaw] * D2R);
+    _q2.setFromAxisAngle(_AX, c[C.rootPitch] * D2R);
+    this.rootObj.quaternion.copy(_q1).multiply(_q2);
+    _v1.set(0, -pivot, 0).applyQuaternion(this.rootObj.quaternion);
+    this.rootObj.position.set(0, pivot + c[C.lift] * sL, 0).add(_v1);
+    this.rootObj.updateMatrixWorld(true);
+    this.rootObj.getWorldQuaternion(_qa); // root world
+    // hips
+    this.hips.position.set(this.hipsRest.x + c[C.hipX] * sL, this.hipsRest.y + c[C.hipY] * sL, this.hipsRest.z + c[C.hipZ] * sL);
+    _e.set(c[C.hipP] * D2R, c[C.hipYaw] * D2R, -c[C.hipR] * D2R, 'YXZ');
+    _qb.copy(_qa).multiply(_q1.setFromEuler(_e)); // canonical hips world
+    this.setWorldQ(this.hips, _q2.copy(_qb).multiply(this.oTorso.get(this.hips)!));
+    // spine chain
+    _e.set(c[C.spP] * D2R, c[C.spY] * D2R, -c[C.spR] * D2R, 'YXZ');
+    _q3.setFromEuler(_e);
+    if (this.spine && this.spine1) {
+      _qc.copy(_qI).slerp(_q3, 0.5);
+      _qb.multiply(_qc); this.setWorldQ(this.spine, _q2.copy(_qb).multiply(this.oTorso.get(this.spine)!));
+      _qb.multiply(_qc); this.setWorldQ(this.spine1, _q2.copy(_qb).multiply(this.oTorso.get(this.spine1)!));
+    } else {
+      _qb.multiply(_q3);
+      const sp = this.spine ?? this.spine1;
+      if (sp) this.setWorldQ(sp, _q2.copy(_qb).multiply(this.oTorso.get(sp)!));
+    }
+    _e.set(c[C.chP] * D2R, c[C.chY] * D2R, -c[C.chR] * D2R, 'YXZ');
+    _qb.multiply(_q1.setFromEuler(_e)); // canonical chest world
+    if (this.chest) this.setWorldQ(this.chest, _q2.copy(_qb).multiply(this.oTorso.get(this.chest)!));
+    const chestCanon = _qc.copy(_qb); // keep (no further use of _qc below until arms done)
+    // neck / head
+    _q3.copy(_qb);
+    if (this.neck) {
+      _e.set(c[C.hdP] * 0.35 * D2R, c[C.hdY] * 0.4 * D2R, -c[C.hdR] * 0.4 * D2R, 'YXZ');
+      _q3.multiply(_q1.setFromEuler(_e));
+      this.setWorldQ(this.neck, _q2.copy(_q3).multiply(this.oTorso.get(this.neck)!));
+    }
+    if (this.head) {
+      const k = this.neck ? 0.65 : 1;
+      _e.set(c[C.hdP] * k * D2R, c[C.hdY] * (this.neck ? 0.6 : 1) * D2R, -c[C.hdR] * (this.neck ? 0.6 : 1) * D2R, 'YXZ');
+      _q3.multiply(_q1.setFromEuler(_e));
+      this.setWorldQ(this.head, _q2.copy(_q3).multiply(this.oTorso.get(this.head)!));
+    }
+    // chest canonical matrix (hand targets live here)
+    const ws = this.group.scale.x;
+    if (this.chest) this.chest.getWorldPosition(_v3); else _v3.set(0, 1.3, 0).applyMatrix4(this.rootObj.matrixWorld);
+    _m2.compose(_v3, chestCanon, _sc.set(ws, ws, ws));
+    // arms
+    if (this.armL) this.solveArm(this.armL, c, C.hL, C.eL, C.wL, 1, this.shG_L, REF_SHOULDER_L, ws, _m2);
+    if (this.armR) this.solveArm(this.armR, c, C.hR, C.eR, C.wR, -1, this.shG_R, REF_SHOULDER_R, ws, _m2);
+    if (this.twoHand && this.armL && this.armR && this.handWeapon) {
+      this.handWeapon.updateMatrixWorld(true);
+      _T.copy((this.handWeapon.userData as { grip2: THREE.Vector3 }).grip2).applyMatrix4(this.handWeapon.matrixWorld);
+      _pole.set(c[C.eL], c[C.eL + 1], c[C.eL + 2]).applyQuaternion(_qa);
+      this.solveLimb(this.armL, _T, _pole, ws, false);
+      // left hand matches the right hand's canonical orientation
+      this.sockets.handR.getWorldQuaternion(_q3);
+      this.setWorldQ(this.armL.end, _q2.copy(_q3).multiply(this.armL.oEnd));
+    }
+    // fingers: fist ↔ open hand
+    for (const fg of this.fingers) {
+      const o = THREE.MathUtils.clamp(c[fg.left ? C.openL : C.openR], 0, 1);
+      _q1.setFromAxisAngle(fg.axis, fg.fist + (fg.open - fg.fist) * o);
+      fg.bone.quaternion.copy(fg.rest).multiply(_q1);
+    }
+    // legs
+    if (this.legL) this.solveLeg(this.legL, c, C.fL, C.kL, C.fLp, ws);
+    if (this.legR) this.solveLeg(this.legR, c, C.fR, C.kR, C.fRp, ws);
+  }
+
+  private solveArm(l: Limb, c: Float32Array, hI: number, eI: number, wI: number, m: number, shG: THREE.Vector3, shRef: THREE.Vector3, ws: number, chestM: THREE.Matrix4): void {
+    _T.set(c[hI], c[hI + 1] - HAND_DROP, c[hI + 2]).sub(shRef).multiplyScalar(this.sA).add(shG).applyMatrix4(chestM);
+    _pole.set(c[eI], c[eI + 1], c[eI + 2]).applyQuaternion(_qa);
+    this.solveLimb(l, _T, _pole, ws, false);
+    // hand: canonical = forearm canonical * wrist euler
+    _e.set(c[wI] * D2R, c[wI + 1] * D2R * m, c[wI + 2] * D2R * m, 'XYZ');
+    _q3.copy(_cq2).multiply(_q1.setFromEuler(_e));
+    this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+  }
+
+  private solveLeg(l: Limb, c: Float32Array, fI: number, kI: number, pI: number, ws: number): void {
+    _T.set(c[fI] * this.rx, this.ankleY + (c[fI + 1] - REF_ANKLE) * this.sL, c[fI + 2] * this.sL).applyMatrix4(this.rootObj.matrixWorld);
+    _pole.set(c[kI], c[kI + 1], c[kI + 2]).applyQuaternion(_qa);
+    this.solveLimb(l, _T, _pole, ws, true);
+    _q3.copy(_qa).multiply(_q1.setFromAxisAngle(_AY, c[pI + 1] * D2R)).multiply(_q2.setFromAxisAngle(_AX, c[pI] * D2R));
+    this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+  }
+
+  /** analytic two-bone IK; writes canonical upper/lower world rotations into _cq1/_cq2 and applies them */
+  private solveLimb(l: Limb, target: THREE.Vector3, pole: THREE.Vector3, ws: number, isLeg: boolean): void {
+    const a = l.a * ws, b = l.b * ws;
+    l.up.getWorldPosition(_S);
+    _v1.subVectors(target, _S);
+    let dist = _v1.length();
+    if (dist < 1e-5) { _v1.set(0, -1, 0); dist = 1e-5; }
+    _v1.divideScalar(dist);
+    dist = Math.min(Math.max(dist, Math.abs(a - b) + 1e-3), (a + b) * 0.9995);
+    const cosA = (a * a + dist * dist - b * b) / (2 * a * dist);
+    const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+    _v2.copy(pole).addScaledVector(_v1, -pole.dot(_v1));
+    if (_v2.lengthSq() < 1e-8) _v2.set(0, 0, isLeg ? 1 : -1).addScaledVector(_v1, -_v1.z);
+    _v2.normalize();
+    _E.copy(_S).addScaledVector(_v1, a * cosA).addScaledVector(_v2, a * sinA);
+    _y.subVectors(_S, _E).normalize();
+    _v3.copy(pole).addScaledVector(_y, -pole.dot(_y));
+    if (_v3.lengthSq() < 1e-8) _v3.copy(_v2);
+    _v3.normalize();
+    if (isLeg) _z.copy(_v3); else _z.copy(_v3).negate();
+    _x.crossVectors(_y, _z).normalize();
+    _z.crossVectors(_x, _y);
+    _m.makeBasis(_x, _y, _z);
+    _cq1.setFromRotationMatrix(_m);
+    _v4.copy(_S).addScaledVector(_v1, dist);
+    _y.subVectors(_E, _v4).normalize();
+    _z.crossVectors(_x, _y).normalize();
+    _m.makeBasis(_x, _y, _z);
+    _cq2.setFromRotationMatrix(_m);
+    this.setWorldQ(l.up, _q2.copy(_cq1).multiply(l.oUp));
+    this.setWorldQ(l.lo, _q2.copy(_cq2).multiply(l.oLo));
+  }
+
+  // --------------------------------------------------------------------------- spring chains
+  private simChains(dt: number): void {
+    if (!this.chains.length) return;
+    const h = Math.min(dt, 1 / 30);
+    const ws = this.group.scale.x;
+    const sp = this.look.spring;
+    // collision spheres
+    if (this.head) this.head.getWorldPosition(_cA); else _cA.set(0, -100, 0);
+    if (this.chest) this.chest.getWorldPosition(_cB); else _cB.set(0, -100, 0);
+    _cA.y += 0.08 * this.sA * ws;
+    const rHead = 0.12 * this.sA * ws, rChest = 0.15 * this.sA * ws;
+    // teleport (round reset / side switch) → reinit
+    const jump = this.lastAnchor.distanceToSquared(this.group.position) > 1.0;
+    this.lastAnchor.copy(this.group.position);
+    for (const ch of this.chains) {
+      const nb = ch.bones.length, np = nb + 1, p = ch.p, pp = ch.pp;
+      // reset to rest (animated parent) and collect targets
+      for (let i = 0; i < nb; i++) ch.bones[i].quaternion.copy(ch.restQ[i]);
+      ch.bones[0].updateMatrixWorld(true);
+      if (!ch.init || jump || dt <= 0) {
+        for (let i = 0; i < np; i++) {
+          if (i < nb) ch.bones[i].getWorldPosition(_v1); else ch.bones[nb - 1].localToWorld(_v1.copy(ch.childLocal[nb - 1]));
+          p[i * 3] = pp[i * 3] = _v1.x; p[i * 3 + 1] = pp[i * 3 + 1] = _v1.y; p[i * 3 + 2] = pp[i * 3 + 2] = _v1.z;
+        }
+        ch.init = true;
+        if (dt <= 0) continue;
+      }
+      ch.bones[0].getWorldPosition(_v1);
+      p[0] = pp[0] = _v1.x; p[1] = pp[1] = _v1.y; p[2] = pp[2] = _v1.z;
+      const damp = 1 - sp.drag;
+      for (let i = 1; i < np; i++) {
+        const k = i * 3;
+        if (i < nb) ch.bones[i].getWorldPosition(_v2); else ch.bones[nb - 1].localToWorld(_v2.copy(ch.childLocal[nb - 1]));
+        const vx = (p[k] - pp[k]) * damp, vy = (p[k + 1] - pp[k + 1]) * damp, vz = (p[k + 2] - pp[k + 2]) * damp;
+        pp[k] = p[k]; pp[k + 1] = p[k + 1]; pp[k + 2] = p[k + 2];
+        p[k] += vx; p[k + 1] += vy - sp.gravity * h * h; p[k + 2] += vz;
+        p[k] += (_v2.x - p[k]) * sp.stiffness; p[k + 1] += (_v2.y - p[k + 1]) * sp.stiffness; p[k + 2] += (_v2.z - p[k + 2]) * sp.stiffness;
+      }
+      for (let it = 0; it < 3; it++) {
+        for (let i = 1; i < np; i++) {
+          const a = (i - 1) * 3, b = i * 3;
+          const seg = ch.segLen[i - 1] * ws;
+          const dx = p[b] - p[a], dy = p[b + 1] - p[a + 1], dz = p[b + 2] - p[a + 2];
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+          const diff = (d - seg) / d;
+          if (i === 1) { p[b] -= dx * diff; p[b + 1] -= dy * diff; p[b + 2] -= dz * diff; }
+          else {
+            const hx = dx * diff * 0.5, hy = dy * diff * 0.5, hz = dz * diff * 0.5;
+            p[a] += hx; p[a + 1] += hy; p[a + 2] += hz; p[b] -= hx; p[b + 1] -= hy; p[b + 2] -= hz;
+          }
+        }
+        for (let i = 2; i < np; i++) {
+          const k = i * 3;
+          collide(p, k, _cA, rHead);
+          collide(p, k, _cB, rChest);
+          if (p[k + 1] < 0.03) p[k + 1] = 0.03;
+        }
+      }
+      // orient bones toward the simulated points
+      for (let i = 0; i < nb; i++) {
+        const bone = ch.bones[i];
+        bone.getWorldPosition(_v1);
+        bone.localToWorld(_v2.copy(ch.childLocal[i]));
+        _v2.sub(_v1);
+        _v3.set(p[i * 3 + 3], p[i * 3 + 4], p[i * 3 + 5]).sub(_v1);
+        if (_v2.lengthSq() < 1e-10 || _v3.lengthSq() < 1e-10) continue;
+        _q1.setFromUnitVectors(_v2.normalize(), _v3.normalize());
+        bone.getWorldQuaternion(_q2);
+        this.setWorldQ(bone, _q1.multiply(_q2));
+      }
+    }
+  }
+
+  get tris(): number {
+    let t = 0;
+    for (const m of this.bodyMeshes) { const g = m.geometry; t += (g.index ? g.index.count : g.getAttribute('position').count) / 3; }
+    return t;
+  }
+
+  dispose(): void {
+    for (const m of this.toonMats) m.dispose();
+    this.outlineMat.dispose();
+    this.group.removeFromParent();
+  }
+}
+
+const _cq1 = new THREE.Quaternion(), _cq2 = new THREE.Quaternion();
+
+function collide(p: Float32Array, k: number, c: THREE.Vector3, r: number): void {
+  const dx = p[k] - c.x, dy = p[k + 1] - c.y, dz = p[k + 2] - c.z;
+  const d2 = dx * dx + dy * dy + dz * dz;
+  if (d2 < r * r && d2 > 1e-8) {
+    const d = Math.sqrt(d2), s = r / d;
+    p[k] = c.x + dx * s; p[k + 1] = c.y + dy * s; p[k + 2] = c.z + dz * s;
+  }
+}
