@@ -52,6 +52,8 @@ export class SettingsScreen extends BaseScreen {
         left: () => { s.reduceFlashing = !s.reduceFlashing; this.save(); }, right: () => { s.reduceFlashing = !s.reduceFlashing; this.save(); } },
       { label: 'Announcer voice', value: () => (s.announcer ? 'ON' : 'OFF'),
         left: () => { s.announcer = !s.announcer; this.save(); }, right: () => { s.announcer = !s.announcer; this.save(); } },
+      { label: 'Broadcast (commentary + ticker)', value: () => (s.broadcast ? 'ON' : 'OFF'),
+        left: () => { s.broadcast = !s.broadcast; this.save(); }, right: () => { s.broadcast = !s.broadcast; this.save(); } },
       { section: 'CONTROLS', label: 'Touch controls', value: () => s.touch.toUpperCase(),
         left: () => { s.touch = this.cycle(T, s.touch, -1); this.save(); }, right: () => { s.touch = this.cycle(T, s.touch, 1); this.save(); } },
       sch(0), sch(1),

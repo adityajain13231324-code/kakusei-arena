@@ -1,6 +1,12 @@
 {
-  "triangles": 5969,
-  "base_triangles": 5969,
+  "version": 2,
+  "triangles": 23338,
+  "base_triangles": 23338,
+  "awakened_triangles": 23338,
+  "triangles_by_mesh": {
+    "Face_Expressions": 532,
+    "Fighter": 22806
+  },
   "bones": [
     "Hips",
     "Spine",
@@ -15,10 +21,40 @@
     "LeftArm",
     "LeftForeArm",
     "LeftHand",
+    "LeftHandThumb1",
+    "LeftHandThumb2",
+    "LeftHandThumb3",
+    "LeftHandIndex1",
+    "LeftHandIndex2",
+    "LeftHandIndex3",
+    "LeftHandMiddle1",
+    "LeftHandMiddle2",
+    "LeftHandMiddle3",
+    "LeftHandRing1",
+    "LeftHandRing2",
+    "LeftHandRing3",
+    "LeftHandPinky1",
+    "LeftHandPinky2",
+    "LeftHandPinky3",
     "RightShoulder",
     "RightArm",
     "RightForeArm",
     "RightHand",
+    "RightHandThumb1",
+    "RightHandThumb2",
+    "RightHandThumb3",
+    "RightHandIndex1",
+    "RightHandIndex2",
+    "RightHandIndex3",
+    "RightHandMiddle1",
+    "RightHandMiddle2",
+    "RightHandMiddle3",
+    "RightHandRing1",
+    "RightHandRing2",
+    "RightHandRing3",
+    "RightHandPinky1",
+    "RightHandPinky2",
+    "RightHandPinky3",
     "Scarf_01",
     "Scarf_02",
     "LeftUpLeg",
@@ -30,7 +66,81 @@
     "RightFoot",
     "RightToeBase"
   ],
+  "finger_bones": [
+    "LeftHandThumb1",
+    "LeftHandThumb2",
+    "LeftHandThumb3",
+    "LeftHandIndex1",
+    "LeftHandIndex2",
+    "LeftHandIndex3",
+    "LeftHandMiddle1",
+    "LeftHandMiddle2",
+    "LeftHandMiddle3",
+    "LeftHandRing1",
+    "LeftHandRing2",
+    "LeftHandRing3",
+    "LeftHandPinky1",
+    "LeftHandPinky2",
+    "LeftHandPinky3",
+    "RightHandThumb1",
+    "RightHandThumb2",
+    "RightHandThumb3",
+    "RightHandIndex1",
+    "RightHandIndex2",
+    "RightHandIndex3",
+    "RightHandMiddle1",
+    "RightHandMiddle2",
+    "RightHandMiddle3",
+    "RightHandRing1",
+    "RightHandRing2",
+    "RightHandRing3",
+    "RightHandPinky1",
+    "RightHandPinky2",
+    "RightHandPinky3"
+  ],
+  "finger_curl_axis": "local +X (bone roll aligns local Z with the palm normal); positive X rotation curls toward the palm",
   "materials": 1,
-  "height_m": 1.9207630157470703,
-  "mesh_count": 2
+  "height_m": 1.968477175036952,
+  "body_height_m": 1.8,
+  "mesh_count": 2,
+  "meshes": [
+    "Face_Expressions",
+    "Fighter"
+  ],
+  "atlas": {
+    "size": 2048,
+    "mobile": 1024,
+    "uv_layout": "unique painted unwrap (v2), not the v1 8x8 palette grid",
+    "glow_mask": "tex_glow.png (512, white = emissive when awakened)"
+  },
+  "expressions": {
+    "mesh": "Face_Expressions",
+    "panels": [
+      "neutral",
+      "shout",
+      "pain",
+      "determined"
+    ],
+    "uv_offset_gltf": {
+      "neutral": [
+        0.0,
+        0.0
+      ],
+      "shout": [
+        0.25,
+        0.0
+      ],
+      "pain": [
+        0.5,
+        0.0
+      ],
+      "determined": [
+        0.75,
+        0.0
+      ]
+    },
+    "how": "Add the offset to the Face_Expressions UVs (or set texture.offset on a cloned map for that mesh only). Panels live in the top 512 px row of both atlases.",
+    "default": "neutral"
+  },
+  "notes": "Kaito Homura: spiky red/orange hair, tank top, gakuran tied at waist with crimson lining, bandaged hands, red sneakers."
 }
