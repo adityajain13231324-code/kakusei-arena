@@ -7,6 +7,33 @@
 
 ---
 
+## ★ v2 QUALITY UPGRADE (Nov 18, 2026) — read this first
+
+**Where we are (v0.1, in repo):** deterministic combat sim + 4 fighters' move data (256 tests passing), synth audio + VFX, full UI/menus/HUD/touch/training, Astra's rigged base models (`public/characters/*`, ~6k tris, Mixamo-style bones). In progress: renderer, CPU AI, online rollback.
+
+**Problem:** base models look toyish (blocky limbs, flat faces, low detail). **Goal:** top-notch look — fightkaro.com level of polish or better, but anime-styled.
+
+**What we copy from fightkaro.com (UX + production value, not its content):**
+- [ ] Characters with real faces, detailed clothing, good proportions; lit 3D stages full of props (crowds, banners, flags, vendor stalls).
+- [ ] Title screen with 2 fighters posing over the stage + huge 2-tone logo + one-line tagline.
+- [ ] Select screen: 3D fighters left & right posing, card grid in the middle, chapter grouping, locked "NEXT" characters (unlock by beating Arcade), stage + CPU difficulty chips, big **PLAY WITH A FRIEND** (blue) and **FIGHT!** (orange) buttons, super-move description per fighter.
+- [ ] In-fight HUD: square portraits, thick bars, big center timer, pause button, meter bars at the bottom.
+- [ ] Fun flavor layer: an anime "tournament broadcast" — live commentator panel ("BREAKING: Kaito's hair is now 40% fire") + bottom news ticker with jokes about the fight.
+- [ ] Crowd of spectators that cheers on big hits / KO.
+
+**Model pipeline v2 (replaces "procedural fighters"):**
+1. Astra's Blender build script (`tools/assets/build_assets.py`) is the base. Upgrade it, don't throw it away.
+2. Upgrade targets per fighter: 15–25k tris, anime proportions (7–7.5 heads, slimmer limbs, bigger hands/feet detail), smooth subdivided limbs (no boxy segments), real fingers, sculpted anime face with painted eyes/brows/mouth in the atlas + swappable expressions, hair as layered clumps/spikes with volume, clothing as separate layered shells (jacket, scarf, haori, robe) with folds painted in the atlas, cel-friendly atlas (flat colors + painted shadow/highlight shapes), outline-ready normals.
+3. Same skeleton names (Mixamo-style), A-pose, GLB + 1024 variant, awakened atlas.
+4. Renderer plays them as skinned meshes: toon material + rim light + inverted-hull outline; poses from the shared pose library mapped onto bones; stepped animation; spring-bone hair/scarf.
+5. Later: Mixamo / hand-keyed clips, or Meshy-generated meshes from your own PC.
+
+**Characters stay original.** Real anime characters (and lookalikes of them) belong to their studios, so they are not in the game. Our fighters are built from the same anime archetypes so the game still feels like a shonen crossover.
+
+**Team plan:** Opus (medium) → model upgrade, renderer, netcode. Sonnet → AI, UI polish, VFX/audio tweaks, docs. Lead (Claude) → integration, QA, publishing.
+
+---
+
 ## 0. How to use this file
 
 This file is two things at once:
