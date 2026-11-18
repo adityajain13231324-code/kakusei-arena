@@ -1,0 +1,50 @@
+{
+  "kaito": {
+    "feet_z_m": -1.0386101223502919e-07,
+    "height_m": 1.9207630157470703,
+    "reimported_skinned_meshes": 2,
+    "finite_deformed_vertices": true,
+    "stress_pose_degrees": {
+      "LeftForeArm": -95,
+      "RightForeArm": -70,
+      "LeftUpLeg": -55,
+      "LeftLeg": 90
+    }
+  },
+  "shiori": {
+    "feet_z_m": -1.0386101223502919e-07,
+    "height_m": 1.8250000476837158,
+    "reimported_skinned_meshes": 2,
+    "finite_deformed_vertices": true,
+    "stress_pose_degrees": {
+      "LeftForeArm": -95,
+      "RightForeArm": -70,
+      "LeftUpLeg": -55,
+      "LeftLeg": 90
+    }
+  },
+  "ren": {
+    "feet_z_m": -1.0386101223502919e-07,
+    "height_m": 1.8250000476837158,
+    "reimported_skinned_meshes": 3,
+    "finite_deformed_vertices": true,
+    "stress_pose_degrees": {
+      "LeftForeArm": -95,
+      "RightForeArm": -70,
+      "LeftUpLeg": -55,
+      "LeftLeg": 90
+    }
+  },
+  "goro": {
+    "feet_z_m": -6.590790491145526e-08,
+    "height_m": 2.26200008392334,
+    "reimported_skinned_meshes": 2,
+    "finite_deformed_vertices": true,
+    "stress_pose_degrees": {
+      "LeftForeArm": -95,
+      "RightForeArm": -70,
+      "LeftUpLeg": -55,
+      "LeftLeg": 90
+    }
+  }
+}

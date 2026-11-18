@@ -1,0 +1,242 @@
+[
+  {
+    "file": "public/characters/kaito/model.glb",
+    "triangles": 5969,
+    "vertices": 6777,
+    "blended_vertices": 704,
+    "materials": 1,
+    "images": [
+      {
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/kaito/model_1024.glb",
+    "triangles": 5969,
+    "vertices": 6777,
+    "blended_vertices": 704,
+    "materials": 1,
+    "images": [
+      {
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/shiori/model.glb",
+    "triangles": 5551,
+    "vertices": 5925,
+    "blended_vertices": 576,
+    "materials": 1,
+    "images": [
+      {
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/shiori/model_1024.glb",
+    "triangles": 5551,
+    "vertices": 5925,
+    "blended_vertices": 576,
+    "materials": 1,
+    "images": [
+      {
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/ren/model.glb",
+    "triangles": 5903,
+    "vertices": 6729,
+    "blended_vertices": 616,
+    "materials": 1,
+    "images": [
+      {
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/ren/model_1024.glb",
+    "triangles": 5903,
+    "vertices": 6729,
+    "blended_vertices": 616,
+    "materials": 1,
+    "images": [
+      {
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/goro/model.glb",
+    "triangles": 7211,
+    "vertices": 9877,
+    "blended_vertices": 576,
+    "materials": 1,
+    "images": [
+      {
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/goro/model_1024.glb",
+    "triangles": 7211,
+    "vertices": 9877,
+    "blended_vertices": 576,
+    "materials": 1,
+    "images": [
+      {
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/characters/goro/shoulder_plates.glb",
+    "triangles": 112,
+    "vertices": 252,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/ac_unit.glb",
+    "triangles": 200,
+    "vertices": 408,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/cherry_tree.glb",
+    "triangles": 1178,
+    "vertices": 2468,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/neon_sign_frame.glb",
+    "triangles": 84,
+    "vertices": 168,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/red_shrine_gate.glb",
+    "triangles": 268,
+    "vertices": 480,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/stone_lantern.glb",
+    "triangles": 280,
+    "vertices": 580,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  },
+  {
+    "file": "public/props/water_tank.glb",
+    "triangles": 472,
+    "vertices": 848,
+    "blended_vertices": 0,
+    "materials": 1,
+    "images": [
+      {
+        "width": 128,
+        "height": 128
+      }
+    ],
+    "errors": 0,
+    "warnings": 0,
+    "messages": []
+  }
+]

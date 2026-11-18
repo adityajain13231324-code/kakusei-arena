@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KAKUSEI ARENA | Asset inspection</title>
+<style>body{margin:0;background:#141b2a;color:#e8edf7;font:14px system-ui}header{padding:18px 24px;display:flex;gap:18px;align-items:center}h1{font-size:17px;margin:0}select,button{background:#29354a;color:white;border:1px solid #627087;border-radius:5px;padding:8px}#status{margin-left:auto;color:#b7c5dc}canvas{display:block}footer{position:fixed;bottom:12px;left:24px;color:#a9b8cc}</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script></head>
+<body><header><h1>KAKUSEI ARENA / asset inspection</h1><select id="fighter"><option>kaito</option><option>shiori</option><option>ren</option><option>goro</option></select><button id="awake">Awaken</button><button id="pose">Stress pose</button><button id="view">Rotate view</button><span id="status">Loading</span></header><footer>Original low-poly fighter assets • exported GLB • three.js toon shading</footer>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {configureFighter} from '/characters/toon-materials.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color('#202b3c');
+const camera=new THREE.PerspectiveCamera(32,innerWidth/(innerHeight-74),.01,100);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight-74);document.body.append(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x59617a,2));const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(-3,5,4);scene.add(light);
+let root,style,awakened=false,posed=false,view=0;const rest=new Map();
+const loader=new GLTFLoader(),status=document.querySelector('#status');
+async function load(name){
+ status.textContent='Loading';window.assetReady=false;
+ if(root){scene.remove(root);style.dispose()}
+ root=(await loader.loadAsync(`/characters/${name}/model.glb`)).scene;scene.add(root);
+ style=await configureFighter(root,name);
+ if(name==='goro')style.attachShoulderPlates((await loader.loadAsync('/characters/goro/shoulder_plates.glb')).scene);
+ rest.clear();root.traverse(o=>{if(o.isBone)rest.set(o.name,o.quaternion.clone())});
+ awakened=false;posed=false;view=0;setView();status.textContent=name.toUpperCase();window.assetReady=true;
+}
+function setView(){const s=document.querySelector('#fighter').value==='goro'?1.2:1;const a=view*Math.PI/2;camera.position.set(Math.sin(a)*4.7*s,1*s,Math.cos(a)*4.7*s);camera.lookAt(0,.98*s,0)}
+document.querySelector('#fighter').onchange=e=>load(e.target.value);
+document.querySelector('#awake').onclick=()=>{awakened=!awakened;style.setAwakened(awakened)};
+document.querySelector('#view').onclick=()=>{view=(view+1)%4;setView()};
+document.querySelector('#pose').onclick=()=>{posed=!posed;for(const [n,a]of [['LeftForeArm',-95],['RightForeArm',-70],['LeftUpLeg',-55],['LeftLeg',90]]){const b=root.getObjectByName(n);b.quaternion.copy(rest.get(n));if(posed)b.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(a)))}};
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/(innerHeight-74);camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight-74)});
+renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+window.assetApp={load,scene,renderer,get root(){return root},get style(){return style}};
+load('kaito');
+</script></body></html>
