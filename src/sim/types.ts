@@ -151,6 +151,33 @@ export interface MoveDef {
   /** cinematic flag for ultimates/awakening: renderer runs a scripted camera */
   cinematic?: 'ultimate' | 'awaken' | 'throw';
   fx?: string; // vfx preset hint on active frames, e.g. 'fire_swipe'
+
+  // ---- optional sim extensions (added by SIM agent; all optional) ----
+  /** throw-type move cannot be broken (command grabs). Command throws (kind 'special') also grab crouchers. */
+  unbreakable?: boolean;
+  /** move id the attacker switches to when this move CONNECTS (throw hold anim, ultimate cinematic). */
+  followup?: string;
+  /** for ultimate cinematic moves: move frames (0-based moveFrame) where an 'ultimateHit' lands; damage is split across them. */
+  ultHits?: number[];
+  /** Kaito Heat Stacks: 'gain' adds a stack on hit, 'consume' spends all stacks for +15% dmg each. */
+  heat?: 'gain' | 'consume';
+  /** teleport at moveFrame `frame` to behind / in front of the opponent (Smoke Swap). */
+  teleport?: { frame: number; to: 'behind' | 'front' };
+  /** hold-stance move (Ren Sheath Stance): loops at loopFrame while S is held; release after minHold -> releaseMove. */
+  stance?: { loopFrame: number; releaseMove: string; counterMove: string; minHold: number; maxHold: number };
+  /** frames immune to projectiles only */
+  projInvuln?: [number, number];
+  /** not selectable by input (reached through followup / stance) */
+  internal?: boolean;
+  /** crouching hurtbox for the whole move (defaults to true for inputs starting with '2') */
+  crouching?: boolean;
+  /** frame advantage on block (display; blockstun is derived from it). */
+  onBlock?: number;
+  /**
+   * frame advantage on hit (display). Named onHitAdv because `onHit` is already the hit EFFECT field.
+   * Undefined when the hit causes launch / knockdown / bounce (show the effect instead).
+   */
+  onHitAdv?: number;
 }
 
 export interface CharDef {
@@ -170,6 +197,8 @@ export interface CharDef {
   moves: MoveDef[];
   ultimateId: string;
   awakenedUltimateId?: string;
+  /** Easy scheme: special the L auto-combo cancels into at the end of the string */
+  autoComboEnder?: string;
 }
 
 // ---------------------------------------------------------------- runtime state
@@ -211,7 +240,78 @@ export interface FighterState {
   heatStacks: number; // char-specific counter (Kaito heat stacks, Shiori clone, etc.)
   wins: number;
   side: -1 | 1; // -1 = currently on the LEFT of the screen, 1 = right (for input mapping & UI)
-  lastInputs: number[]; // ring of recent input bits (for motion parsing); keep length <= 30
+  /**
+   * Recent inputs, oldest first, newest last (length <= 30). Stored FACING-RELATIVE:
+   * bit Btn.Left = BACK, bit Btn.Right = FORWARD; Up/Down/buttons unchanged.
+   */
+  lastInputs: number[];
+  /** internal sim bookkeeping (always present at runtime). Other modules should treat it as opaque. */
+  sim?: FighterSimData;
+}
+
+/** Internal per-fighter sim data (plain JSON). Not part of the render contract. */
+export interface FighterSimData {
+  prevRaw: number;
+  /** current facing-relative input bits (see lastInputs) */
+  rel: number;
+  /** direction edge events this frame (bit flags, see sim/input.ts EV_*) */
+  dirEv: number;
+  /** frames since last press per button [L,H,K,S,Guard,Ult]; 99 = none / consumed */
+  press: number[];
+  /** frames held per button [L,H,K,S,Guard,Ult] (0 = released) */
+  held: number[];
+  upHeld: number; downHeld: number; fwdHeld: number; backHeld: number;
+  /** double-tap windows remaining (frames) */
+  fwdTap: number; backTap: number; upTap: number;
+  /** Down was pressed alone and nothing else happened while held (release = sidestep out) */
+  downClean: boolean;
+  /** bit per hitbox index of the current move that already connected */
+  hitMask: number;
+  /** current move connected: 0 none, 1 hit, 2 block */
+  contact: number;
+  activeDone: boolean;
+  /** string follow-up queued before its window opened */
+  queued: string | null;
+  /** current move was started with an Easy shortcut (-10% damage on specials) */
+  easyMove: boolean;
+  pushX: number; pushZ: number;
+  knockX: number; knockZ: number;
+  bounce: boolean; bounceUsed: boolean; splatUsed: boolean;
+  ssX: number; ssZ: number; ssLateral: number;
+  jumpX: number; jumpZ: number;
+  turnLock: number;
+  landLag: number;
+  /** throw partner index or -1 */
+  partner: number;
+  breakable: boolean;
+  throwMove: string;
+  regen: number;
+  armorUsed: boolean;
+  heatUsed: number;
+  kiFullSent: boolean;
+  hitPose: PoseName;
+  crumple: boolean;
+  airAttackUsed: boolean;
+}
+
+export interface TrainingOptions {
+  infiniteKi: boolean;
+  hpRegen: boolean;
+  /** P2 dummy auto-guard when it is free to act */
+  dummyGuard: 'none' | 'all' | 'random';
+  dummyCrouch: boolean;
+}
+
+/** Ultimate cinematic in progress */
+export interface UltState {
+  player: 0 | 1;
+  target: 0 | 1;
+  frame: number;
+  duration: number;
+  damage: number; // total damage to deal (already scaled)
+  dealt: number;
+  hitIndex: number;
+  moveId: string; // the cinematic move id
 }
 
 export interface ProjectileState {
@@ -226,6 +326,8 @@ export interface ProjectileState {
   hitsLeft: number;
   beam: boolean;
   moveId: string;
+  /** frames until this projectile may hit again (multi-hit beams) */
+  cooldown?: number;
 }
 
 export interface ClashState {
@@ -235,6 +337,10 @@ export interface ClashState {
   balance: number; // -1000 (p1 losing) .. 1000 (p1 winning)
   mash: [number, number];
   point: Vec3; // where beams meet
+  /** beam move ids [p1, p2] */
+  moves?: [string, string];
+  /** -1 none yet, 0 / 1 winner, 2 draw (set on the clashEnd frame) */
+  winner?: -1 | 0 | 1 | 2;
 }
 
 export type RoundPhase = 'intro' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd';
@@ -256,6 +362,10 @@ export interface SimEvent {
   damage?: number;
   moveId?: string;
   charId?: CharId;
+  /** sub-kind for richer feedback: 'armor' | 'backHit' | 'heat' | 'stance' | 'beam' | 'wake' | 'tech' | 'airHit' | 'juggle' ... */
+  tag?: string;
+  /** combo hit count of the target after this event */
+  combo?: number;
 }
 
 export interface CameraHint {
@@ -277,6 +387,10 @@ export interface GameState {
   projectiles: ProjectileState[];
   nextProjectileId: number;
   clash: ClashState;
+  /**
+   * timer is in FRAMES (60 per second; UI divides by 60). phaseFrame = frames since phase began.
+   * winner: -1 none yet, 0/1 player, 2 draw. At 'matchEnd' it holds the MATCH winner.
+   */
   round: { number: number; phase: RoundPhase; phaseFrame: number; timer: number; winner: -1 | 0 | 1 | 2 };
   roundsToWin: number;
   camera: CameraHint;
@@ -284,6 +398,14 @@ export interface GameState {
   events: SimEvent[]; // events produced during the LAST step (cleared at start of step)
   training: boolean; // training mode: infinite HP refill, no timer
   schemes: [ControlScheme, ControlScheme];
+  /** active ultimate cinematic (null when none) */
+  ult?: UltState | null;
+  /** training-mode options (UI may mutate between steps) */
+  trainingOpts?: TrainingOptions;
+  /** last measured frame advantage (attacker's perspective) after a hit/block, for the training HUD */
+  frameAdv?: { player: 0 | 1; value: number; moveId: string; frame: number } | null;
+  /** internal: frame-advantage tracker */
+  advTrack?: { att: number; moveId: string; aFree: number; dFree: number } | null;
 }
 
 export interface MatchConfig {
@@ -294,6 +416,7 @@ export interface MatchConfig {
   roundsToWin?: number; // default 2
   training?: boolean;
   schemes?: [ControlScheme, ControlScheme];
+  trainingOpts?: Partial<TrainingOptions>;
 }
 
 /**
@@ -303,6 +426,6 @@ export interface MatchConfig {
  *   serialize(state): Uint8Array ; deserialize(bytes): GameState ; hashState(state): number
  *   getChar(id: CharId): CharDef
  *   getMove(char: CharId, moveId: string): MoveDef | undefined
- *   debugBoxes(state): { hit: Capsule[], hurt: Capsule[] }  // world-space capsules for the hitbox viewer
+ *   debugBoxes(state): Capsule[]  // world-space capsules (kind = hurt | hit | throw | projectile) for the hitbox viewer
  */
 export interface Capsule { a: Vec3; b: Vec3; r: number; owner: 0 | 1; kind: 'hit' | 'hurt' | 'throw' | 'projectile' }
