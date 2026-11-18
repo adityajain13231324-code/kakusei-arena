@@ -1,0 +1,153 @@
+{
+  "errors": [],
+  "reports": [
+    {
+      "name": "kaito",
+      "render": {
+        "frame": 47,
+        "calls": 4,
+        "triangles": 11938,
+        "points": 0,
+        "lines": 0
+      },
+      "meshes": [
+        {
+          "name": "Face_Expressions",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Face_Expressions_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter_Outline",
+          "visible": true,
+          "skinned": true
+        }
+      ]
+    },
+    {
+      "name": "shiori",
+      "render": {
+        "frame": 142,
+        "calls": 4,
+        "triangles": 11102,
+        "points": 0,
+        "lines": 0
+      },
+      "meshes": [
+        {
+          "name": "Face_Expressions",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Face_Expressions_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter_Outline",
+          "visible": true,
+          "skinned": true
+        }
+      ]
+    },
+    {
+      "name": "ren",
+      "render": {
+        "frame": 209,
+        "calls": 6,
+        "triangles": 11806,
+        "points": 0,
+        "lines": 0
+      },
+      "meshes": [
+        {
+          "name": "Face_Expressions",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Katana",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Face_Expressions_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Katana_Outline",
+          "visible": true,
+          "skinned": true
+        }
+      ]
+    },
+    {
+      "name": "goro",
+      "render": {
+        "frame": 289,
+        "calls": 6,
+        "triangles": 14646,
+        "points": 0,
+        "lines": 0
+      },
+      "meshes": [
+        {
+          "name": "Face_Expressions",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Face_Expressions_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "Fighter_Outline",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "ShoulderPlates",
+          "visible": true,
+          "skinned": true
+        },
+        {
+          "name": "ShoulderPlates_Outline",
+          "visible": true,
+          "skinned": true
+        }
+      ]
+    }
+  ]
+}
