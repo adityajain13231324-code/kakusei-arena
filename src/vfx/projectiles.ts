@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import type { Element, GameState, ProjectileState } from '../sim/types';
 import { T, rr, randDir } from './particles';
 import * as PR from './particles';
-import { auraColor, ELEM_COL } from './effects';
+import { auraColor, elemCol } from './effects';
 import type { Effects, FxCtx } from './effects';
 import type { DecalTextures } from './tex';
+import { formAura } from './xover';
 
 export type ChestFn = (p: 0 | 1, out: THREE.Vector3) => void;
 
@@ -25,6 +26,26 @@ function spriteMat(map: THREE.Texture, color: number, opacity = 1): THREE.Sprite
   m.toneMapped = false;
   return m;
 }
+/** view-angle rim shader: core colour in the middle, rim colour at the silhouette (additive or normal blend) */
+export function fresnelMat(core: number, rim: number, additive: boolean, power = 2.2, opacity = 1): THREE.ShaderMaterial {
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uCore: { value: new THREE.Color(core) }, uRim: { value: new THREE.Color(rim) }, uPow: { value: power }, uOp: { value: opacity }, uTime: { value: 0 } },
+    vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = -mv.xyz; vP = position; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: /* glsl */`uniform vec3 uCore; uniform vec3 uRim; uniform float uPow; uniform float uOp; uniform float uTime;
+      varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main(){
+        float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPow);
+        float n = 0.85 + 0.15 * sin(vP.x * 9.0 + uTime * 7.0) * sin(vP.y * 8.0 - uTime * 5.0);
+        gl_FragColor = vec4(mix(uCore, uRim, f) * n, clamp(uOp * (0.55 + f), 0.0, 1.0));
+      }`,
+    transparent: true, depthWrite: false, side: THREE.FrontSide,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+  });
+  m.toneMapped = false;
+  return m;
+}
+
 function cloneTex(t: THREE.Texture): THREE.Texture {
   const c = t.clone();
   c.needsUpdate = true;
@@ -87,8 +108,17 @@ class BeamVis {
 }
 
 const K_FIRE = 0, K_KUNAI = 1, K_CRESC = 2, K_BOULDER = 3, K_BEAM = 4, K_ORB = 5;
+// crossover kinds
+const K_BLUE = 6, K_RED = 7, K_PURPLE = 8, K_SHURI = 9, K_SPEAR = 10, K_ROAR = 11;
+const N_KINDS = 12;
 function kindOf(p: ProjectileState): number {
   const k = p.kind.toLowerCase();
+  if (k.includes('purple')) return K_PURPLE;
+  if (k === 'blue' || k.startsWith('blue_')) return K_BLUE;
+  if (k === 'red' || k.startsWith('red_')) return K_RED;
+  if (k.includes('rasenshuriken') || k.includes('rasen_shuriken')) return K_SHURI;
+  if (k.includes('spear')) return K_SPEAR;
+  if (k.includes('roar')) return K_ROAR;
   if (p.beam || k.includes('beam')) return K_BEAM;
   if (k.includes('fire') || k.includes('flame') || k.includes('ember')) return K_FIRE;
   if (k.includes('kunai') || k.includes('shuriken') || k.includes('dagger')) return K_KUNAI;
@@ -98,7 +128,7 @@ function kindOf(p: ProjectileState): number {
 }
 
 interface Vis {
-  kind: number; id: number; stamp: number; acc: number; seed: number;
+  kind: number; id: number; stamp: number; acc: number; seed: number; slowAcc: number; hexT: number;
   root: THREE.Group; a: THREE.Object3D | null; b: THREE.Object3D | null; c: THREE.Object3D | null;
   beam: BeamVis | null;
 }
@@ -116,7 +146,7 @@ function rockGeo(): THREE.BufferGeometry {
 }
 
 export class ProjectileFx {
-  private pools: Vis[][] = [[], [], [], [], [], []];
+  private pools: Vis[][] = Array.from({ length: N_KINDS }, () => [] as Vis[]);
   private active: Vis[] = [];
   private byId = new Map<number, Vis>();
   private stamp = 0;
@@ -130,7 +160,7 @@ export class ProjectileFx {
   }
 
   private build(kind: number): Vis {
-    const v: Vis = { kind, id: -1, stamp: 0, acc: 0, seed: Math.random() * 100, root: new THREE.Group(), a: null, b: null, c: null, beam: null };
+    const v: Vis = { kind, id: -1, stamp: 0, acc: 0, slowAcc: 0, hexT: 0, seed: Math.random() * 100, root: new THREE.Group(), a: null, b: null, c: null, beam: null };
     const t = this.tex;
     switch (kind) {
       case K_FIRE: {
@@ -169,6 +199,65 @@ export class ProjectileFx {
         v.beam.addTo(v.root);
         break;
       }
+      case K_BLUE: {
+        // imploding sphere: dark core with a hot blue rim, swirling distortion ring, halo
+        v.a = new THREE.Mesh(sphGeo, fresnelMat(0x050a30, 0x6fb4ff, false, 1.6, 0.97));
+        const ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.ring, 0x9fd0ff, 0.9));
+        const ring2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.spiral, 0x1a3cc0, 0.55));
+        const g = new THREE.Group(); g.add(ring, ring2);
+        v.b = g;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0x2a5cff, 0.6));
+        break;
+      }
+      case K_RED: {
+        v.a = new THREE.Mesh(sphGeo, fresnelMat(0xfff0e0, 0xff1a2a, true, 1.4, 1));
+        const st = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.star, 0xff3a2a, 0.9));
+        v.b = st;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0xff2a1a, 1));
+        break;
+      }
+      case K_PURPLE: {
+        v.beam = new BeamVis(t);
+        v.beam.addTo(v.root);
+        // the "imaginary mass" at the tip: white core, violet rim, red / blue swirl discs
+        const g = new THREE.Group();
+        const core = new THREE.Mesh(sphGeo, fresnelMat(0xffffff, 0xa040ff, true, 1.2, 1));
+        const sw1 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.spiral, 0xff3a6a, 0.8));
+        const sw2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.spiral, 0x4a6cff, 0.8));
+        for (const m of [core, sw1, sw2]) { m.frustumCulled = false; m.renderOrder = 17; g.add(m); }
+        v.a = g;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0xb04aff, 1));
+        break;
+      }
+      case K_SHURI: {
+        v.a = new THREE.Mesh(sphGeo, fresnelMat(0xffffff, 0x4ac8ff, true, 1.5, 1));
+        const disc = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.shuriken, 0xd8f6ff, 1));
+        const disc2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.spiral, 0x7ad8ff, 0.7));
+        const g = new THREE.Group(); g.add(disc, disc2);
+        v.b = g;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0x6fd8ff, 0.9));
+        break;
+      }
+      case K_SPEAR: {
+        const g = new THREE.Group();
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0x3a3e48 }));
+        const head = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28, 6), new THREE.MeshBasicMaterial({ color: 0xb8bcc8 }));
+        head.position.y = 0.48;
+        const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.22, 8), new THREE.MeshBasicMaterial({ color: 0x8a2a1a }));
+        can.position.y = 0.2;
+        g.add(shaft, head, can);
+        v.a = g;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0xffd040, 0.9));
+        break;
+      }
+      case K_ROAR: {
+        const r1 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.ring, 0xffe0c0, 0.8));
+        const r2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), addMat(t.ring, 0xff8a5a, 0.6));
+        const g = new THREE.Group(); g.add(r1, r2);
+        v.a = g;
+        v.c = new THREE.Sprite(spriteMat(t.glow, 0xffb080, 0.5));
+        break;
+      }
       default: {
         v.a = new THREE.Mesh(sphGeo, addMat(null, 0xffffff, 1));
         v.b = new THREE.Mesh(sphGeo, addMat(null, 0x6fe8ff, 0.5));
@@ -188,7 +277,7 @@ export class ProjectileFx {
 
   private color(p: ProjectileState, state: GameState): number {
     const e: Element = p.element;
-    if (e && e !== 'none') return ELEM_COL[e]![0];
+    if (e && e !== 'none') return elemCol(e)[0];
     return auraColor(state.fighters[p.owner].char);
   }
 
@@ -198,7 +287,7 @@ export class ProjectileFx {
     const clashing = state.clash.active;
     for (const p of state.projectiles) {
       const kind = kindOf(p);
-      if (clashing && kind === K_BEAM) continue;
+      if (clashing && (kind === K_BEAM || kind === K_PURPLE)) continue;
       let v = this.byId.get(p.id);
       if (!v || v.kind !== kind) {
         if (v) this.release(v);
@@ -242,7 +331,162 @@ export class ProjectileFx {
     const col = this.color(p, state);
     const sc = this.fx.scale;
     const tm = this.time + v.seed;
+    // Gojo's Infinity: stretched blue shimmer streaks + hex ripples while slowed
+    if (p.slow !== undefined && p.slow < 100 && v.kind !== K_BEAM && v.kind !== K_PURPLE) {
+      v.slowAcc += dt * 40 * sc;
+      while (v.slowAcc >= 1) {
+        v.slowAcc -= 1;
+        P.spec.reset().at(x + rr(-r, r) * 0.8, y + rr(-r, r) * 0.8, z + rr(-r, r) * 0.8).v(vx * 3 + 0.01, vy * 3, vz * 3 + 0.01).ph(6, 0)
+          .ttl(rr(0.3, 0.5)).tx(T.STREAK, 0.35).sz(r * 0.5, r * 0.15, r * 2.5, r * 1.2).col(0xe8f4ff, 0x5a9cff, 0.55, 0, 1.2);
+        P.emit(true);
+      }
+      v.hexT -= dt;
+      if (v.hexT <= 0) { v.hexT = 0.22; this.fx.D.spawn('hex', x, y, z, r * 2, r * 6, 0.4, 0x9fd0ff, 0, rr(0, 6), 0.6, true); }
+    }
     switch (v.kind) {
+      case K_BLUE: {
+        v.root.position.set(x, y, z);
+        const pulse = 1 + Math.sin(tm * 22) * 0.06;
+        v.a!.scale.setScalar(r * 0.75 * pulse);
+        (v.a as THREE.Mesh).material && (((v.a as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uTime!.value = tm);
+        const g = v.b as THREE.Group;
+        g.quaternion.copy(this.fx.cam.quaternion);
+        const ring = g.children[0]!, ring2 = g.children[1]!;
+        const ph = (tm * 1.8) % 1; // ring collapses inward on a loop
+        ring.scale.setScalar(r * (5.5 - ph * 4.2));
+        ((ring as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.25 + ph * 0.7;
+        ring2.scale.setScalar(r * 4.2); ring2.rotation.z = tm * 6;
+        (v.c as THREE.Sprite).scale.setScalar(r * 6 * pulse);
+        // particles sucked inward
+        v.acc += dt * 110 * sc;
+        while (v.acc >= 1) {
+          v.acc -= 1;
+          randDir();
+          const d = r * rr(2.2, 4.5);
+          P.spec.reset().at(x + PR.dx * d, y + PR.dy * d, z + PR.dz * d).v(-PR.dx * d * 4 + vx, -PR.dy * d * 4 + vy, -PR.dz * d * 4 + vz).ph(0, 0)
+            .ttl(0.24).tx(T.STREAK, 0.05).sz(0.04, 0.01, 0.25, 0.05).col(0xdfeaff, 0x2a5cff, 0.95, 0.2, 1.6);
+          P.emit(true);
+        }
+        break;
+      }
+      case K_RED: {
+        v.root.position.set(x, y, z);
+        const pulse = 1 + Math.sin(tm * 30) * 0.1;
+        v.a!.scale.setScalar(r * 0.8 * pulse);
+        ((v.a as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uTime!.value = tm;
+        const st = v.b as THREE.Mesh;
+        st.quaternion.copy(this.fx.cam.quaternion); st.rotateZ(tm * 3);
+        st.scale.setScalar(r * 5 * (1 + Math.sin(tm * 17) * 0.15));
+        (v.c as THREE.Sprite).scale.setScalar(r * 7 * pulse);
+        v.acc += dt * 120 * sc;
+        while (v.acc >= 1) {
+          v.acc -= 1;
+          randDir();
+          const sp = rr(5, 10);
+          P.spec.reset().at(x + PR.dx * r * 0.5, y + PR.dy * r * 0.5, z + PR.dz * r * 0.5).v(PR.dx * sp + vx * 0.5, PR.dy * sp, PR.dz * sp + vz * 0.5).ph(4, 0)
+            .ttl(rr(0.12, 0.24)).tx(T.STREAK, 0.05).sz(0.05, 0.01, 0.35, 0.1).col(0xffffff, 0xff2a1a, 1, 0, 1.7);
+          P.emit(true);
+        }
+        v.hexT -= dt;
+        if (v.hexT <= 0) { v.hexT = 0.09; this.fx.D.spawn('ring', x, y, z, r * 1.5, r * 7, 0.22, 0xff4a3a, 0, 0, 0.7, true); }
+        break;
+      }
+      case K_PURPLE: {
+        this.chest(p.owner, v2);
+        const f = state.fighters[p.owner];
+        v2.x += (f.facing.x / 1000) * 0.4; v2.z += (f.facing.z / 1000) * 0.4;
+        v3.set(x, y, z);
+        const R = Math.max(0.4, r);
+        v.beam!.set(v2, v3, R * 1.25, 0x9a3aff, tm, 1);
+        this.beamSparks(v2, v3, 0xc070ff, dt, v, 2);
+        const g = v.a as THREE.Group;
+        g.position.copy(v3);
+        const core = g.children[0]!, sw1 = g.children[1]!, sw2 = g.children[2]!;
+        core.scale.setScalar(R * 1.5 * (1 + Math.sin(tm * 35) * 0.06));
+        ((core as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uTime!.value = tm;
+        for (const [m, sgn] of [[sw1, 1], [sw2, -1]] as Array<[THREE.Object3D, number]>) {
+          m.quaternion.copy(this.fx.cam.quaternion); m.rotateZ(tm * 9 * sgn);
+          m.scale.setScalar(R * 5.5);
+        }
+        (v.c as THREE.Sprite).position.copy(v3);
+        (v.c as THREE.Sprite).scale.setScalar(R * 12);
+        // matter being erased: debris pulled into the sphere
+        v.slowAcc += dt * 90 * sc;
+        while (v.slowAcc >= 1) {
+          v.slowAcc -= 1;
+          randDir();
+          const d = R * rr(2.5, 5);
+          P.spec.reset().at(v3.x + PR.dx * d, v3.y + Math.abs(PR.dy) * d, v3.z + PR.dz * d).v(-PR.dx * d * 3, -Math.abs(PR.dy) * d * 3, -PR.dz * d * 3).ph(0, 0)
+            .ttl(0.3).tx(T.STREAK, 0.08).sz(0.06, 0.01, 0.4, 0.1).col(0xffffff, 0x8a3aff, 1, 0.3, 1.7);
+          P.emit(true);
+        }
+        break;
+      }
+      case K_SHURI: {
+        v.root.position.set(x, y, z);
+        const big = p.kind.includes('kurama') ? 1.35 : 1;
+        v.a!.scale.setScalar(r * 0.55 * big);
+        ((v.a as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uTime!.value = tm;
+        const g = v.b as THREE.Group;
+        // disc faces the camera, tilted a bit so it reads as a spinning blade wheel
+        g.quaternion.copy(this.fx.cam.quaternion); g.rotateX(-0.5);
+        g.children[0]!.rotation.z = -tm * 22; g.children[0]!.scale.setScalar(r * 5.2 * big);
+        g.children[1]!.rotation.z = tm * 9; g.children[1]!.scale.setScalar(r * 3.2 * big);
+        (v.c as THREE.Sprite).scale.setScalar(r * 6 * big);
+        v.acc += dt * 90 * sc;
+        while (v.acc >= 1) {
+          v.acc -= 1;
+          const a = rr(0, 6.28), rad = r * 2.4 * big;
+          const cr = this.fx.cam.matrixWorld.elements;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          const ox = (cr[0]! * ca + cr[4]! * sa) * rad, oy = (cr[1]! * ca + cr[5]! * sa) * rad, oz = (cr[2]! * ca + cr[6]! * sa) * rad;
+          // tangential wind streaks
+          P.spec.reset().at(x + ox, y + oy, z + oz).v(-oy * 8 + vx * 0.4, ox * 8, vz * 0.4).ph(3, 0)
+            .ttl(rr(0.12, 0.22)).tx(T.STREAK, 0.05).sz(0.05, 0.01, 0.4, 0.1).col(0xffffff, 0x6fd8ff, 1, 0, 1.5);
+          P.emit(true);
+        }
+        break;
+      }
+      case K_SPEAR: {
+        v.root.position.set(x, y, z);
+        if (sp > 0.01) { v1.set(vx, vy, vz).multiplyScalar(1 / sp); v.a!.quaternion.setFromUnitVectors(Y, v1); }
+        const armed = p.fuse !== undefined && p.life <= p.fuse + 20;
+        const blink = armed ? (Math.sin(tm * 60) > 0 ? 1 : 0.2) : 0.6;
+        (v.c as THREE.Sprite).scale.setScalar(armed ? 0.9 : 0.5);
+        ((v.c as THREE.Sprite).material as THREE.SpriteMaterial).opacity = blink;
+        v.acc += dt * 70 * sc;
+        while (v.acc >= 1) {
+          v.acc -= 1;
+          P.spec.reset().at(x - vx * 0.02, y - vy * 0.02, z - vz * 0.02).v(rr(-0.3, 0.3), rr(0.1, 0.6), rr(-0.3, 0.3)).ph(2, -0.3)
+            .ttl(rr(0.4, 0.8)).tx(T.SMOKE).sz(0.12, 0.45).rt(rr(0, 6), rr(-1, 1)).col(0xd8d2c8, 0x6a6460, 0.5, 0);
+          P.emit(false);
+          if (Math.random() < 0.5) {
+            P.spec.reset().at(x, y, z).v(-vx * 0.2 + rr(-1, 1), rr(-0.5, 1), -vz * 0.2 + rr(-1, 1)).ph(2, 4).ttl(rr(0.15, 0.3)).tx(T.SPARK).sz(0.1, 0.02).col(0xffffff, 0xffb020, 1, 0, 1.7);
+            P.emit(true);
+          }
+        }
+        break;
+      }
+      case K_ROAR: {
+        v.root.position.set(x, y, z);
+        const g = v.a as THREE.Group;
+        g.quaternion.copy(this.fx.cam.quaternion);
+        const ph = (tm * 3) % 1;
+        g.children[0]!.scale.setScalar(r * (1 + ph * 4));
+        ((g.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - ph);
+        const ph2 = (ph + 0.5) % 1;
+        g.children[1]!.scale.setScalar(r * (1 + ph2 * 4));
+        ((g.children[1] as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - ph2);
+        (v.c as THREE.Sprite).scale.setScalar(r * 4);
+        v.acc += dt * 40 * sc;
+        while (v.acc >= 1) {
+          v.acc -= 1;
+          P.spec.reset().at(x + rr(-r, r), y + rr(-r, r) * 0.5, z + rr(-r, r)).v(vx * 0.3 + rr(-0.5, 0.5), rr(0.3, 1.2), vz * 0.3 + rr(-0.5, 0.5)).ph(1.5, -0.5)
+            .ttl(rr(0.6, 1.0)).tx(T.SMOKE).sz(r * 0.6, r * 2.2).rt(rr(0, 6), rr(-1, 1)).col(0xf4ece4, 0xb8aca0, 0.45, 0);
+          P.emit(false);
+        }
+        break;
+      }
       case K_FIRE: {
         v.root.position.set(x, y, z);
         const s = r * (1 + Math.sin(tm * 30) * 0.08);
@@ -294,6 +538,9 @@ export class ProjectileFx {
         m.rotateZ(Math.atan2(v1.dot(v3), v1.dot(v2)));
         const s = Math.max(1.3, r * 5);
         m.scale.set(s, s * 1.15, 1);
+        const zor = state.fighters[p.owner].char === 'zoro';
+        (m.material as THREE.MeshBasicMaterial).color.setHex(zor ? 0xc8ffd8 : 0xffffff);
+        ((v.c as THREE.Sprite).material as THREE.SpriteMaterial).color.setHex(zor ? 0x3fd17a : 0x9fdcff);
         (v.c as THREE.Sprite).scale.setScalar(s * 1.6);
         v.acc += dt * 70 * sc;
         while (v.acc >= 1) {
@@ -423,6 +670,29 @@ export class ClashFx {
     v2.x += (f1.facing.x / 1000) * 0.4; v2.z += (f1.facing.z / 1000) * 0.4;
     const c0 = auraColor(f0.char), c1 = auraColor(f1.char);
     const prog = Math.min(1, c.frame / Math.max(1, c.duration));
+    const realm = (c as { kind?: string }).kind === 'realm';
+    this.b0.show(!realm); this.b1.show(!realm);
+    if (realm) {
+      // Realm Clash: the two worlds grind along a seam through the meeting point (environment split is in render)
+      this.ball.visible = false;
+      this.accC += dt * 160 * this.fx.scale;
+      const sx = -(v2.z - v1.z), sz = v2.x - v1.x, sl = Math.hypot(sx, sz) || 1;
+      while (this.accC >= 1) {
+        this.accC -= 1;
+        const along = rr(-9, 9), h = rr(0, 7);
+        const px = v3.x + (sx / sl) * along, pz = v3.z + (sz / sl) * along;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        P.spec.reset().at(px, h, pz).v((ax / al) * side * rr(3, 9), rr(-2, 4), (az / al) * side * rr(3, 9)).ph(2.5, 3).ttl(rr(0.15, 0.4)).tx(T.STREAK, 0.1)
+          .sz(0.05, 0.015, 0.4, 0.15).col(0xffffff, side < 0 ? c0 : c1, 1, 0, 1.7);
+        P.emit(true);
+      }
+      this.halo.position.copy(v3); this.halo.scale.setScalar(5 + Math.sin(this.time * 30) * 0.5);
+      this.starS.position.copy(v3); this.starS.scale.setScalar(3.5);
+      (this.starS.material as THREE.SpriteMaterial).rotation = this.time * 5;
+      if ((state.frame & 3) === 0) this.fx.r.addShake(0.03 + prog * 0.03, 3);
+      return;
+    }
+    this.ball.visible = true;
     this.b0.set(v1, v3, 0.45 * (1 + bal * 0.4), c0, this.time, 1);
     this.b1.set(v2, v3, 0.45 * (1 - bal * 0.4), c1, this.time + 3, 1);
     const R = 0.55 + prog * 0.9 + Math.sin(this.time * 33) * 0.06;
@@ -484,22 +754,25 @@ export class Auras {
     for (let i = 0; i < 2; i++) {
       const f = state.fighters[i]!;
       const charge = f.mode === 'kicharge';
-      const awake = f.awakened;
-      const target = charge ? 1 : awake ? 0.55 : 0;
+      const fa = formAura(f);
+      const awake = f.awakened || !!fa;
+      const target = charge ? 1 : fa ? fa.k : awake ? 0.55 : 0;
       this.a[i]! += (target - this.a[i]!) * Math.min(1, dt * 8);
       const a = this.a[i]!;
       const m = this.mesh[i]!;
       if (a < 0.02) { m.visible = false; continue; }
       m.visible = true;
       let col = auraColor(f.char);
-      if (awake && !charge) col = lerpHex(col, 0xfff1a8, 0.45);
+      if (fa && !charge) col = fa.col;
+      else if (awake && !charge) col = lerpHex(col, 0xfff1a8, 0.45);
+      const fs = fa ? fa.scale : 1;
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.color.setHex(col);
       mat.opacity = a * (charge ? 0.9 : 0.6);
       const grow = charge ? 0.8 + Math.min(1, f.modeFrame / 120) * 0.5 : 1.0;
       const pulse = 1 + Math.sin(this.time * (charge ? 16 : 9) + i) * 0.07;
-      m.position.set(f.pos.x / 1000, f.pos.y / 1000 + 1.2, f.pos.z / 1000);
-      m.scale.set(grow * pulse, 1, grow * pulse);
+      m.position.set(f.pos.x / 1000, f.pos.y / 1000 + 1.2 * (f.form === 'titan' ? fs : 1), f.pos.z / 1000);
+      m.scale.set(grow * pulse * fs, f.form === 'titan' ? fs : 1, grow * pulse * fs);
       m.rotation.y += dt * 2.5;
       this.maps[i]!.offset.y -= dt * (charge ? 2.4 : 1.4);
       this.maps[i]!.offset.x += dt * 0.2;

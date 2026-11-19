@@ -130,6 +130,14 @@ export class FighterView {
   /** form name when this view shows an alternate-form model (form_<name>.glb), else null */
   readonly form: string | null = null;
   private exprHold = 0;
+  // ---- crossover: forms / cartoon squash / rubber limbs
+  private formName = '';
+  private formScaleT = 1; private formS = 1;
+  private formRim: THREE.Color | null = null; private formRimK = 0; private formOutline: THREE.Color | null = null;
+  private sqX = 0; private sqV = 0;
+  private rubber = false;
+  private stretchQ: Array<[Limb, number]> = [];
+  private stretched: THREE.Bone[] = [];
 
   constructor(readonly char: CharId, asset: CharAsset, opts: { alt?: boolean } = {}) {
     this.look = charLook(char);
@@ -154,6 +162,7 @@ export class FighterView {
     this.outlineMat = makeFighterOutline(u);
     this.mannequin = asset.mannequin;
     this.form = asset.form;
+    this.rubber = char === 'luffy';
     if (asset.mannequin) {
       const pal = resolvePalette(char);
       u.uRimColor.value.set(pal.accent);
@@ -476,6 +485,9 @@ export class FighterView {
   // --------------------------------------------------------------------------- update
   /** time: seconds (monotonic); dt: real seconds since last frame */
   update(f: FighterState, prev: FighterState | null, alpha: number, dt: number, time: number): void {
+    for (const b of this.stretched) b.matrixAutoUpdate = true;
+    this.stretched.length = 0;
+    this.stretchQ.length = 0;
     const p = prev ?? f;
     const x = (p.pos.x + (f.pos.x - p.pos.x) * alpha) / 1000;
     const y = (p.pos.y + (f.pos.y - p.pos.y) * alpha) / 1000;
@@ -497,7 +509,15 @@ export class FighterView {
       this.popT = Math.max(0, this.popT - dt);
       s *= 1 + Math.sin((this.popT / 0.35) * Math.PI) * 0.08;
     }
-    this.group.scale.setScalar(s);
+    // generic form scale (e.g. Titan placeholder x2.5) + cartoon squash spring (Gear Fifth hit reactions)
+    this.formS += (this.formScaleT - this.formS) * Math.min(1, dt * 4);
+    if (Math.abs(this.formS - this.formScaleT) < 1e-3) this.formS = this.formScaleT;
+    const sk = 220, sd = 9;
+    this.sqV += (-sk * this.sqX - sd * this.sqV) * Math.min(dt, 1 / 30);
+    this.sqX += this.sqV * Math.min(dt, 1 / 30);
+    if (Math.abs(this.sqX) < 1e-4 && Math.abs(this.sqV) < 1e-3) { this.sqX = 0; this.sqV = 0; }
+    const fs = s * this.formS;
+    this.group.scale.set(fs * (1 + this.sqX * 0.6), fs * (1 - this.sqX), fs * (1 + this.sqX * 0.6));
     // ---- pose
     sampleFighter(this.char, f, alpha, time, this.target, this.info, this.lookup);
     if (!this.hasPose || this.info.snap) {
@@ -520,6 +540,7 @@ export class FighterView {
     this.applyPose(this.pose);
     this.strikeAssist(f, alpha);
     this.simChains(dt);
+    for (const [l, k] of this.stretchQ) this.applyStretch(l, k);
     // ---- material uniforms
     const u = this.u;
     u.uWipe.value = this.wipe;
@@ -533,7 +554,73 @@ export class FighterView {
     this.flash = Math.max(0, this.flash - dt * 5);
     u.uFlash.value = Math.max(this.flash, this.ghostTint);
     if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.copy(awk > 0.5 ? this.outAwk : this.outBase);
+    if (this.formRim) {
+      u.uRimColor.value.copy(this.formRim);
+      u.uRimStrength.value = Math.max(u.uRimStrength.value, this.formRimK * (0.85 + 0.15 * Math.sin(time * 7)));
+      u.uRimWidth.value = 0.5;
+    }
+    if (this.formOutline && u.uHue.value === 0) u.uOutlineColor.value.copy(this.formOutline);
     if (this.faceMat) this.pickExpression(f, dt);
+  }
+
+  /**
+   * Crossover form look on the current model: rim tint / outline per form and a generic scale
+   * (giant: no dedicated form model, so the base model is scaled up as a placeholder).
+   */
+  setForm(form: string, giantPlaceholder: boolean): void {
+    const key = form + (giantPlaceholder ? '!' : '');
+    if (key === this.formName) return;
+    this.formName = key;
+    const F = FORM_LOOKS[form];
+    this.formRim = F ? new THREE.Color(F.rim) : null;
+    this.formRimK = F ? F.k : 0;
+    this.formOutline = F?.outline ? new THREE.Color(F.outline) : null;
+    this.formScaleT = (F?.scale ?? 1) * (giantPlaceholder && form === 'titan' ? 2.5 : 1);
+    if (!F?.outline) this.u.uOutlineColor.value.copy(this.outBase);
+  }
+
+  /** cartoon squash & stretch impulse (Gear Fifth physics), amount ~0.1 .. 0.4 */
+  squash(amount: number): void { this.sqV -= amount * 14; }
+
+  /** current generic form scale (camera uses it for giant forms) */
+  get formScale(): number { return this.formS; }
+
+  /**
+   * Rubber limb: scale the upper bone along its length by K (the forearm / shin inherits it), then put the
+   * end bone (hand / foot) back at its unsheared world orientation so fists and feet keep their size.
+   */
+  private applyStretch(l: Limb, K: number): void {
+    if (K < 1.02) return;
+    l.end.updateWorldMatrix(true, false);
+    l.end.matrixWorld.decompose(_sP, _sQ, _sS);
+    const up = l.up;
+    _v1.copy(l.lo.position).normalize();
+    const k1 = K - 1, x = _v1.x, y = _v1.y, z = _v1.z;
+    _mS.set(
+      1 + k1 * x * x, k1 * x * y, k1 * x * z, 0,
+      k1 * y * x, 1 + k1 * y * y, k1 * y * z, 0,
+      k1 * z * x, k1 * z * y, 1 + k1 * z * z, 0,
+      0, 0, 0, 1);
+    up.updateMatrix();
+    up.matrix.multiply(_mS);
+    up.matrixAutoUpdate = false;
+    up.updateMatrixWorld(true);
+    l.end.getWorldPosition(_sP2);
+    _m.compose(_sP2, _sQ, _sS);
+    l.end.matrix.copy(_m2.copy(l.lo.matrixWorld).invert().multiply(_m));
+    l.end.matrixAutoUpdate = false;
+    l.end.updateMatrixWorld(true);
+    this.stretched.push(up, l.end);
+  }
+
+  /** queue a rubber stretch so the limb reaches the hitbox target (_T) */
+  private rubberReach(l: Limb): void {
+    if (!this.rubber) return;
+    const ws = this.group.scale.y;
+    l.up.getWorldPosition(_v3);
+    const reach = (l.a + l.b) * ws * 0.97;
+    const d = _v3.distanceTo(_T);
+    if (d > reach) this.stretchQ.push([l, Math.min(4.5, d / reach)]);
   }
 
   /** register a hit on this fighter (flash) */
@@ -689,6 +776,7 @@ export class FighterView {
     _e.set(this.pose[wI] * D2R, this.pose[wI + 1] * D2R * m, this.pose[wI + 2] * D2R * m, 'XYZ');
     _q3.copy(_cq2).multiply(_q1.setFromEuler(_e));
     this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+    this.rubberReach(l);
   }
 
   private assistFoot(l: Limb, kI: number, pI: number): void {
@@ -703,6 +791,7 @@ export class FighterView {
     _q2.copy(_qa).multiply(_q1.setFromAxisAngle(_AY, this.pose[pI + 1] * D2R)).multiply(_qb.setFromAxisAngle(_AX, this.pose[pI] * D2R));
     _q3.slerp(_q2, 1 - w);
     this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+    this.rubberReach(l);
   }
 
   private solveArm(l: Limb, c: Float32Array, hI: number, eI: number, wI: number, m: number, shG: THREE.Vector3, shRef: THREE.Vector3, ws: number, chestM: THREE.Matrix4): void {
@@ -843,6 +932,19 @@ export class FighterView {
 }
 
 const _cq1 = new THREE.Quaternion(), _cq2 = new THREE.Quaternion();
+const _mS = new THREE.Matrix4(), _sP = new THREE.Vector3(), _sP2 = new THREE.Vector3(), _sQ = new THREE.Quaternion(), _sS = new THREE.Vector3();
+
+/** crossover form looks (rim tint, optional outline, generic scale) */
+const FORM_LOOKS: Record<string, { rim: string; k: number; outline?: string; scale?: number }> = {
+  six_eyes: { rim: '#8fe0ff', k: 0.75 },
+  sage: { rim: '#ff8a1a', k: 0.7, outline: '#4a1800' },
+  kurama: { rim: '#ffc21a', k: 1.0, outline: '#5a3000', scale: 1.04 },
+  gear2: { rim: '#ff6a8a', k: 0.65 },
+  gear4: { rim: '#ff2a1a', k: 0.8, outline: '#2a0000', scale: 1.18 },
+  gear5: { rim: '#ffffff', k: 1.0, outline: '#6a6070' },
+  titan: { rim: '#c01a10', k: 0.85, outline: '#300000' },
+  santoryu: { rim: '#6fffb0', k: 0.3 }, nitoryu: { rim: '#6fffb0', k: 0.25 }, ittoryu: { rim: '#6fffb0', k: 0.35 },
+};
 const MANNEQUIN_GREY = new THREE.Color('#c4c8d2');
 
 type AssistLimb = 'handL' | 'handR' | 'both' | 'footL' | 'footR';

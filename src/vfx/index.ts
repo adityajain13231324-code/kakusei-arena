@@ -10,6 +10,7 @@ import { PostFx } from './post';
 import { Effects } from './effects';
 import type { FxCtx } from './effects';
 import { Auras, ClashFx, ProjectileFx } from './projectiles';
+import { XoverFx } from './xover';
 
 export class VfxSystem {
   private readonly root = new THREE.Group();
@@ -22,8 +23,10 @@ export class VfxSystem {
   private readonly proj: ProjectileFx;
   private readonly clash: ClashFx;
   private readonly auras: Auras;
+  private readonly xover: XoverFx;
   private quality: Quality = 'high';
   private lastState: GameState | null = null;
+  private warned = false;
 
   constructor(private r: GameRenderer) {
     this.root.name = 'vfx';
@@ -35,7 +38,8 @@ export class VfxSystem {
     this.proj = new ProjectileFx(this.fx, chest);
     this.clash = new ClashFx(this.fx, chest, this.eff, this.proj);
     this.auras = new Auras(this.fx);
-    this.root.add(this.P.group, this.proj.group, this.clash.group, this.auras.group);
+    this.xover = new XoverFx(this.fx, this.eff, chest);
+    this.root.add(this.P.group, this.proj.group, this.clash.group, this.auras.group, this.xover.group);
     r.scene.add(this.root);
     r.setPostPass((rr) => this.post.render(rr));
     this.setQuality('high');
@@ -94,6 +98,8 @@ export class VfxSystem {
         case 'ko': this.eff.ko(ev, state); break;
         default: break; // clash start/end are driven from state.clash.active in update()
       }
+      // crossover pack: hint-driven flourishes, forms, realms, clones (never let one bad effect break the rest)
+      try { this.xover.handle(ev, state); } catch (e) { if (!this.warned) { this.warned = true; console.warn('[vfx] xover', e); } }
     }
   }
 
@@ -109,6 +115,7 @@ export class VfxSystem {
     this.auras.update(dt, state);
     this.proj.update(dt, state);
     this.clash.update(dt, state);
+    try { this.xover.update(dt, state); } catch (e) { if (!this.warned) { this.warned = true; console.warn('[vfx] xover', e); } }
   }
 
   setQuality(q: Quality): void {
@@ -134,6 +141,7 @@ export class VfxSystem {
     this.proj.clear();
     this.clash.clear();
     this.auras.clear();
+    this.xover.clear();
   }
 
   /** extra (not part of the contract): remove everything from the scene */
@@ -141,6 +149,6 @@ export class VfxSystem {
     this.r.setPostPass(null);
     this.root.removeFromParent();
     this.P.dispose(); this.D.dispose(); this.O.dispose(); this.post.dispose();
-    this.proj.dispose(); this.clash.dispose(); this.auras.dispose();
+    this.proj.dispose(); this.clash.dispose(); this.auras.dispose(); this.xover.dispose();
   }
 }

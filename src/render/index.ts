@@ -27,6 +27,9 @@
 import * as THREE from 'three';
 import type { GameState, Capsule, CharId, StageId, MoveDef, FighterState } from '../sim/types';
 import { ALL_CHARS } from '../sim/types';
+import { getChar, getMove } from '../sim';
+import './stage/realms';
+import type { RealmBuild } from './stage/realms/kit';
 import { FighterView, type SocketName } from './fighter/FighterView';
 import { loadCharacter, loadForm, getLoadedCharacter, disposeCharacterCache, type ModelRes, type CharAsset } from './fighter/assets';
 import { charLook, resolvePalette } from './fighter/looks';
@@ -49,6 +52,7 @@ const _MENU_SUN = new THREE.Vector3();
 const _KEY = new THREE.Vector3();
 const _RIM = new THREE.Vector3();
 const _side = new THREE.Vector3();
+const _hc = new THREE.Color();
 
 function initialQuality(): Quality {
   try {
@@ -84,9 +88,10 @@ export class GameRenderer {
   // realm takeover layer
   private realmBuilds = new Map<string, StageBuild>();
   private realmId: string | null = null;
-  private realmShown: StageBuild | null = null;
-  private realmK = 0;
+  /** realms currently shown (up to two during a Realm Clash), with their dissolve amount */
+  private realmSlots: Array<{ id: string; b: StageBuild; k: number; side: number }> = [];
   private realmManual = false;
+  private clashSeam = new THREE.Vector4();
   private baseFog = new THREE.Color();
   private baseBg = new THREE.Color();
   private stage: StageBuild | null = null;
@@ -225,6 +230,8 @@ export class GameRenderer {
 
   async loadMatch(state: GameState): Promise<void> {
     await this.ensureMatch(state);
+    // pre-build + compile both fighters' Soul Realms (no hitch when one opens)
+    for (const f of state.fighters) { const k = this.realmKindOf(f.char); if (k) this.prewarmRealm(k); }
     this.update(null, state, 1, 1 / 60);
     // pre-compile every shader variant (no hitch on first hit)
     try {
@@ -253,8 +260,13 @@ export class GameRenderer {
       let cheer = 0;
       for (const e of state.events) {
         if ((e.type === 'hit' || e.type === 'counter' || e.type === 'ultimateHit' || e.type === 'throw') && e.target !== undefined) {
-          this.active[e.target]?.onHit(STRENGTH[e.strength ?? 'medium'] ?? 0.4);
+          const st = STRENGTH[e.strength ?? 'medium'] ?? 0.4;
+          this.active[e.target]?.onHit(st);
+          // Gear Fifth cartoon physics: hit reactions squash & stretch
+          const atk = state.fighters[e.player];
+          if (atk && (atk.form === 'gear5' || state.realm?.kind === 'gear_fifth')) this.active[e.target]?.squash(0.12 + st * 0.3);
         }
+        if (e.type === 'groundBounce' && e.tag === 'gear5' && e.target !== undefined) this.active[e.target]?.squash(0.35);
         if (e.type === 'ko') cheer = Math.max(cheer, 1);
         else if (e.type === 'ultimateHit') cheer = Math.max(cheer, 0.75);
         else if (e.type === 'counter' || e.type === 'awaken') cheer = Math.max(cheer, 0.55);
@@ -267,9 +279,12 @@ export class GameRenderer {
       const f = state.fighters[i];
       const v = this.pickView(i as 0 | 1, f);
       if (v) {
+        const form = this.formOf(f) ?? '';
+        v.setForm(form, !!form && v === this.views[i] && form === 'titan');
         v.update(f, prev ? prev.fighters[i] : null, alpha, dt, this.time);
         this.fcam.fighterPos[i].copy(v.group.position);
         if (v.form) tall = Math.max(tall, v.modelHeight / 2.05);
+        if (v.formScale > 1.3) tall = Math.max(tall, v.formScale * 0.95);
       } else this.fcam.fighterPos[i].set(f.pos.x / 1000, f.pos.y / 1000, f.pos.z / 1000);
     }
     this.updateSummons(state, dt);
@@ -403,8 +418,11 @@ export class GameRenderer {
     const b = this.realmBuild(id);
     if (!b) return;
     b.group.visible = true;
+    b.setDissolve?.(0.5);
     try { this.renderer.compile(this.scene, this.camera); } catch { /* ignore */ }
-    b.group.visible = this.realmShown === b && this.realmK > 0;
+    const sl = this.realmSlots.find((x) => x.b === b);
+    b.setDissolve?.(sl ? sl.k : 0);
+    b.group.visible = !!sl && sl.k > 0;
   }
 
   /**
@@ -416,50 +434,121 @@ export class GameRenderer {
     this.realmId = id;
   }
 
+  /** realm kind of a fighter's Soul Realm move (CharDef.realmId -> MoveDef.realm.kind) */
+  private realmKindOf(char: CharId): string | null {
+    try {
+      const id = getChar(char).realmId;
+      if (!id) return null;
+      return getMove(char, id)?.realm?.kind ?? null;
+    } catch { return null; }
+  }
+
   private updateRealm(state: GameState, dt: number): void {
-    if (!this.realmManual) {
-      const r = state.realm;
-      this.realmId = r && typeof r.kind === 'string' ? r.kind : null;
+    // which realms should be on screen
+    const want: Array<{ id: string; side: number }> = [];
+    let cx = (this.fcam.fighterPos[0].x + this.fcam.fighterPos[1].x) / 2, cz = (this.fcam.fighterPos[0].z + this.fcam.fighterPos[1].z) / 2;
+    const clash = state.clash as GameState['clash'] & { kind?: string; moves?: string[] };
+    if (this.realmManual) { if (this.realmId) want.push({ id: this.realmId, side: 0 }); }
+    else if (clash.active && clash.kind === 'realm') {
+      // Realm Clash: both worlds, split down the middle, seam through the clash point
+      const k0 = this.realmKindOf(state.fighters[0].char), k1 = this.realmKindOf(state.fighters[1].char);
+      const a = this.fcam.fighterPos[0], b = this.fcam.fighterPos[1];
+      let nx = b.x - a.x, nz = b.z - a.z;
+      const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      const px = clash.point.x / 1000, pz = clash.point.z / 1000;
+      this.clashSeam.set(nx, nz, nx * px + nz * pz, 1);
+      cx = px; cz = pz;
+      if (k0) want.push({ id: k0, side: -1 });
+      if (k1 && k1 !== k0) want.push({ id: k1, side: 1 });
+      else if (k1 && want.length) want[0]!.side = 0;
+    } else if (state.realm && typeof state.realm.kind === 'string') {
+      want.push({ id: state.realm.kind, side: 0 });
+      const o = this.fcam.fighterPos[state.realm.owner];
+      cx = o.x; cz = o.z;
     }
-    const want = this.realmId ? this.realmBuild(this.realmId) : null;
-    if (want && this.realmShown !== want) {
-      if (this.realmShown && this.realmK > 0) { this.realmK = Math.max(0, this.realmK - dt / 0.35); this.applyRealm(); return; }
-      if (this.realmShown) this.realmShown.group.visible = false;
-      this.realmShown = want;
-      this.realmK = 0;
+    this.realmId = want.length ? want[0]!.id : null;
+    // add slots
+    for (const w of want) {
+      let slot = this.realmSlots.find((x) => x.id === w.id);
+      if (!slot) {
+        const b = this.realmBuild(w.id);
+        if (!b) continue;
+        slot = { id: w.id, b, k: 0, side: w.side };
+        this.realmSlots.push(slot);
+        b.group.visible = true;
+      }
+      slot.side = w.side;
     }
-    if (!this.realmShown) return;
-    const target = want ? 1 : 0;
-    this.realmK += Math.sign(target - this.realmK) * Math.min(Math.abs(target - this.realmK), dt / 0.6);
+    // animate
+    const inClash = want.length > 1 || (want.length === 1 && want[0]!.side !== 0);
+    for (let i = this.realmSlots.length - 1; i >= 0; i--) {
+      const sl = this.realmSlots[i]!;
+      const on = want.some((w) => w.id === sl.id);
+      // opening fills most of the 90-frame cinematic; a clash snaps both worlds in; closing is quicker
+      const rate = on ? (inClash ? 1 / 0.45 : 1 / 1.25) : 1 / 0.55;
+      sl.k += Math.sign((on ? 1 : 0) - sl.k) * Math.min(Math.abs((on ? 1 : 0) - sl.k), dt * rate);
+      const rb = sl.b as Partial<RealmBuild>;
+      rb.setCenter?.(cx, cz);
+      if (rb.setClip) {
+        if (sl.side !== 0) rb.setClip(this.clashSeam.x, this.clashSeam.y, this.clashSeam.z, sl.side);
+        else rb.setClip(0, 0, 0, 0);
+      }
+      if (sl.k > 0) sl.b.update(this.time, dt);
+      if (sl.k <= 0 && !on) { sl.b.setDissolve?.(0); sl.b.group.visible = false; this.realmSlots.splice(i, 1); }
+    }
     this.applyRealm();
-    if (this.realmK > 0) this.realmShown.update(this.time, dt);
-    if (this.realmK <= 0 && !want) { this.realmShown.group.visible = false; this.realmShown = null; }
   }
 
   private disposeRealms(): void {
     for (const b of this.realmBuilds.values()) { b.dispose(); this.scene.remove(b.group); }
     this.realmBuilds.clear();
-    this.realmShown = null; this.realmK = 0;
+    this.realmSlots = [];
   }
 
   private applyRealm(): void {
-    const r = this.realmShown, st = this.stage;
-    if (!r || !st) return;
-    const k = this.realmK;
-    if (r.setDissolve) { r.group.visible = k > 0; r.setDissolve(k); } else r.group.visible = k >= 0.5;
-    if (st.setDissolve) { st.group.visible = k < 1; st.setDissolve(1 - k); } else st.group.visible = k < 0.5;
+    const st = this.stage;
+    if (!st) return;
+    let top: { b: StageBuild; k: number } | null = null;
+    let kMax = 0, kMin = 1;
+    for (const sl of this.realmSlots) {
+      const r = sl.b;
+      if (r.setDissolve) { r.group.visible = sl.k > 0; r.setDissolve(sl.k); } else r.group.visible = sl.k >= 0.5;
+      if (!top || sl.k > top.k) top = sl;
+      kMax = Math.max(kMax, sl.k); kMin = Math.min(kMin, sl.k);
+    }
+    const split = this.realmSlots.length > 1 && this.realmSlots.every((x) => x.side !== 0);
+    // bubble realms hide the stage only once fully expanded (both halves in a clash); others swap at the midpoint
+    const bubble = !!top && !!(top.b as Partial<RealmBuild>).bubble;
+    const hideStage = top ? (bubble ? (split ? kMin >= 0.999 : kMax >= 0.999) : kMax >= 0.5) : false;
+    if (st.setDissolve) { st.group.visible = kMax < 1; st.setDissolve(1 - kMax); } else st.group.visible = !hideStage;
+    const r = top?.b ?? null;
+    const k = top ? (bubble ? Math.min(1, top.k * 1.15) : top.k) : 0;
     // environment blend
-    this.baseBg.copy(st.background).lerp(r.background, k);
+    this.baseBg.copy(st.background);
+    if (r) this.baseBg.lerp(r.background, k);
     (this.scene.background as THREE.Color | null)?.copy?.(this.baseBg);
-    if (this.scene.fog && st.fog && r.fog) {
-      this.baseFog.copy(st.fog.color).lerp(r.fog.color, k);
+    if (this.scene.fog && st.fog) {
+      this.baseFog.copy(st.fog.color);
+      if (r?.fog) this.baseFog.lerp(r.fog.color, k);
       (this.scene.fog as THREE.Fog).color.copy(this.baseFog);
     }
-    this.sun.color.copy(st.sunColor).lerp(r.sunColor, k);
-    this.sun.intensity = st.sunIntensity + (r.sunIntensity - st.sunIntensity) * k;
-    this.hemi.intensity = st.hemiIntensity + (r.hemiIntensity - st.hemiIntensity) * k;
-    if (r.rim) this.rimLight.color.copy(this.stageRim).lerp(r.rim, k);
+    this.sun.color.copy(st.sunColor);
+    this.sun.intensity = st.sunIntensity;
+    this.hemi.color.copy(st.hemiSky).lerp(st.hemiGround, 0.35);
+    this.hemi.intensity = st.hemiIntensity;
+    this.rimLight.color.copy(this.stageRim);
+    if (r) {
+      this.sun.color.lerp(r.sunColor, k);
+      this.sun.intensity += (r.sunIntensity - st.sunIntensity) * k;
+      _hc.copy(r.hemiSky).lerp(r.hemiGround, 0.35);
+      this.hemi.color.lerp(_hc, k);
+      this.hemi.intensity += (r.hemiIntensity - st.hemiIntensity) * k;
+      if (r.rim) this.rimLight.color.lerp(r.rim, k);
+    }
   }
+
+  /** Optional (additive): realm kinds currently on screen (dev / tests) */
+  get realmsShown(): string[] { return this.realmSlots.filter((s) => s.k > 0).map((s) => s.id); }
 
   private placeSun(center: THREE.Vector3, extent: number, dir?: THREE.Vector3): void {
     if (!this.stage) return;
@@ -528,6 +617,15 @@ export class GameRenderer {
     let s: SocketName = bone;
     if (bone === 'weapon' && !v.visibleWeapon) s = 'handR';
     return v.socket(s).getWorldPosition(out);
+  }
+
+  /** Optional (additive): world orientation of a bone socket (canonical frame: +Z forward / blade direction). */
+  getBoneQuat(player: 0 | 1, bone: BoneName, out: THREE.Quaternion): THREE.Quaternion {
+    const v = this.active[player] ?? this.views[player];
+    if (!v) return out.identity();
+    let s: SocketName = bone;
+    if (bone === 'weapon' && !v.visibleWeapon) s = 'handR';
+    return v.socket(s).getWorldQuaternion(out);
   }
 
   /** called each render() after the scene is drawn; vfx uses it for screen-space post effects */

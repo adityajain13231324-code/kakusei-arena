@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>KAKUSEI ARENA — crossover VFX harness</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #hud { position: fixed; left: 12px; top: 10px; color: #fff; text-shadow: 0 1px 3px #000; font-size: 13px; line-height: 1.4; pointer-events: none; white-space: pre; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="hud"></div>
+    <script type="module" src="./xover.ts"></script>
+  </body>
+</html>

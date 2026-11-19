@@ -8,6 +8,7 @@ precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform float uVig;
 uniform vec4 uFlash; uniform float uLines; uniform vec3 uLineCol; uniform float uSeed;
 uniform float uImpact; uniform float uHasScene; uniform sampler2D uScene;
+uniform float uLetter; uniform vec4 uGrade;
 float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
 vec4 over(vec4 f, vec4 b){
   float a = f.a + b.a * (1.0 - f.a);
@@ -32,7 +33,12 @@ void main(){
     float m = smoothstep(inner, inner + 0.3, r) * line * step(0.22, h);
     o = over(vec4(uLineCol, m * clamp(uLines * 1.15, 0.0, 1.0)), o);
   }
+  if (uGrade.a > 0.002) {
+    // colour wash, stronger at the edges (realm / ultimate mood)
+    o = over(vec4(uGrade.rgb, uGrade.a * (0.55 + 0.45 * smoothstep(0.2, 0.9, r))), o);
+  }
   o = over(vec4(uFlash.rgb, uFlash.a), o);
+  if (uLetter > 0.001 && abs(uv.y - 0.5) > 0.5 - uLetter) o = vec4(0.0, 0.0, 0.0, 1.0);
   if (uImpact > 0.5) {
     vec3 c = uHasScene > 0.5 ? texture2D(uScene, uv).rgb : vec3(smoothstep(0.05, 0.55, r));
     float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -79,6 +85,9 @@ export class PostFx {
   private lineCol = new THREE.Color(1, 1, 1);
   private vigBase = 0.34; private vigPulse = 0;
   private seed = 0;
+  private letter = 0; private letterTarget = 0;
+  private grade = new THREE.Vector4(0, 0, 0, 0);
+  private gradeTarget = 0; private gradeHold = 0;
   reduce = false;
   /** 0 low, 1 medium, 2 high */
   level = 2;
@@ -90,6 +99,7 @@ export class PostFx {
         uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uVig: { value: 0 },
         uFlash: { value: this.flash }, uLines: { value: 0 }, uLineCol: { value: this.lineCol },
         uSeed: { value: 0 }, uImpact: { value: 0 }, uHasScene: { value: 0 }, uScene: { value: null },
+        uLetter: { value: 0 }, uGrade: { value: this.grade },
       },
       vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, depthTest: false, depthWrite: false, blending: THREE.NormalBlending,
@@ -121,6 +131,14 @@ export class PostFx {
     this.seed = Math.random();
   }
   vignettePulse(a: number): void { this.vigPulse = Math.max(this.vigPulse, a); }
+  /** cinematic letterbox bars, fraction of the screen height per bar (0 = off); eased */
+  letterbox(target: number): void { this.letterTarget = target; }
+  /** colour wash toward `hex` at `amount` (0..1), held for `hold` s then eased out */
+  colorGrade(hex: number, amount: number, hold = 0.1): void {
+    this.grade.x = ((hex >> 16) & 255) / 255; this.grade.y = ((hex >> 8) & 255) / 255; this.grade.z = (hex & 255) / 255;
+    this.gradeTarget = Math.max(0, Math.min(0.8, amount));
+    this.gradeHold = hold;
+  }
 
   update(dt: number): void {
     this.time += dt;
@@ -128,16 +146,22 @@ export class PostFx {
     if (this.linesHold > 0) this.linesHold -= dt;
     else this.lines = Math.max(0, this.lines - this.linesDecay * dt);
     this.vigPulse = Math.max(0, this.vigPulse - dt * 1.4);
+    this.letter += (this.letterTarget - this.letter) * Math.min(1, dt * 6);
+    if (Math.abs(this.letter - this.letterTarget) < 1e-4) this.letter = this.letterTarget;
+    if (this.gradeHold > 0) this.gradeHold -= dt; else this.gradeTarget = 0;
+    this.grade.w += (this.gradeTarget - this.grade.w) * Math.min(1, dt * 5);
+    if (this.grade.w < 1e-3 && this.gradeTarget === 0) this.grade.w = 0;
   }
   clear(): void {
     this.impactLeft = 0; this.flash.w = 0; this.lines = 0; this.linesHold = 0; this.vigPulse = 0;
+    this.letter = this.letterTarget = 0; this.grade.w = 0; this.gradeTarget = 0;
   }
 
   /** the post pass body; called by the renderer after the scene is drawn */
   render(r: THREE.WebGLRenderer): void {
     const vig = this.level === 0 ? 0 : this.vigBase + this.vigPulse * 0.5;
     const impact = this.impactLeft > 0;
-    if (!impact && this.flash.w < 0.004 && this.lines < 0.01 && vig < 0.01) return;
+    if (!impact && this.flash.w < 0.004 && this.lines < 0.01 && vig < 0.01 && this.letter < 0.001 && this.grade.w < 0.002) return;
     r.getDrawingBufferSize(this.size);
     const u = this.mat.uniforms;
     (u.uRes!.value as THREE.Vector2).copy(this.size);
@@ -145,6 +169,7 @@ export class PostFx {
     u.uVig!.value = vig;
     u.uLines!.value = this.lines;
     u.uSeed!.value = this.seed;
+    u.uLetter!.value = this.letter;
     let phase = 0;
     u.uHasScene!.value = 0;
     if (impact) {

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { makeDecals, makeOnomato, ONOMATO } from './tex';
 import type { DecalTextures } from './tex';
 
-export type DecalKind = 'star' | 'ring' | 'crescent' | 'glow';
+export type DecalKind = 'star' | 'ring' | 'crescent' | 'glow' | 'hex' | 'spiral' | 'shuriken' | 'asura' | 'swirl';
 /** 0 billboard (faces camera), 1 flat on ground, 2 faces a given normal */
 export type DecalMode = 0 | 1 | 2;
 
@@ -22,7 +22,7 @@ export class DecalFx {
   readonly tex: DecalTextures;
   private items: Item[] = [];
   private next = 0;
-  constructor(root: THREE.Object3D, readonly cam: THREE.Camera, count = 28) {
+  constructor(root: THREE.Object3D, readonly cam: THREE.Camera, count = 40) {
     this.tex = makeDecals();
     const geo = new THREE.PlaneGeometry(1, 1);
     for (let i = 0; i < count; i++) {
@@ -101,7 +101,7 @@ export class Onomato {
   private tex = new Map<string, THREE.CanvasTexture>();
   private pool: OSprite[] = [];
   private next = 0;
-  constructor(root: THREE.Object3D, count = 6) {
+  constructor(root: THREE.Object3D, count = 8) {
     for (const k of Object.keys(ONOMATO)) this.tex.set(k, makeOnomato(k));
     for (let i = 0; i < count; i++) {
       const mat = new THREE.SpriteMaterial({ map: this.tex.get('don')!, transparent: true, depthTest: false, depthWrite: false });

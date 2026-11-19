@@ -155,6 +155,16 @@ export interface DecalTextures {
   crescent: THREE.CanvasTexture;
   glow: THREE.CanvasTexture;
   aura: THREE.CanvasTexture;
+  /** hexagon lattice ring (Infinity ripple) */
+  hex: THREE.CanvasTexture;
+  /** 5-arm swirl (Rasengan / vortex discs) */
+  spiral: THREE.CanvasTexture;
+  /** 4 curved wind blades around a ring (Rasen-Shuriken disc) */
+  shuriken: THREE.CanvasTexture;
+  /** abstract glowing glyph: three halo rings + six arcs (Asura afterimage; deliberately not a figure) */
+  asura: THREE.CanvasTexture;
+  /** soft vertical streaks (tornado / steam columns, scrolls in v) */
+  swirl: THREE.CanvasTexture;
 }
 
 export function makeDecals(): DecalTextures {
@@ -248,7 +258,119 @@ export function makeDecals(): DecalTextures {
   aura.wrapS = THREE.RepeatWrapping;
   aura.wrapT = THREE.RepeatWrapping;
 
-  return { star, ring, crescent, glow, aura };
+  return { star, ring, crescent, glow, aura, ...makeXoverDecals(rnd) };
+}
+
+/** crossover decal textures (white, tinted per use) */
+function makeXoverDecals(rnd: () => number): Pick<DecalTextures, 'hex' | 'spiral' | 'shuriken' | 'asura' | 'swirl'> {
+  // hex lattice, masked to a ring
+  let c = canvas(256, 256);
+  let g = c.getContext('2d')!;
+  g.strokeStyle = W + '1)';
+  g.lineWidth = 2.2;
+  const R = 13, hw = R * Math.sqrt(3);
+  for (let row = -12; row <= 12; row++) {
+    for (let col = -12; col <= 12; col++) {
+      const cx = 128 + col * hw + (row & 1 ? hw / 2 : 0), cy = 128 + row * R * 1.5;
+      g.beginPath();
+      for (let k = 0; k <= 6; k++) {
+        const a = (k / 6) * 6.2832 + Math.PI / 6;
+        const x = cx + Math.cos(a) * R * 0.92, y = cy + Math.sin(a) * R * 0.92;
+        if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  g.globalCompositeOperation = 'destination-in';
+  radial(g, 128, 128, 128, [[0, W + '0.15)'], [0.55, W + '0.5)'], [0.82, W + '1)'], [0.92, W + '0.6)'], [1, W + '0)']]);
+  g.globalCompositeOperation = 'source-over';
+  radial(g, 128, 128, 128, [[0, W + '0)'], [0.84, W + '0)'], [0.88, W + '0.9)'], [0.93, W + '0)']]);
+  const hex = mk(c);
+
+  // swirl arms
+  c = canvas(256, 256);
+  g = c.getContext('2d')!;
+  g.translate(128, 128);
+  for (let arm = 0; arm < 5; arm++) {
+    for (let i = 0; i < 70; i++) {
+      const t = i / 70;
+      const a = arm * (6.2832 / 5) + t * 4.2;
+      const r = 8 + t * 116;
+      g.fillStyle = `rgba(255,255,255,${(0.9 * (1 - t) + 0.1).toFixed(3)})`;
+      g.beginPath();
+      g.arc(Math.cos(a) * r, Math.sin(a) * r, 2 + 9 * (1 - t) * (0.5 + 0.5 * Math.sin(t * 9)), 0, 6.2832);
+      g.fill();
+    }
+  }
+  radial(g, 0, 0, 40, [[0, W + '1)'], [1, W + '0)']]);
+  const spiral = mk(c);
+
+  // shuriken: 4 curved blades + ring
+  c = canvas(256, 256);
+  g = c.getContext('2d')!;
+  g.translate(128, 128);
+  g.shadowColor = 'rgba(255,255,255,1)';
+  g.shadowBlur = 10;
+  for (let k = 0; k < 4; k++) {
+    g.save();
+    g.rotate((k * Math.PI) / 2);
+    const lg = g.createLinearGradient(0, 0, 124, 0);
+    lg.addColorStop(0, W + '0.95)');
+    lg.addColorStop(1, W + '0.15)');
+    g.fillStyle = lg;
+    g.beginPath();
+    g.moveTo(14, -16);
+    g.quadraticCurveTo(70, -46, 124, -8);
+    g.quadraticCurveTo(70, -14, 18, 18);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+  g.shadowBlur = 0;
+  radial(g, 0, 0, 52, [[0, W + '1)'], [0.5, W + '0.9)'], [0.7, W + '0.35)'], [1, W + '0)']]);
+  g.strokeStyle = W + '0.8)';
+  g.lineWidth = 3;
+  g.beginPath(); g.arc(0, 0, 60, 0, 6.2832); g.stroke();
+  const shuriken = mk(c);
+
+  // abstract asura glyph: three halo rings on top, six arcs fanning from the centre (no figure, no faces)
+  c = canvas(256, 256);
+  g = c.getContext('2d')!;
+  g.strokeStyle = W + '1)';
+  g.shadowColor = 'rgba(255,255,255,1)';
+  g.shadowBlur = 12;
+  g.lineCap = 'round';
+  g.lineWidth = 5;
+  for (const [x, y, r] of [[128, 52, 22], [84, 66, 17], [172, 66, 17]] as Array<[number, number, number]>) {
+    g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.stroke();
+  }
+  g.lineWidth = 6;
+  for (let k = 0; k < 6; k++) {
+    const side = k < 3 ? -1 : 1, j = k % 3;
+    g.beginPath();
+    g.moveTo(128 + side * 18, 118 + j * 10);
+    g.quadraticCurveTo(128 + side * (64 + j * 8), 70 + j * 46, 128 + side * (112 - j * 6), 40 + j * 70);
+    g.stroke();
+  }
+  g.lineWidth = 4;
+  g.beginPath(); g.moveTo(128, 90); g.lineTo(128, 236); g.stroke();
+  const asura = mk(c);
+
+  // vertical swirl streaks (tile in u and v)
+  c = canvas(128, 256);
+  g = c.getContext('2d')!;
+  for (let i = 0; i < 40; i++) {
+    const x = rnd() * 128, y = rnd() * 256, len = 40 + rnd() * 120, w = 2 + rnd() * 7, a = 0.25 + rnd() * 0.75;
+    for (const ox of [-128, 0, 128]) for (const oy of [-256, 0, 256]) {
+      const lg = g.createLinearGradient(0, y + oy, 0, y + oy + len);
+      lg.addColorStop(0, W + '0)'); lg.addColorStop(0.5, W + a + ')'); lg.addColorStop(1, W + '0)');
+      g.fillStyle = lg;
+      g.fillRect(x + ox - w / 2, y + oy, w, len);
+    }
+  }
+  const swirl = mk(c);
+  swirl.wrapS = swirl.wrapT = THREE.RepeatWrapping;
+  return { hex, spiral, shuriken, asura, swirl };
 }
 
 export const ONOMATO: Record<string, { text: string; top: string; bottom: string }> = {
@@ -264,6 +386,30 @@ export const ONOMATO: Record<string, { text: string; top: string; bottom: string
   bishi: { text: 'ビシッ!', top: '#ffffff', bottom: '#ffe14a' },
   guardcrush: { text: 'GUARD CRUSH!', top: '#ffffff', bottom: '#2f8cff' },
   dosu: { text: 'ドスッ!', top: '#f1e6d2', bottom: '#a8865a' },
+  // crossover pack
+  pon: { text: 'ポン!', top: '#ffffff', bottom: '#ffb04a' },
+  mugen: { text: '∞', top: '#ffffff', bottom: '#7fc4ff' },
+  zan: { text: '斬!', top: '#f4fff6', bottom: '#3fd17a' },
+  boing: { text: 'ボヨヨン!', top: '#ffffff', bottom: '#ff6a8a' },
+  dodon: { text: 'ドンドットット', top: '#ffffff', bottom: '#ffd23a' },
+  gorogoro: { text: 'ゴロゴロ!', top: '#fffbd0', bottom: '#ffd21a' },
+  doom: { text: 'ドォン!!', top: '#ffffff', bottom: '#b06cff' },
+  rv_infinite_void: { text: '無量空処', top: '#ffffff', bottom: '#8fa8ff' },
+  rv_tailed_beast_bomb: { text: '尾獣玉', top: '#ffd0a0', bottom: '#ff3a1a' },
+  rv_king_of_hell: { text: '閻王', top: '#ffe0e0', bottom: '#ff2030' },
+  rv_gear_fifth: { text: 'GEAR 5!', top: '#ffffff', bottom: '#ffe48a' },
+  rv_paths: { text: '道', top: '#fff8d8', bottom: '#5ad0ff' },
+  rv_clash: { text: 'REALM CLASH!', top: '#ffffff', bottom: '#c06cff' },
+  fm_six_eyes: { text: 'SIX EYES', top: '#ffffff', bottom: '#5ac8ff' },
+  fm_sage: { text: 'SAGE MODE', top: '#fff0c0', bottom: '#ff8a1a' },
+  fm_kurama: { text: 'KURAMA MODE', top: '#fffbd0', bottom: '#ffb000' },
+  fm_santoryu: { text: '三刀流', top: '#f4fff6', bottom: '#3fd17a' },
+  fm_ittoryu: { text: '一刀流', top: '#f4fff6', bottom: '#3fd17a' },
+  fm_nitoryu: { text: '二刀流', top: '#f4fff6', bottom: '#3fd17a' },
+  fm_gear2: { text: 'GEAR 2', top: '#ffffff', bottom: '#ff5a7a' },
+  fm_gear4: { text: 'GEAR 4', top: '#ffffff', bottom: '#d0303a' },
+  fm_gear5: { text: 'GEAR 5', top: '#ffffff', bottom: '#ffe48a' },
+  fm_titan: { text: 'TITAN!', top: '#fff2c0', bottom: '#d0301a' },
 };
 
 export function makeOnomato(key: string): THREE.CanvasTexture {

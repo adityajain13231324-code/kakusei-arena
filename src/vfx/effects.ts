@@ -37,7 +37,10 @@ export function auraColor(id: CharId): number {
 export const ELEM_COL: Record<string, [number, number]> = {
   none: [0xfff2b0, 0xffb347], fire: [0xff7a1a, 0xffd23a], shadow: [0xb07cff, 0x2a0a40],
   blade: [0xffffff, 0xbfe8ff], earth: [0xc89a5a, 0x6b5232], ki: [0x6fe8ff, 0xffffff],
+  void: [0x7f9cff, 0x1a1050], wind: [0xbff6ff, 0x4ad0ff], lightning: [0xfff27a, 0xffb21a], rubber: [0xffd0dc, 0xff4a6a],
 };
+/** element colour pair, safe for unknown elements */
+export function elemCol(el: string | undefined): [number, number] { return ELEM_COL[el ?? 'none'] ?? ELEM_COL.none!; }
 
 const LVL: Record<Strength, number> = { light: 0, medium: 1, heavy: 2, super: 3 };
 const tmpV = new THREE.Vector3();
@@ -192,6 +195,54 @@ export class Effects {
         }
         break;
       }
+      case 'void': {
+        // implosion: bright ring collapsing inward + dark core + inward streaks
+        this.fx.D.spawn('ring', this.x, this.y, this.z, 2.6 * k, 0.2, 0.22, 0x9fb8ff, 0, 0, 0.9, true);
+        this.fx.D.spawn('hex', this.x, this.y, this.z, 0.4, 2.2 * k, 0.3, 0x7f9cff, 0, rr(0, 6), 0.7, true);
+        this.glow(1.5 * k, 0.18, 0xe0e8ff, 0x3a2aff, 1, 1.5);
+        for (let i = 0; i < this.n(12 * k); i++) {
+          randDir();
+          const d = rr(0.8, 1.4) * k;
+          P.spec.reset().at(this.x + PR.dx * d, this.y + PR.dy * d, this.z + PR.dz * d).v(-PR.dx * d * 5, -PR.dy * d * 5, -PR.dz * d * 5).ph(0, 0)
+            .ttl(0.2).tx(T.STREAK, 0.06).sz(0.05, 0.01, 0.3, 0.05).col(0xffffff, 0x5a6aff, 1, 0, 1.6);
+          P.emit(true);
+        }
+        break;
+      }
+      case 'wind': {
+        // spiralling wind blades
+        for (let i = 0; i < this.n(14 * k); i++) {
+          const a = (i / 14) * 6.2832, sp = rr(4, 8) * k;
+          const cr = this.fx.cam.matrixWorld.elements;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          P.spec.reset().at(this.x, this.y, this.z)
+            .v((cr[0]! * ca + cr[4]! * sa) * sp - sa * 2, (cr[1]! * ca + cr[5]! * sa) * sp, (cr[2]! * ca + cr[6]! * sa) * sp + ca * 2).ph(4, 0)
+            .ttl(rr(0.18, 0.32)).tx(T.STREAK, 0.08).sz(0.06, 0.01, 0.5, 0.15).col(0xffffff, 0x6fe0ff, 1, 0, 1.5);
+          P.emit(true);
+        }
+        this.fx.D.spawn('spiral', this.x, this.y, this.z, 0.6 * k, 2.4 * k, 0.26, 0xbff6ff, 0, rr(0, 6), 0.8, true, 0, 1, 0, 1, 14);
+        this.glow(1.3 * k, 0.15, 0xffffff, 0x4ad0ff, 0.9);
+        break;
+      }
+      case 'lightning': {
+        for (let i = 0; i < this.n(10 * k); i++) {
+          randDir();
+          const sp = rr(6, 12);
+          P.spec.reset().at(this.x, this.y, this.z).v(PR.dx * sp, PR.dy * sp, PR.dz * sp).ph(5, 0)
+            .ttl(rr(0.08, 0.18)).tx(T.STREAK, 0.03).sz(0.05, 0.02, 0.6, 0.3).col(0xffffff, 0xffd21a, 1, 0, 2.0);
+          P.emit(true);
+        }
+        this.glow(1.6 * k, 0.12, 0xffffff, 0xffd21a, 1, 1.7);
+        this.star(1.4 * k, 0.1, 0xfff27a, rr(0, 6), 1);
+        break;
+      }
+      case 'rubber': {
+        // cartoon "boing": squashed white ring + soft pink puff
+        this.fx.D.spawn('ring', this.x, this.y, this.z, 0.3, 2.4 * k, 0.24, 0xffffff, 0, 0, 0.9, true, 0, 1, 0, 0.55);
+        this.fx.D.spawn('ring', this.x, this.y, this.z, 0.2, 1.6 * k, 0.3, 0xff8aa8, 0, 0, 0.7, true, 0, 1, 0, 1.4);
+        this.smokePuffs(4 * k, 1.4, 0.5, 0.45, 0xffffff, 0xffc0d0, 0.55, 0.2);
+        break;
+      }
       default:
     }
   }
@@ -203,6 +254,10 @@ export class Effects {
     if (el === 'earth') return 'zudon';
     if (el === 'ki') return 'don';
     if (el === 'shadow') return 'baki';
+    if (el === 'void') return 'don';
+    if (el === 'wind') return 'zuba';
+    if (el === 'lightning') return 'gorogoro';
+    if (el === 'rubber') return lvl >= 3 ? 'doka' : 'boing';
     return lvl >= 3 ? 'doka' : ['baki', 'don', 'bam'][(Math.random() * 3) | 0]!;
   }
 
@@ -214,7 +269,7 @@ export class Effects {
     let lvl = LVL[ev.strength ?? 'medium'];
     if (counter) lvl = Math.min(3, lvl + 1);
     const el = ev.element;
-    const col = ELEM_COL[el ?? 'none']!;
+    const col = elemCol(el);
     const sparkN = [9, 15, 26, 44][lvl]!, speed = [5, 7, 9.5, 13][lvl]!;
     this.sparks(sparkN, speed, 0.9, 0xfff6c8, col[0], [0.5, 0.7, 0.95, 1.3][lvl]!, 0.45);
     if (lvl >= 1) this.sparks(sparkN * 0.4, speed * 0.6, 1.2, 0xffffff, 0xffb347, 0.35, 0.4, 12);
@@ -506,7 +561,7 @@ export class Effects {
   projectileLaunch(ev: SimEvent): void {
     const s = this.state;
     const el = ev.element ?? 'none';
-    const col = ELEM_COL[el]!;
+    const col = elemCol(el);
     this.x = ev.pos.x / 1000; this.y = ev.pos.y / 1000; this.z = ev.pos.z / 1000;
     if (this.y < 0.2 && s) this.y = 1.2;
     this.glow(1.2, 0.14, 0xffffff, col[0], 0.9);
@@ -518,7 +573,7 @@ export class Effects {
     this.origin(ev.pos, 0.25);
     this.ax = 0; this.az = 0;
     const el = ev.element ?? 'none';
-    const col = ELEM_COL[el]!;
+    const col = elemCol(el);
     this.sparks(12, 7, 1.2, 0xffffff, col[0], 0.7, 0.4);
     this.glow(1.8, 0.16, 0xffffff, col[0], 1);
     this.star(1.4, 0.14, 0xffffff);
@@ -528,7 +583,7 @@ export class Effects {
 
   projectileDestroy(ev: SimEvent): void {
     this.origin(ev.pos, 0.2);
-    const col = ELEM_COL[ev.element ?? 'none']!;
+    const col = elemCol(ev.element);
     this.ax = 0; this.az = 0;
     this.sparks(7, 4, 1.2, 0xffffff, col[0], 0.5, 0.3);
     this.glow(1.0, 0.12, 0xffffff, col[0], 0.7);
