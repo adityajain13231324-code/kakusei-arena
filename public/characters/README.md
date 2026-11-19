@@ -1,158 +1,81 @@
-# KAKUSEI ARENA fighter asset pack
+# KAKUSEI ARENA character assets, v2
 
-Four original low-poly anime fighters, authored with scripted mesh construction in **Blender 5.2.2 LTS**, exported with Blender's glTF 2.0 exporter. No downloaded character meshes, reference-character tracing, or third-party artwork. The editable construction source is `tools/assets/build_assets.py`.
+Original designs built with the existing Blender v2 pipeline: SDF heads, smoothly lofted limbs, finger bones, layered hair and clothing, uniquely packed UVs, painted cel colors and four expression panels. Source: `tools/assets/build_assets_v2.py`, `v2_geom.py`, `v2_face.py`, `v2_chars.py`, and `v2_ch2.py`. Chapter 2 exports use Blender 5.2.2 LTS, NumPy, Pillow and SciPy.
 
-## Files and budgets
+## Inventory
 
-All geometry is in metres, Y-up, facing +Z, feet at Y=0, in an A-pose. Each GLB embeds its texture, so it loads independently. The separate PNGs support runtime palette and expression changes. The 1024 models use the same geometry and UVs with a smaller embedded atlas.
+| ID | Base triangles | Awakened triangles | Notes |
+| --- | ---: | ---: | --- |
+| kaito | 23,338 | 23,338 | Existing v2 fire fighter |
+| shiori | 24,634 | 24,634 | Existing v2 shadow fighter |
+| ren | 24,760 | 24,760 | Existing v2 swordsman, separate Katana mesh |
+| goro | 20,862 | 21,334 | Existing v2 grappler, optional shoulder plates |
+| mika | 21,200 | 21,200 | Cobalt/yellow track jacket, neck headphones, short blue twin tails |
+| lyra | 22,400 | 22,400 | Ash-grey/teal ceremonial layers, paper charms and bell cords |
+| kitsu | 17,064 | 19,144 | Spectral fox with a quadruped rig and eight optional spirit tails |
 
-| Folder | Fighter | Base triangles, including carried weapon | Awakened triangles | Skinned meshes | Materials |
-| --- | --- | ---: | ---: | ---: | ---: |
-| `kaito/` | Kaito Homura | 5,969 | 5,969 | 2 | 1 |
-| `shiori/` | Shiori Kageyama | 5,551 | 5,551 | 2 | 1 |
-| `ren/` | Ren Tsukishiro | 5,903 | 5,903 | 3 | 1 |
-| `goro/` | Goro Ishigami | 7,211 | 7,323 | 2, plus optional plates | 1 |
+Every character folder contains:
 
-Each of the four folders contains these files:
+- `model.glb`: rigged mesh with embedded 2048 atlas.
+- `model_1024.glb`: identical mesh, UVs and weights with an embedded 1024 atlas.
+- `tex.png`, `tex_awakened.png`: 2048 normal/awakened color atlases.
+- `tex_1024.png`, `tex_awakened_1024.png`: mobile color atlases.
+- `tex_glow.png`: 512 emission mask, enabled on awakening.
+- `manifest.json`: exact triangles, bone names, mesh names and expression offsets.
 
-| File | Contents |
-| --- | --- |
-| `model.glb` | Rigged fighter, embedded 2048 x 2048 normal atlas |
-| `model_1024.glb` | Same rig and geometry, embedded 1024 x 1024 normal atlas |
-| `tex.png` | 2048 x 2048 normal atlas |
-| `tex_awakened.png` | 2048 x 2048 awakened atlas, identical UV layout |
-| `tex_1024.png` | 1024 x 1024 normal atlas |
-| `tex_awakened_1024.png` | 1024 x 1024 awakened atlas |
-| `manifest.json` | Geometry counts, height, materials, mesh count, and complete bone list |
+New Chapter 2 folders also contain `validation.json` and `browser-check.json`. All new base models are within 15,000 to 25,000 triangles and use one material. Optional outlines add a second material and roughly double rendered triangle counts. They do not count as additional exported character geometry.
 
-`goro/shoulder_plates.glb` contains the optional awakened shoulder plates: **112 triangles**, one atlas material, and the same rig. Attach its skinned plate mesh to the base fighter's bones. Do not display its duplicate skeleton as a second character. Goro is authored at 1.2 times the base scale, with a wider torso and limbs.
+Special files: `goro/shoulder_plates.glb`; `kitsu/awakened_tails.glb`; and `lyra/kitsu.glb`, an identical convenience copy of `kitsu/model.glb`. Kitsu's external atlases remain in `kitsu/`. Its normal GLB includes one tail; the optional mesh supplies the other eight. All nine tails use the three shared tail bones.
 
-Additional files:
+## Coordinates and rig
 
-- `toon-materials.js`: optional three.js toon, emissive, outline, and Goro plate attachment helper.
-- `validation.json`: Khronos glTF validator results and accessor-level skin/texture/budget checks.
-- `deformation-check.json`: Blender reimport, foot-height, and finite posed-vertex checks.
-- `browser-check.json`: three.js load/render checks, including awakened states and attached plates.
-- `previews/<fighter>_front.png`, `_side.png`, `_back.png`: actual Blender orthographic renders.
-- `previews/<fighter>_awakened_front.png`, `_awakened_side.png`, `_awakened_back.png`: the same geometry with the alternate atlas and optional Goro plates. These neutral Blender renders do not show the runtime glow or outline shader.
-- `previews/<fighter>_deformation.png`: reimported GLB stress pose.
-- `previews/<fighter>_three_normal.png`, `_three_awakened.png`, `_three_pose.png`: actual three.js screenshots, including the outline shader.
+Metres, Y-up, +Z forward, feet/paws at Y=0. Humanoids use an A-pose. No animations are embedded.
 
-## Skeleton and skinning
-
-Every character uses these exact Mixamo-style names, without a `mixamorig:` prefix:
+Core humanoid bones:
 
 ```text
-Hips
-  Spine
-    Spine1
-      Spine2
-        Neck
-          Head
-            Hair_01
-            Ponytail_01
-              Ponytail_02
-        LeftShoulder
-          LeftArm
-            LeftForeArm
-              LeftHand
-        RightShoulder
-          RightArm
-            RightForeArm
-              RightHand
-        Scarf_01
-          Scarf_02
-  LeftUpLeg
-    LeftLeg
-      LeftFoot
-        LeftToeBase
-  RightUpLeg
-    RightLeg
-      RightFoot
-        RightToeBase
+Hips, Spine, Spine1, Spine2, Neck, Head
+LeftShoulder, LeftArm, LeftForeArm, LeftHand
+RightShoulder, RightArm, RightForeArm, RightHand
+LeftUpLeg, LeftLeg, LeftFoot, LeftToeBase
+RightUpLeg, RightLeg, RightFoot, RightToeBase
+Hair_01, Scarf_01, Scarf_02, Ponytail_01, Ponytail_02
 ```
 
-All 27 bones are present in each file for consistent mapping. Hair, scarf and ponytail bones are only weighted where those accessories exist. Limbs have additional rings around elbows and knees, with normalized blended weights on either side of each joint. Hands have individually modeled fingers, weighted to the hand bone. There are no finger bones or facial morph targets.
+Each hand also has `LeftHand` or `RightHand` + `Thumb/Index/Middle/Ring/Pinky` + `1/2/3`, for 30 finger bones. Positive local X curls the fingers. The standard rig has 57 bones; Mika adds LeftTail_01/02 and RightTail_01/02 (61 total). Lyra adds Charm_01, SkirtFront_01 and SkirtBack_01 (60 total). Exact parentage and complete names are in each manifest. Mika's tail chains carry the twin-tail weights. Lyra's skirt panels blend Hips and the corresponding thigh for kick clearance; her extra skirt bones are available for later secondary-motion authoring.
 
-The asset includes a separate `Face_Expressions` skinned mesh. It shares the atlas with `Fighter`. Ren also has a separate `Katana` skinned mesh, including the blade, handle and guard, initially weighted to Hips inside its separate sheath geometry. For drawing the weapon, detach/rebind the Katana to the hand or animate its vertices through an attachment transform; simply parenting a still-skinned sword under a hand does not replace its Hips weights.
-
-This is a segmented low-poly construction with overlapping clothing and body parts, not a single watertight sculpt. The included stress poses check basic limb deformation. Full Mixamo retargeting, extreme combat poses, cloth collision and final game-device performance have not been validated. Rest-pose calibration remains necessary when retargeting. No idle, walk or other animation clips are embedded.
+Kitsu has Hips, Spine, Spine1, Neck, Head, Tail_01/02/03, and FrontLeft/FrontRight/HindLeft/HindRight + UpLeg/Leg/Foot, 20 bones total. It is a quadruped and must not be retargeted with humanoid clips.
 
 ## Atlas and expressions
 
-The atlas is an 8 x 8 palette grid. Each surface samples the center of one swatch, allowing clean flat colors and reliable 1024 resizing. UVs are shared across both variants. This is a palette atlas, not a unique texel-density unwrap for detailed hand painting.
+V2 uses a unique packed unwrap, not the old 8x8 palette grid. The top 512 pixels of each 2048 atlas contain four 512-square face panels: neutral, shout, pain, determined. The matching mobile panels are 256 square.
 
-Blender cell index is `row * 8 + column`, with row zero at the image's bottom. In the PNG, that row is at the bottom; exported glTF flips V. The shader helper accounts for this.
+`Face_Expressions` is a separate skinned mesh. Add the following U offset to its original UVs only: neutral 0, shout 0.25, pain 0.5, determined 0.75. V stays unchanged. Both normal and awakened atlases use exactly the same layout. These are painted expression swaps, not morph targets. Keep a copy of the original UVs to avoid accumulating offsets.
 
-| Cell | Use |
-| ---: | --- |
-| 0 | Skin |
-| 1 | Light clothing / robe |
-| 2 | Dark clothing / mask / gloves |
-| 3 | Hair / dark accessory |
-| 4 | Accent |
-| 5 | Silver / stone highlight |
-| 6 | Sole / stone shadow |
-| 7 | Eye white / Ren closed-eye skin |
-| 8 | Iris |
-| 9 | Pupil |
-| 10 | Eye glint |
-| 11 | Lash |
-| 12 | Mouth |
-| 13 | Goro shoulder stone |
-| 14 | Reserved outline color |
-| 15 | Ren closed eyelid / awakened eye highlight |
+Color textures: `SRGBColorSpace`, `flipY=false`. Emission mask: `NoColorSpace`, `flipY=false`. The embedded GLB texture loads without external configuration. `toon-materials.js` is an optional asset-viewer helper for stepped lighting, skinned outlines, awakening and extra mesh attachment. Bloom is a renderer feature; an atlas alone cannot create a light halo.
 
-Changing swatches changes eye and mouth colors. Swapping the `Face_Expressions` geometry supports different expression shapes. Ren's supplied closed/open effect uses the same eye geometry and changes its colors through the alternate atlas; it is not an eyelid morph.
+## Previews and checks
 
-## three.js integration
+Actual three.js renders live in `previews/<id>_three_<view>.png`: front, side, back, three, awakened, punch, kick, crouch, face_neutral, face_shout, face_pain, face_determined and face_awakened. For Kitsu, the pose checks bend quadruped legs and tail bones. Earlier Blender/v1 images are retained for historical reference; use the `_three_` images for the current models.
 
-Standard glTF materials preserve the baked colors. Use the optional helper for stepped cel lighting, silhouettes and emissive accents. A texture alone cannot create a camera-dependent white outline or a light halo.
+Chapter 2 validation checks Khronos glTF errors/warnings, triangle and bone budgets, normalized weights, atlas dimensions, matching 2048/1024 geometry/UVs/weights, and expression UV bounds. Browser checks load the exported GLBs and capture all listed states. These are software/browser checks, not owner-device performance measurements. Actual combat clips, Mixamo retargeting, cloth physics and arbitrary extreme poses still need integration testing. New fighters are asset deliveries only; no `src/` files are changed or new gameplay slots wired.
 
-```js
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { configureFighter } from '/characters/toon-materials.js';
+## Build
 
-const loader = new GLTFLoader();
-const { scene: fighter } = await loader.loadAsync('/characters/kaito/model.glb');
-scene.add(fighter);
-const appearance = await configureFighter(fighter, 'kaito');
-appearance.setAwakened(true);
-
-// For Goro, after configuring the base Goro fighter:
-// const plates = await loader.loadAsync('/characters/goro/shoulder_plates.glb');
-// appearance.attachShoulderPlates(plates.scene);
-```
-
-Pass `{ resolution: 1024 }` when loading `model_1024.glb`. External color textures require `SRGBColorSpace` and `flipY = false`, handled by the helper. Kaito receives warm emissive hair/accent colors; Ren receives pale-blue emissive eyes. Add bloom in the game renderer if a halo is desired. Shiori receives an ink-black palette and a white inverted-hull outline. Goro's plates toggle with awakening.
-
-The optional helper uses one toon material and one outline material. Outlines reuse the existing geometry and skeleton, adding a render pass rather than a second exported character. Even with outlines, each fighter remains below 25,000 rendered triangles. The helper expects a unique character instance; clone rigs with `SkeletonUtils.clone` before configuring multiple fighters.
-
-## Props
-
-Props live in `public/props/`, with flat colors, metre scale, and no skeletons or animations. Each has one embedded 128 x 128 palette material.
-
-| File | Triangles |
-| --- | ---: |
-| `water_tank.glb` | 472 |
-| `ac_unit.glb` | 200 |
-| `neon_sign_frame.glb` | 84 |
-| `stone_lantern.glb` | 280 |
-| `red_shrine_gate.glb` | 268 |
-| `cherry_tree.glb` | 1,178 |
-
-The neon panel is blank and brand-free. The tree has modeled blossom clusters and no alpha cards.
-
-## Rebuild and inspect
+Using Blender with NumPy, Pillow and SciPy on its Python path:
 
 ```sh
-blender --background --factory-startup --python tools/assets/build_assets.py
-blender --background --factory-startup --python tools/assets/build_assets.py -- props
-blender --background --factory-startup --python tools/assets/check_deformation.py
+blender --background --factory-startup --python tools/assets/build_assets_v2.py -- mika lyra --no-render
+blender --background --factory-startup --python tools/assets/build_kitsu.py
 ```
 
-Install `gltf-validator` in a scratch directory and expose its `node_modules` through `NODE_PATH` to run `node tools/assets/validate_assets.cjs`. No runtime dependencies were added to the game.
+Omit `--no-render` to also produce Blender turnarounds. The v2 script also runs with Python's `bpy` package. `build_assets.py` is retained as the historical v1 builder; do not use it to regenerate v2 fighters.
 
-`tools/assets/check_browser.cjs` runs the browser checks. It needs `three` and `playwright` available through `NODE_PATH`, plus Google Chrome at the Windows path configured in the script. Update that path on other systems.
+Install verification dependencies in a scratch folder, not the game package: `gltf-validator` and `playwright`. Expose that folder's `node_modules` through `NODE_PATH`. Then:
 
-`tools/assets/preview.html` is a standalone inspection page. Serve the repo root, map `/characters/` to `public/characters/`, and `/vendor/three/` to the installed `three` package. It loads the delivered GLBs and lets you toggle awakening, a stress pose, and front/side/back views. It does not modify the game's renderer or gameplay code.
+```sh
+node tools/assets/validate_ch2.cjs mika lyra kitsu
+node tools/assets/check_ch2.cjs mika lyra kitsu
+```
+
+The browser checker serves the repo on localhost:5198 and reads three.js from the repository's existing `node_modules`. Set `CHROME_PATH` if Chrome is not at the default Windows installation path. The manual viewer is `tools/assets/preview.html`; the checker maps its local asset and three.js routes.

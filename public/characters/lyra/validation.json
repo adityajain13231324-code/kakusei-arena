@@ -1,0 +1,45 @@
+{
+  "checks": [
+    "triangle budget",
+    "Khronos validator",
+    "normalized weights",
+    "bone names",
+    "mobile geometry/UV/skin equality",
+    "atlas dimensions",
+    "expression strip UV bounds"
+  ],
+  "files": [
+    {
+      "file": "public/characters/lyra/model.glb",
+      "triangles": 22400,
+      "vertices": 13016,
+      "blended_vertices": 5834,
+      "materials": 1,
+      "images": [
+        {
+          "width": 2048,
+          "height": 2048
+        }
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "messages": []
+    },
+    {
+      "file": "public/characters/lyra/model_1024.glb",
+      "triangles": 22400,
+      "vertices": 13016,
+      "blended_vertices": 5834,
+      "materials": 1,
+      "images": [
+        {
+          "width": 1024,
+          "height": 1024
+        }
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "messages": []
+    }
+  ]
+}
