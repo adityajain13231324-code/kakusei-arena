@@ -14,8 +14,8 @@
  * getBoneWorld.
  */
 import * as THREE from 'three';
-import type { CharId, FighterState, PoseName } from '../../sim/types';
-import { C, NCH } from '../anim/poses';
+import type { CharId, FighterState, PoseName, HitboxDef } from '../../sim/types';
+import { C, NCH, PAIN_POSES } from '../anim/poses';
 import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
 import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
 import { charLook, type CharLook } from './looks';
@@ -114,6 +114,15 @@ export class FighterView {
   private twoHand = false;
   lookup: MoveLookup = defaultMoveLookup;
   visibleWeapon = false;
+  private rimBase = new THREE.Color();
+  private rimAwk = new THREE.Color();
+  private outBase = new THREE.Color();
+  private outAwk = new THREE.Color();
+  private stageRim: THREE.Color | null = null;
+  private faceMat: THREE.MeshToonMaterial | null = null;
+  private expr: Expr = 'neutral';
+  private assistCache = new Map<string, Assist | null>();
+  private exprHold = 0;
 
   constructor(readonly char: CharId, asset: CharAsset, opts: { alt?: boolean } = {}) {
     this.look = charLook(char);
@@ -136,6 +145,8 @@ export class FighterView {
     u.uMap2.value = asset.awakenTex;
     u.uHasMap2.value = asset.awakenTex ? 1 : 0;
     this.outlineMat = makeFighterOutline(u);
+    this.rimBase.set(L.rim); this.rimAwk.set(L.rimAwk);
+    this.outBase.set(L.outline); this.outAwk.set(L.outlineAwk || L.outline);
     // ---- bones
     this.model.traverse((o) => {
       if ((o as THREE.Bone).isBone) {
@@ -159,7 +170,13 @@ export class FighterView {
     };
     for (const mesh of meshes) {
       const name = `${mesh.name} ${mesh.parent?.name ?? ''}`;
-      mesh.material = toonFor(mesh.material);
+      const isFaceMesh = /face_?expression/i.test(name);
+      if (isFaceMesh && !this.faceMat) {
+        const sm = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+        this.faceMat = makeFighterToon(sm?.map ?? null, u, true);
+        this.toonMats.push(this.faceMat);
+      }
+      mesh.material = isFaceMesh && this.faceMat ? this.faceMat : toonFor(mesh.material);
       mesh.frustumCulled = false;
       mesh.castShadow = true;
       mesh.receiveShadow = false;
@@ -373,7 +390,33 @@ export class FighterView {
     if (stageTint) this.u.uShadowTint.value.lerp(stageTint, 0.5);
   }
 
+  /** stage back-light colour: blended into the (non-awakened) fresnel rim */
+  setStageRim(c: THREE.Color | null): void {
+    this.rimBase.set(this.look.rim);
+    this.stageRim = c;
+    if (c) this.rimBase.lerp(c, 0.55);
+  }
+
   socket(name: SocketName): THREE.Object3D { return this.sockets[name]; }
+
+  /** current facial expression (Face_Expressions panel) */
+  get expression(): Expr { return this.expr; }
+
+  private pickExpression(f: FighterState, dt: number): void {
+    const p = this.info.pose;
+    let e: Expr = 'neutral';
+    if (PAIN_POSES.has(p) || f.mode === 'hitstun' || f.mode === 'juggle' || f.mode === 'knockdown' || f.mode === 'thrown') e = 'pain';
+    else if (p === 'kiCharge' || p === 'awakenPose' || p === 'beamFire' || p === 'win' || p === 'liftOverhead' || (this.info.strike && /Ext|Fire|Down|quickDraw|groundPound|stomp|Slam|spin|flying|dive/.test(p))) e = 'shout';
+    else if (this.info.strike || p === 'guardHigh' || p === 'guardLow' || p === 'introPose' || p === 'dash' || p === 'crouch' || p === 'beamCharge' || p === 'sheathStance' || f.mode === 'blockstun') e = 'determined';
+    if (f.awakened && e === 'neutral') e = 'determined';
+    // hold shouts / pain a moment so single-frame poses still read
+    if (e !== this.expr) {
+      if (this.exprHold > 0 && (this.expr === 'shout' || this.expr === 'pain') && e !== 'pain') { this.exprHold -= dt; return; }
+      this.expr = e;
+      this.exprHold = e === 'shout' || e === 'pain' ? 0.18 : 0;
+      this.u.uFaceOff.value.set(EXPR_OFF[e], 0);
+    } else if (this.exprHold > 0) this.exprHold -= dt;
+  }
 
   get poseName(): PoseName { return this.info.pose; }
 
@@ -422,19 +465,22 @@ export class FighterView {
     for (const m of this.plates) m.visible = plateOn;
     this.group.updateMatrixWorld(true);
     this.applyPose(this.pose);
+    this.strikeAssist(f, alpha);
     this.simChains(dt);
     // ---- material uniforms
     const u = this.u;
     u.uWipe.value = this.wipe;
     u.uEdge.value = this.wipe > -0.5 && this.wipe < this.height + 0.25 ? 1 : 0;
     u.uGlow.value = awk * L.glowStrength * (0.75 + 0.25 * Math.sin(time * 6.5));
-    u.uRimColor.value.set(awk > 0.5 ? L.rimAwk : L.rim);
-    u.uRimStrength.value = L.rimStrength + (L.rimStrengthAwk - L.rimStrength) * awk * (0.85 + 0.15 * Math.sin(time * 9));
+    u.uRimColor.value.copy(awk > 0.5 ? this.rimAwk : this.rimBase);
+    const rs = this.stageRim ? Math.max(0.42, L.rimStrength) : L.rimStrength;
+    u.uRimStrength.value = rs + (L.rimStrengthAwk - rs) * awk * (0.85 + 0.15 * Math.sin(time * 9));
     u.uRimWidth.value = 0.62 - 0.1 * awk;
     if (f.counterHitFlash > 0) this.flash = Math.max(this.flash, 0.45);
     this.flash = Math.max(0, this.flash - dt * 5);
     u.uFlash.value = this.flash;
-    if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.set(awk > 0.5 ? L.outlineAwk : L.outline);
+    if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.copy(awk > 0.5 ? this.outAwk : this.outBase);
+    if (this.faceMat) this.pickExpression(f, dt);
   }
 
   /** register a hit on this fighter (flash) */
@@ -521,6 +567,76 @@ export class FighterView {
     // legs
     if (this.legL) this.solveLeg(this.legL, c, C.fL, C.kL, C.fLp, ws);
     if (this.legR) this.solveLeg(this.legR, c, C.fR, C.kR, C.fRp, ws);
+  }
+
+  // --------------------------------------------------------------------------- strike → hitbox alignment
+  /** which limb carries a move's active hitbox (from the anim key pose around the first active frame) */
+  private assistFor(moveId: string): Assist | null {
+    if (this.assistCache.has(moveId)) return this.assistCache.get(moveId)!;
+    let res: Assist | null = null;
+    const mv = this.lookup(this.char, moveId);
+    if (mv && mv.hitboxes?.length && mv.anim?.length && mv.height !== 'throw') {
+      const hb = mv.hitboxes[0];
+      for (const [fr, pose] of mv.anim) {
+        if (fr > hb.to) break;
+        if (fr < hb.from - 6) continue;
+        const r = ASSIST_POSES[pose];
+        if (r) { res = { limb: r[0], w: r[1], hbs: mv.hitboxes }; break; }
+      }
+    }
+    this.assistCache.set(moveId, res);
+    return res;
+  }
+
+  private strikeAssist(f: FighterState, alpha: number): void {
+    if (!f.moveId || f.mode !== 'attack') return;
+    const a = this.assistFor(f.moveId);
+    if (!a) return;
+    const fr = f.moveFrame + 1 + alpha;
+    let w = 0;
+    let hb: HitboxDef | null = null;
+    for (const h of a.hbs) {
+      const k = fr < h.from ? 1 - (h.from - fr) / 3 : fr <= h.to + 1 ? 1 : 1 - (fr - h.to - 1) / 5;
+      if (k > w) { w = k; hb = h; }
+    }
+    if (!hb || w <= 0) return;
+    w = Math.min(1, w) * a.w;
+    // hitbox far end (minus a bit of the radius so the fist / foot sits inside it), group-local metres
+    const fwd = (hb.x + hb.len * 0.8) / 1000;
+    const ws = this.group.scale.x;
+    this.rootObj.getWorldQuaternion(_qa);
+    const solveHand = (l: Limb, wI: number, m: number, eI: number, lat: number) => {
+      l.end.getWorldPosition(_v4);
+      _T.set(lat, hb!.y / 1000, fwd).applyMatrix4(_m2.copy(this.group.matrixWorld).multiply(_m.makeScale(1 / ws, 1 / ws, 1 / ws)));
+      _T.lerp(_v4, 1 - w);
+      _pole.set(this.pose[eI], this.pose[eI + 1], this.pose[eI + 2]).applyQuaternion(_qa);
+      this.solveLimb(l, _T, _pole, ws, false);
+      _e.set(this.pose[wI] * D2R, this.pose[wI + 1] * D2R * m, this.pose[wI + 2] * D2R * m, 'XYZ');
+      _q3.copy(_cq2).multiply(_q1.setFromEuler(_e));
+      this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+    };
+    const solveFoot = (l: Limb, kI: number, pI: number) => {
+      l.end.getWorldPosition(_v4);
+      _T.set(0, hb!.y / 1000, fwd).applyMatrix4(_m2.copy(this.group.matrixWorld).multiply(_m.makeScale(1 / ws, 1 / ws, 1 / ws)));
+      _T.lerp(_v4, 1 - w);
+      _pole.set(this.pose[kI], this.pose[kI + 1], this.pose[kI + 2]).applyQuaternion(_qa);
+      this.solveLimb(l, _T, _pole, ws, true);
+      // foot follows the shin (pointed kick)
+      _q3.copy(_cq2).multiply(_q1.setFromAxisAngle(_AX, -70 * D2R * w));
+      _q2.copy(_qa).multiply(_q1.setFromAxisAngle(_AY, this.pose[pI + 1] * D2R)).multiply(_qb.setFromAxisAngle(_AX, this.pose[pI] * D2R));
+      _q3.slerp(_q2, 1 - w);
+      this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+    };
+    switch (a.limb) {
+      case 'handL': if (this.armL) solveHand(this.armL, C.wL, 1, C.eL, 0.02); break;
+      case 'handR': if (this.armR) solveHand(this.armR, C.wR, -1, C.eR, -0.02); break;
+      case 'both':
+        if (this.armL) solveHand(this.armL, C.wL, 1, C.eL, 0.12);
+        if (this.armR) solveHand(this.armR, C.wR, -1, C.eR, -0.12);
+        break;
+      case 'footR': if (this.legR) solveFoot(this.legR, C.kR, C.fRp); break;
+      case 'footL': if (this.legL) solveFoot(this.legL, C.kL, C.fLp); break;
+    }
   }
 
   private solveArm(l: Limb, c: Float32Array, hI: number, eI: number, wI: number, m: number, shG: THREE.Vector3, shRef: THREE.Vector3, ws: number, chestM: THREE.Matrix4): void {
@@ -661,6 +777,19 @@ export class FighterView {
 }
 
 const _cq1 = new THREE.Quaternion(), _cq2 = new THREE.Quaternion();
+
+type AssistLimb = 'handL' | 'handR' | 'both' | 'footL' | 'footR';
+interface Assist { limb: AssistLimb; w: number; hbs: HitboxDef[] }
+/** strike poses whose limb is pulled onto the active hitbox (limb, max weight) */
+const ASSIST_POSES: Partial<Record<PoseName, [AssistLimb, number]>> = {
+  jabExt: ['handL', 1], straightExt: ['handR', 1], hookExt: ['handR', 0.75], uppercutExt: ['handR', 0.45], palmExt: ['handR', 1],
+  throwProjectile: ['handR', 0.6], beamFire: ['both', 0.8], grabReach: ['both', 0.9],
+  lowKickExt: ['footR', 1], midKickExt: ['footR', 1], highKickExt: ['footR', 1], roundhouseExt: ['footR', 1], axeKickDown: ['footR', 0.9],
+  sweepExt: ['footR', 1], flyingKick: ['footL', 1], diveKick: ['footL', 1],
+};
+
+export type Expr = 'neutral' | 'shout' | 'pain' | 'determined';
+const EXPR_OFF: Record<Expr, number> = { neutral: 0, shout: 0.25, pain: 0.5, determined: 0.75 };
 
 function collide(p: Float32Array, k: number, c: THREE.Vector3, r: number): void {
   const dx = p[k] - c.x, dy = p[k + 1] - c.y, dz = p[k + 2] - c.z;

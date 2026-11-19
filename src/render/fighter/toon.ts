@@ -28,6 +28,8 @@ export interface FighterUniforms {
   uHue: { value: number };
   uOutlineColor: { value: THREE.Color };
   uOutlineWidth: { value: number };
+  /** Face_Expressions panel offset (glTF UV space), only read by the face material */
+  uFaceOff: { value: THREE.Vector2 };
 }
 
 export function makeFighterUniforms(): FighterUniforms {
@@ -47,10 +49,11 @@ export function makeFighterUniforms(): FighterUniforms {
     uHue: { value: 0 },
     uOutlineColor: { value: new THREE.Color('#120c14') },
     uOutlineWidth: { value: 0.0055 },
+    uFaceOff: { value: new THREE.Vector2(0, 0) },
   };
 }
 
-export function makeFighterToon(map: THREE.Texture | null, u: FighterUniforms): THREE.MeshToonMaterial {
+export function makeFighterToon(map: THREE.Texture | null, u: FighterUniforms, face = false): THREE.MeshToonMaterial {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, map, gradientMap: toonGradient() });
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
@@ -65,6 +68,7 @@ varying float vObjY;
 uniform sampler2D uMap2;
 uniform float uHasMap2, uWipe, uGlow, uEdge, uRimStrength, uRimWidth, uFlash, uHue;
 uniform vec3 uGlowColor, uRimColor, uFlashColor;
+uniform vec2 uFaceOff;
 vec3 kkSrgb(vec3 c) { return pow(max(c, vec3(0.0)), vec3(0.4545)); }
 float kkSat(vec3 s) { float mx = max(s.r, max(s.g, s.b)); float mn = min(s.r, min(s.g, s.b)); return mx > 1e-4 ? (mx - mn) / mx : 0.0; }
 float kkHueOf(vec3 s) {
@@ -78,11 +82,15 @@ float kkGlowMask = 0.0;
 float kkEdgeK = 0.0;
 #ifdef USE_MAP
 {
-  vec4 texA = texture2D( map, vMapUv );
+  vec2 kkUv = vMapUv;
+  #ifdef KK_FACE
+  kkUv += uFaceOff;
+  #endif
+  vec4 texA = texture2D( map, kkUv );
   float wipeK = uHasMap2 * smoothstep( vObjY - 0.03, vObjY + 0.03, uWipe );
   vec4 tex = texA;
   if ( wipeK > 0.0 ) {
-    vec4 texB = texture2D( uMap2, vMapUv );
+    vec4 texB = texture2D( uMap2, kkUv );
     tex = mix( texA, texB, wipeK );
     vec3 sB = kkSrgb( texB.rgb );
     kkGlowMask = wipeK * smoothstep( 0.45, 0.75, kkSat( sB ) ) * smoothstep( 0.55, 0.85, max( sB.r, max( sB.g, sB.b ) ) );
@@ -125,7 +133,8 @@ vec3 getGradientIrradiance( vec3 normal, vec3 lightDirection ) {
 }
 #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'kk-fighter-toon';
+  if (face) (m as unknown as { defines: Record<string, string> }).defines = { KK_FACE: '' };
+  m.customProgramCacheKey = () => (face ? 'kk-fighter-toon-face' : 'kk-fighter-toon');
   return m;
 }
 

@@ -449,6 +449,7 @@ html, body {
 .callout.mini.r { text-align: right; }
 .callout.mini span { font-size: 3.4em; }
 .callout.counter span { color: var(--orange); }
+.callout.guardcrush { top: 26%; } .callout.guardcrush span { color: #bfe4ff; filter: drop-shadow(0.05em 0.06em 0 var(--ink)) drop-shadow(0 0 0.35em #2f8cff); }
 .callout.ultimate { top: 27%; } .callout.ultimate span { font-size: 4.4em; color: var(--c); filter: drop-shadow(0.05em 0.06em 0 var(--ink)) drop-shadow(0 0 0.4em var(--c)); }
 @keyframes co-big { 0% { opacity: 0; transform: scale(3.4); } 14% { opacity: 1; transform: scale(0.92); } 22% { transform: scale(1); } 76% { opacity: 1; transform: scale(1.04); } 100% { opacity: 0; transform: scale(1.18); } }
 @keyframes co-mini { 0% { opacity: 0; transform: translateX(-3em) scale(1.4); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-1em); } }

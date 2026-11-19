@@ -96,6 +96,23 @@ const LINES: Record<string, Bit[]> = {
     [H('GRAB! {A} gives {B} an unscheduled hug!'), P('Throw range: one elbow. Escape window: one short regret.')],
     [P('Throws beat blocks. Rock-paper-scissors, but louder.')],
   ],
+  guardCrush: [
+    [H('GUARD CRUSH!! {B} blocked so hard the block gave up!'), P('Guard meter: empty. Dignity: also empty. Stagger window: very real.')],
+    [H('SHATTERED! {B} is wearing a guard made of glass and {A} brought a hammer!'), P('Turtling has a finite budget. {B} just went bankrupt.')],
+    [P('Sustained blocking drains the guard gauge. {B} found the bottom of it. Loudly.')],
+    [H('{A} breaks the guard wide open! Somebody sweep up the shards!'), P('Hazard note: the shards are imaginary. The damage is not.')],
+    [H('CRUNCH! That was {B}\'s guard, and also {B}\'s plan!'), P('Plan B has been located. It is also glass.')],
+    [H('{B} held the block for TOO LONG and now the block holds {B} accountable!'), P('A stunned {B} is a free-combo coupon.')],
+    [H('Pressure pressure pressure and CRACK! {A} does not knock, {A} shatters!'), P('Defensive options remaining: prayer, mostly.')],
+  ],
+  otg: [
+    [H('{A} stomps a fallen {B}! Kicking someone while they are down! Sporting? NO! Effective? YES!'), P('Ground hit confirmed. Rules say it is allowed once. Ethics say less.')],
+    [H('DOSU! {B} is already on the floor and {A} says "not yet"!'), P('Okizeme: the art of hitting someone who has just lost an argument with gravity.')],
+    [P('Lying-down tax collected. {B} will be notified by mail, and by boot.')],
+    [H('Oh that is COLD! {A} follows up on a knocked-down {B}!'), P('Technically the floor already hit {B} first. {A} just added a second opinion.')],
+    [H('A ground pound! {B} became part of the stage!'), P('Dust level: dramatic. Respect level: conflicted.')],
+    [H('{B} tried to relax on the floor and {A} charged an admission fee!'), P('Wake-up timing matters. So does not lying around.')],
+  ],
   wall: [
     [H('WALL SPLAT! {B} is now a decorative poster!'), P('Arena structural integrity: questionable. {B} structural integrity: worse.')],
     [P('The wall was not consulted about this.')],
@@ -302,6 +319,10 @@ export class Broadcast {
           this.hits[a]++;
           if (e.combo && e.combo > this.maxCombo) this.maxCombo = e.combo;
           this.idleT = 0;
+          if (e.type === 'hit' && e.tag === 'otg') {
+            this.say('otg', 1.8, a, {}, 6);
+            if (Math.random() < 0.5) this.pushHeadline(`${this.names[a].toUpperCase()} stomps a grounded ${this.names[t]}; floor files for "second-hand damage"`);
+          }
           if (!this.firstHit && e.type === 'hit' && st.round.phase === 'fight') {
             this.firstHit = true;
             if (Math.random() < 0.4) this.say('quip', 1.4, a, {}, 0, QUIPS[this.chars[a]]);
@@ -323,6 +344,10 @@ export class Broadcast {
           this.say('counter', 1.5, a, {}, 6);
           break;
         case 'block': this.say('block', 0.4, a, {}, 14); break;
+        case 'guardCrush':
+          this.say('guardCrush', 2.5, a, {}, 5);
+          this.pushHeadline(`GUARD CRUSH! ${this.names[t].toUpperCase()}'s block declared "structurally unsound" by inspectors`, true);
+          break;
         case 'throw': this.say('grab', 0.6, a, {}, 12); break;
         case 'wallSplat': this.say('wall', 0.8, a, {}, 12); break;
         case 'awaken':

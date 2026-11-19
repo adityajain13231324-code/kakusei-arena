@@ -37,6 +37,9 @@ const _v = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _origin = new THREE.Vector3();
 const _MENU_SUN = new THREE.Vector3();
+const _KEY = new THREE.Vector3();
+const _RIM = new THREE.Vector3();
+const _side = new THREE.Vector3();
 
 function initialQuality(): Quality {
   try {
@@ -66,6 +69,9 @@ export class GameRenderer {
   private sun = new THREE.DirectionalLight(0xffffff, 2.4);
   /** flat ambient (anime look: no smooth hemisphere gradients on toon surfaces) */
   private hemi = new THREE.AmbientLight(0xffffff, 1.2);
+  /** back light (stage moon / sun colour) so fighters pop off the background; no shadows */
+  private rimLight = new THREE.DirectionalLight(0xffffff, 1.6);
+  private stageRim = new THREE.Color('#ffffff');
   private debug = new DebugBoxes();
   private post: ((r: THREE.WebGLRenderer) => void) | null = null;
   private time = 0;
@@ -95,7 +101,7 @@ export class GameRenderer {
     this.sun.shadow.normalBias = 0.025;
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
     sc.near = 0.5; sc.far = 40;
-    this.scene.add(this.sun, this.sun.target, this.hemi, this.debug.group);
+    this.scene.add(this.sun, this.sun.target, this.hemi, this.rimLight, this.rimLight.target, this.debug.group);
     this.scene.background = new THREE.Color('#0b0b14');
     this.applyQualityToLights();
     this.camera.position.set(0, 1.5, 6);
@@ -131,8 +137,12 @@ export class GameRenderer {
     this.sun.intensity = this.stage.sunIntensity;
     this.hemi.color.copy(this.stage.hemiSky).lerp(this.stage.hemiGround, 0.35);
     this.hemi.intensity = this.stage.hemiIntensity;
-    for (const v of this.views) v?.setShadowTint(this.stage.shadowTint);
-    for (const s of this.menu.slots) s.view?.setShadowTint(this.stage.shadowTint);
+    this.stageRim.copy(this.stage.rim ?? this.stage.sunColor);
+    this.rimLight.color.copy(this.stageRim);
+    this.rimLight.intensity = 1.5;
+    this.fcam.bound = halfM + (id === 'training' ? 6 : 3.1);
+    for (const v of this.views) { v?.setShadowTint(this.stage.shadowTint); v?.setStageRim(this.stageRim); }
+    for (const v of this.menuPool.values()) { v.setShadowTint(this.stage.shadowTint); v.setStageRim(this.stageRim); }
   }
 
   private makeView(char: CharId, asset: CharAsset, alt: boolean): FighterView {
@@ -140,6 +150,7 @@ export class GameRenderer {
     v.lookup = this.moveLookup;
     v.setQuality(this.quality);
     v.setShadowTint(this.stage ? this.stage.shadowTint : null);
+    if (this.stage) v.setStageRim(this.stageRim);
     this.scene.add(v.group);
     return v;
   }
@@ -230,9 +241,31 @@ export class GameRenderer {
       _c.copy(this.fcam.fighterPos[0]).add(this.fcam.fighterPos[1]).multiplyScalar(0.5);
       _c.y = 0;
       const sep = this.fcam.fighterPos[0].distanceTo(this.fcam.fighterPos[1]);
-      this.placeSun(_c, Math.max(2.6, sep * 0.5 + 1.8));
+      // key light from the camera side (faces read), stage light becomes the back/rim light
+      this.keyDir(this.fcam.normal, _KEY);
+      this.placeSun(_c, Math.max(2.6, sep * 0.5 + 1.8), _KEY);
+      this.placeRim(_c, this.fcam.normal);
       this.stage.update(this.time, dt);
     }
+  }
+
+  /** key light direction: mostly from the camera, raised, a bit to the side of the stage light */
+  private keyDir(camN: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+    const sd = this.stage ? this.stage.sunDir : _RIM.set(0.4, 0.8, 0.4);
+    _side.set(-camN.z, 0, camN.x);
+    const sgn = _side.dot(sd) >= 0 ? 1 : -1;
+    return out.copy(camN).multiplyScalar(0.8).addScaledVector(_side, 0.45 * sgn).setY(1.05).normalize();
+  }
+
+  /** rim/back light opposite the camera, on the stage light's side */
+  private placeRim(center: THREE.Vector3, camN: THREE.Vector3): void {
+    const sd = this.stage ? this.stage.sunDir : _RIM.set(0.4, 0.8, 0.4);
+    _side.set(-camN.z, 0, camN.x);
+    const sgn = _side.dot(sd) >= 0 ? 1 : -1;
+    _RIM.copy(camN).multiplyScalar(-1).addScaledVector(_side, 0.6 * sgn).setY(0.55).normalize();
+    this.rimLight.target.position.copy(center);
+    this.rimLight.position.copy(center).addScaledVector(_RIM, 15);
+    this.rimLight.target.updateMatrixWorld();
   }
 
   private placeSun(center: THREE.Vector3, extent: number, dir?: THREE.Vector3): void {
@@ -326,8 +359,9 @@ export class GameRenderer {
     this.menu.token++;
     this.menu.slots = list.map((c, i) => {
       const left = i === 0;
-      const x = layout === 'title' ? (left ? -1.55 : 1.55) : (left ? -1.95 : 1.95);
-      const ang = layout === 'title' ? (left ? 0.45 : -0.45) : (left ? 0.62 : -0.62);
+      // select: fighters flank the bottom-centre DOM panel (screen x ≈ 12% / 88%), upper body above the info cards
+      const x = layout === 'title' ? (left ? -1.55 : 1.55) : (left ? -1.85 : 1.85);
+      const ang = layout === 'title' ? (left ? 0.45 : -0.45) : (left ? 0.5 : -0.5);
       const pose = layout === 'title' ? (left ? 'introPose' : 'win') : 'introPose';
       const st = blankFighter(c, x * 1000, 0, Math.round(Math.sin(ang) * 1000), Math.round(Math.cos(ang) * 1000), pose);
       st.mode = 'intro';
@@ -342,10 +376,10 @@ export class GameRenderer {
     const token = this.menu.token;
     const res = this.res();
     this.menu.slots.forEach((slot, i) => {
-      const key = `${slot.char}:${i}:${res}`;
+      const mirror = i === 1 && this.menu.slots[0]?.char === slot.char;
+      const key = `${slot.char}:${i}:${res}:${mirror ? 'alt' : 'main'}`;
       const pooled = this.menuPool.get(key);
       if (pooled) { slot.view = pooled; pooled.group.visible = true; return; }
-      const mirror = i === 1 && this.menu.slots[0]?.char === slot.char;
       loadCharacter(slot.char, res).then((a) => {
         if (token !== this.menu.token || !this.menu.active) return;
         let v = this.menuPool.get(key);
@@ -374,9 +408,10 @@ export class GameRenderer {
       _v.set(Math.sin(a) * 4.3, 0.75 + Math.sin(t * 0.21) * 0.06, Math.cos(a) * 4.3);
       _c.set(0, 1.32, 0);
     } else if (lay === 'select') {
-      const a = Math.sin(t * 0.15) * 0.08;
-      _v.set(Math.sin(a) * 5.6, 1.25 + Math.sin(t * 0.23) * 0.05, Math.cos(a) * 5.6);
-      _c.set(0, 1.05, 0);
+      const a = Math.sin(t * 0.15) * 0.03;
+      const d = 3.7 * Math.max(0.75, Math.min(1.25, (16 / 9) / Math.max(0.5, this.camera.aspect)));
+      _v.set(Math.sin(a) * d, 1.45 + Math.sin(t * 0.23) * 0.03, Math.cos(a) * d);
+      _c.set(0, 1.32, 0);
     } else {
       const a = t * 0.05;
       _v.set(Math.sin(a) * 7, 2.4, Math.cos(a) * 7);
@@ -386,6 +421,8 @@ export class GameRenderer {
     // menus: key light from the camera side so faces read (stage sun often back-lights for drama)
     _MENU_SUN.set(this.stage ? this.stage.sunDir.x * 0.5 : 0.4, 0.75, 0.75).normalize();
     this.placeSun(_origin, 4, _MENU_SUN);
+    _v.sub(_c).setY(0).normalize();
+    this.placeRim(_origin, _v);
     this.stage?.update(this.time, dt);
   }
 

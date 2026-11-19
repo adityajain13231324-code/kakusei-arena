@@ -212,6 +212,7 @@ export class HudScreen extends BaseScreen {
         }
         case 'fight': this.callout('FIGHT!', 'big fight'); break;
         case 'counter': this.callout('COUNTER!', 'mini counter ' + (e.target === 0 ? 'l' : 'r')); break;
+        case 'guardCrush': this.callout('GUARD CRUSH!', 'mini guardcrush ' + (e.target === 0 ? 'l' : 'r')); break;
         case 'ko': {
           const dbl = st.fighters[0].hp <= 0 && st.fighters[1].hp <= 0;
           this.callout(dbl ? 'DOUBLE K.O.' : 'K.O.', 'big ko');

@@ -53,7 +53,7 @@ export interface CharLook {
 const LOOKS: Record<CharId, CharLook> = {
   kaito: {
     id: 'kaito', shadowTint: '#8a6a8e', outline: '#1a0c0c', outlineAwk: '#3a0800', outlineWidth: 1,
-    rim: '#ffd9c0', rimAwk: '#ff7a1a', rimStrength: 0.22, rimStrengthAwk: 1.1, glow: '#ff8b28', glowStrength: 1.2,
+    rim: '#ffd9c0', rimAwk: '#ff7a1a', rimStrength: 0.22, rimStrengthAwk: 0.75, glow: '#ff8b28', glowStrength: 0.8,
     awakenScale: 1, altHue: 3.4, altOutline: '#0a1430', weapon: null, spring: { gravity: 6, drag: 0.1, stiffness: 0.16 },
   },
   shiori: {
