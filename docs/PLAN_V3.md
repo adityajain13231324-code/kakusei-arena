@@ -4,15 +4,30 @@
 Ship **KAKUSEI ARENA Season 1**: 9 fighters, cinematic "Soul Realm" ultimates on par with the biggest anime moments, a smooth fightkaro-level UI, live on Vercel + the Web Games hub, playable online with friends.
 
 **Done when:**
-- 9 fighters playable (4 current + 5 new headliners), each with a showstopper signature system, Awakening, Ultimate and a Soul Realm ultimate.
+- Crossover Pack (5) playable, then 9 original fighters (4 current + 5 new headliners), each with a showstopper signature system, Awakening, Ultimate and a Soul Realm ultimate.
 - Every menu and transition runs at 60 fps on an Iris Xe laptop and a mid-range phone, first load < 10 s.
 - Online rooms tested between 2 real devices; no desyncs over 20 matches.
 - 10 friends play it without being told how.
 
-## Characters stay original
-Real anime characters (and lookalikes, signature techniques by name, or copies of their designs) are owned by their studios. A public game that uses them gets taken down, and hurts the hub site and the GitHub account. So every fighter stays original — but each headliner gets one **big, unique, cinematic signature** so the roster hits the same hype level.
 
-## 5 new headliners
+## ★ PRIORITY: Crossover Pack (owner says: private/local game, licensed characters)
+Five crossover fighters, built on the same systems as the current roster. **Claude builds the kits** (moves, frame data, mechanics, AI, VFX, sound, UI text). **Models come from the owner** (licensed assets): Claude does not create or draw the characters' looks. Until a model is dropped in, the fighter uses a neutral mannequin body.
+
+**Model drop-in spec:** `public/characters/<id>/model.glb` — humanoid, Mixamo-style bone names (or standard Mixamo rig), A- or T-pose, metres, Y-up, ≤ 30k tris, one material/atlas preferred; optional `tex_awakened.png` (same UVs) and extra meshes for forms (`form_titan.glb`, `form_gear4.glb`, …). The loader already handles Mixamo prefixes and extra bones.
+
+| Fighter | Style | Signature systems | Specials | Awakening | Ultimate / Soul Realm |
+|---|---|---|---|---|---|
+| **Gojo** (`gojo`) | Zoner / control | **Infinity**: projectiles slow down near him; first hit each round is nullified (shimmer). Blink teleport. | *Blue* (pull orb, drags opponent in), *Red* (point-blank repel blast, wall splat), *Blink* (teleport behind), *Six Eyes counter* | **Blindfold off**: faster Ki, sees through vanish/teleports (auto-guard 1 hit) | Ult: **Hollow Purple** (merging blue+red → huge beam, clash-capable). Soul Realm: **Domain Expansion: Infinite Void** — black-and-star void swallows the arena, opponent frozen ~1.5 s (scaled damage, once per match) |
+| **Naruto** (`naruto`) | Rushdown / pressure | **Shadow Clones**: up to 2 clones that copy his next attack from other angles | *Rasengan* (dash orb, launches), *Shadow Clone Jutsu*, *Clone Rush* (clones grab + throw), *Rasen-Shuriken* (Ki projectile, multi-hit) | **Sage Mode** → at low HP **Nine-Tails Chakra Mode** (golden aura, speed + new moves) | Ult: **Rasengan barrage** with clones. Soul Realm: **Tailed Beast Bomb** arena blast |
+| **Eren** (`eren`) | Mobility + transformation | **ODM gear**: grapple-dash in any direction, air blade strikes | *Spinning slash*, *Grapple dash*, *Thunder Spear* (delayed blast), *Hardened fist counter* | **Titan Shift**: lightning strike → 10 s in Titan form (needs `form_titan.glb`, 4–5 m, armored, slow heavy moveset, camera pulls back) | Ult (Titan form): **Hardened Titan smash**. Soul Realm: **Paths** — sand-and-light world, Titan army stomp |
+| **Luffy** (`luffy`) | Long-reach brawler | **Rubber body**: stretch limbs = longest-range normals; bounces off walls | *Gum-Gum Pistol* (long punch), *Gatling*, *Rocket* (stretch dash), *Bell* (headbutt) | **Gear Second** (speed, steam) → low HP **Gear Fourth** (bounce form, `form_gear4.glb` optional) | Ult: **King Kong Gun**. Soul Realm: **Gear Fifth** — cartoon-physics world (everything squash-and-stretch, his hits bounce opponents around) |
+| **Zoro** (`zoro`) | Sword footsies | **Three-Sword Style** stance: swap 1/2/3-sword strings | *Oni Giri* (dash-through slash), *Tatsumaki* (tornado launcher), *Pound Cannon* (flying slash projectile), *Lion's Song* (iai counter) | **Asura**: 9-sword afterimage form, every slash hits twice | Ult: **Asura: Ichibugin**. Soul Realm: **King of Hell** slash storm. Joke taunt: walks off the wrong way |
+
+**Done when:** all 5 playable in every mode, each signature mechanic works and is deterministic (rollback tests green), Infinite Void / Titan Shift / Gear Fifth cinematics run at 60 fps, balance 40–60% vs the current 4, CPU personalities for each.
+
+**Order:** Gojo → Naruto → Zoro → Luffy → Eren (Eren last: Titan form needs a second model + camera mode).
+
+## 5 new original headliners (later, after the Crossover Pack)
 | # | Fighter | Archetype | Signature showstopper | Ultimate |
 |---|---|---|---|---|
 | 5 | **MIKA "VOLT" RAIDEN** | Lightning speedster | **OVERCLOCK** — 4 s where the world runs at half speed for the opponent; Mika leaves hitting afterimages | *Railgun Heart*: coin flick → hyper-speed beam (clash-capable) |
@@ -56,6 +71,7 @@ Chapter 3 later: Aiko Gearhart (mecha inventor), Koji Tanaka (delinquent brawler
 | **P1 Deploy** | Vercel deploy, hub card, real-device online test | You + Claude | friend plays online from another city |
 | **P2 UI motion pass** | Motion system, select/VS/HUD upgrades, loading + preload | Claude (Sonnet) | screen recordings smooth at 60 fps on laptop + phone |
 | **P3 Soul Realm system** | Sim rules + render realm swap for current 4 | Claude (Opus) | each of the 4 realms works, Realm Clash works, rollback tests green |
+| **P3b Crossover Pack** | Gojo → Naruto → Zoro → Luffy → Eren kits (Claude) + licensed models dropped in by owner | Claude + owner | see Crossover Pack 'Done when' |
 | **P4 Mika + Lyra** | Models (Astra), moves/data/AI/VFX/audio (Claude) | Astra + Claude | both playable, balanced 40–60% |
 | **P5 Daichi (Colossus) + Seraph** | Colossus needs a 2nd skeleton/model + camera mode; Seraph flight | Astra + Claude | both playable |
 | **P6 Oboro** | Boss with 3 forms, Arcade final fight, playable after unlock | Astra + Claude | arcade ends with Oboro |
