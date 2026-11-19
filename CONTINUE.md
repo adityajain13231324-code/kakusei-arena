@@ -22,6 +22,7 @@ npm run test:ai      # CPU AI (AI_QUICK=1 for fast)
 npm run test:net     # rollback netcode, 46 checks
 npm run build        # production build to dist/
 ```
+Playable preview page (claude.ai, no online play there): `npm run build && node tools/pack-artifact.mjs` → `dist-artifact/` (GLBs shipped as `.glb.json`, auto-loaded by `loadGLB` fallback).
 Online dev without internet: open two tabs with `?net=local` (add `&lag=40&jitter=15&loss=3` to simulate lag).
 
 ## 4. Golden rules (breaking these = bugs)

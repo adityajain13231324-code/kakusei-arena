@@ -67,13 +67,32 @@ async function loadTex(url: string): Promise<THREE.Texture | null> {
   } catch { return null; }
 }
 
+/**
+ * Load a GLB. Some static hosts (e.g. claude.ai artifact pages) can't serve .glb files, so the
+ * artifact packer (tools/pack-artifact.mjs) ships each model as `<name>.glb.json` = {"b64": "..."}.
+ * Try the real .glb first, then that fallback.
+ */
+async function loadGLB(url: string) {
+  try {
+    return await loader.loadAsync(url);
+  } catch (err) {
+    const res = await fetch(url + '.json');
+    if (!res.ok) throw err;
+    const { b64 } = (await res.json()) as { b64: string };
+    const bin = atob(b64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return loader.parseAsync(buf.buffer, url.slice(0, url.lastIndexOf('/') + 1));
+  }
+}
+
 async function loadImpl(id: CharId, res: ModelRes): Promise<CharAsset> {
   const dir = `${baseUrl()}characters/${id}/`;
   const sfx = res === 1024 ? '_1024' : '';
   const [gltf, awk, plates] = await Promise.all([
-    loader.loadAsync(`${dir}model${sfx}.glb`),
+    loadGLB(`${dir}model${sfx}.glb`),
     loadTex(`${dir}tex_awakened${sfx}.png`),
-    id === 'goro' ? loader.loadAsync(`${dir}shoulder_plates.glb`).catch(() => null) : Promise.resolve(null),
+    id === 'goro' ? loadGLB(`${dir}shoulder_plates.glb`).catch(() => null) : Promise.resolve(null),
   ]);
   const scene = gltf.scene;
   scene.updateMatrixWorld(true);
