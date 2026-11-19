@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "species": "spectral fox",
+  "triangles": 17064,
+  "awakened_triangles": 19144,
+  "bones": [
+    "Hips",
+    "Spine",
+    "Spine1",
+    "Neck",
+    "Head",
+    "Tail_01",
+    "Tail_02",
+    "Tail_03",
+    "FrontLeftUpLeg",
+    "FrontLeftLeg",
+    "FrontLeftFoot",
+    "FrontRightUpLeg",
+    "FrontRightLeg",
+    "FrontRightFoot",
+    "HindLeftUpLeg",
+    "HindLeftLeg",
+    "HindLeftFoot",
+    "HindRightUpLeg",
+    "HindRightLeg",
+    "HindRightFoot"
+  ],
+  "materials": 1,
+  "height_m": 0.9015989746598776,
+  "expressions": {
+    "mesh": "Face_Expressions",
+    "panels": [
+      "neutral",
+      "shout",
+      "pain",
+      "determined"
+    ],
+    "uv_offset_gltf": {
+      "neutral": [
+        0.0,
+        0
+      ],
+      "shout": [
+        0.25,
+        0
+      ],
+      "pain": [
+        0.5,
+        0
+      ],
+      "determined": [
+        0.75,
+        0
+      ]
+    }
+  },
+  "notes": "One base tail and eight optional spirit tails. Three shared tail bones. +Z forward, Y up, metre scale; all four paws touch the ground."
+}

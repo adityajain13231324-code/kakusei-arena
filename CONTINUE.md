@@ -80,3 +80,5 @@ Commit on `astra/continue`, push, and add a line under "Log" below: date, task, 
 
 ## Log
 - 2026-11-18 — Claude (lead): all modules on `main`. The v2 renderer, model upgrade and UI polish helpers were STOPPED mid-work and their work committed as-is. State at handoff: typecheck 0 errors, sim tests 256/256, build OK, a live match runs with GLB fighters, HUD, commentator + ticker, crowd (see `docs/screenshots/live-match-v2.png`), no console errors in a smoke test. NOT verified: every pose on bones, awakened swap, Goro plates, menu 3D scenes, phone layout, All 4 models ARE at v2 (manifest version 2, 21–25k tris each) — T3 is a visual quality check, not a rebuild. Match camera looked close/dark in the smoke test — check framing + lighting in T2/T4.
+
+- 2026-11-19 - Astra A1 first batch: Mika, Lyra and rigged Kitsu built with the v2 pipeline; normal/mobile atlases, awakened variants, expression strips and three.js previews validated. Assets only on astra/assets-ch2. A2, A3 and remaining fighters are next.

@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from v2_geom import *          # noqa
 import v2_face as FA
 import v2_chars as CH
+import v2_ch2 as CH2
+CH2.register(CH)
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'public/characters'
@@ -98,8 +100,10 @@ def hand_layout(sign, S, hp):
     return out
 
 
-def make_rig(S, hands):
+def make_rig(S, hands, extra_bones=None):
     B = base_bones(S)
+    for name, (head, tail, parent) in (extra_bones or {}).items():
+        B[name] = (np.asarray(head) * S, np.asarray(tail) * S, parent)
     arm = bpy.data.armatures.new('MixamoHumanoid')
     rig = bpy.data.objects.new('Armature', arm)
     bpy.context.collection.objects.link(rig)
@@ -175,7 +179,6 @@ def build_mesh(name, parts, rig, mat):
             g.add([idx], float(w), 'REPLACE')
     mod = ob.modifiers.new('Humanoid Skin', 'ARMATURE')
     mod.object = rig
-    ob.parent = rig
     return ob
 
 
@@ -351,7 +354,7 @@ def character(kind, render=True):
     spec = CH.SPECS[kind]
     S = spec['S']
     hands = {side: hand_layout(sign, S, spec['hand']) for side, sign in [('Left', 1), ('Right', -1)]}
-    rig, segs, finger_bones = make_rig(S, hands)
+    rig, segs, finger_bones = make_rig(S, hands, spec.get('extra_bones'))
     parts = CH.build(kind, S, segs, hands)
     # weights + normals
     for p in parts:
@@ -383,7 +386,6 @@ def character(kind, render=True):
     aoa = np.asarray(ao_img).astype(np.float32) / 255
     lo, hi = spec.get('ao_cut', (0.50, 0.60))
     ao_mask = smoothstep(hi, lo, aoa)
-    np.save('/tmp/ao_' + kind + '.npy', aoa)
     painter = CH.painter(kind)
     face_fn = CH.face_painter(kind, S)
     tex, glow0 = compose_atlas(parts, raster, ao_mask, painter, False, face_fn, kind)
@@ -454,7 +456,8 @@ def character(kind, render=True):
 
 
 if __name__ == '__main__':
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    cli = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
+    args = [a for a in cli if not a.startswith('--')]
     render = '--no-render' not in sys.argv
     kinds = args or ['kaito', 'shiori', 'ren', 'goro']
     for k in kinds:

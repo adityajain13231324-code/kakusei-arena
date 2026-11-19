@@ -1,0 +1,61 @@
+{
+  "checks": [
+    "triangle budget",
+    "Khronos validator",
+    "normalized weights",
+    "bone names",
+    "mobile geometry/UV/skin equality",
+    "atlas dimensions",
+    "expression strip UV bounds"
+  ],
+  "files": [
+    {
+      "file": "public/characters/kitsu/model.glb",
+      "triangles": 17064,
+      "vertices": 9532,
+      "blended_vertices": 2767,
+      "materials": 1,
+      "images": [
+        {
+          "width": 2048,
+          "height": 2048
+        }
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "messages": []
+    },
+    {
+      "file": "public/characters/kitsu/model_1024.glb",
+      "triangles": 17064,
+      "vertices": 9532,
+      "blended_vertices": 2767,
+      "materials": 1,
+      "images": [
+        {
+          "width": 1024,
+          "height": 1024
+        }
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "messages": []
+    },
+    {
+      "file": "public/characters/kitsu/awakened_tails.glb",
+      "triangles": 2080,
+      "vertices": 1160,
+      "blended_vertices": 923,
+      "materials": 1,
+      "images": [
+        {
+          "width": 2048,
+          "height": 2048
+        }
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "messages": []
+    }
+  ]
+}
