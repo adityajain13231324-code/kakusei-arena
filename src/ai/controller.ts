@@ -41,13 +41,16 @@ interface Mem {
   mashN: number;
   awakeAt: number;
   chargeUntil: number;
+  /** stalemate breaker: last seen HP of both fighters and the frame either last changed */
+  hpSeen: number;
+  dmgAt: number;
 }
 
 function freshMem(): Mem {
   return {
     last: -1, plan: [], post: 'none', postUntil: 0, nextDecide: 0, oppKey: -1, oppId: '', oppReact: 0, answered: -1,
     punishKey: -1, punishTries: 0, punishRoll: 0, contactKey: -1, juggleTick: 0, airTick: 0, projSeen: {},
-    breakKey: -1, breakAt: 0, techAt: 0, techKey: -1, mashN: 0, awakeAt: -1, chargeUntil: 0,
+    breakKey: -1, breakAt: 0, techAt: 0, techKey: -1, mashN: 0, awakeAt: -1, chargeUntil: 0, hpSeen: -1, dmgAt: 0,
   };
 }
 
@@ -143,6 +146,8 @@ export class CpuController {
       if (key !== mem.oppKey || opp.moveId !== mem.oppId) {
         mem.oppKey = key; mem.oppId = opp.moveId;
         mem.oppReact = P.react + rng.int(P.jitter + 1);
+        // Shiori's Moonless Void: she is invisible between attacks, so her strikes are read late
+        if (state.realm && state.realm.phase === 'active' && state.realm.kind === 'moonless_void' && state.realm.owner !== pi) mem.oppReact += 6;
         mem.punishRoll = 0; mem.punishTries = 0;
       }
     }
@@ -369,6 +374,14 @@ export class CpuController {
     }
     if (mem.plan.length) return mem.plan.shift()!;
     if (!mi) return 0;
+    // Ren's Petal Storm Dojo: chain Quick Draws (tap S again from the first active frame) while they reach
+    if (me.moveId === 'ren_quick_draw' && state.realm && state.realm.phase === 'active' && state.realm.kind === 'petal_storm'
+      && state.realm.owner === this.player && me.moveFrame >= mi.m.startup) {
+      const dist = hdist(me, opp);
+      const busy = opp.mode === 'blockstun' || opp.mode === 'guard' || opp.mode === 'attack' || opp.mode === 'idle' || opp.mode === 'walk' || opp.mode === 'crouch';
+      if (busy && dist <= mi.reach + 0.65 * radiusOf(opp.char) && (me.moveFrame & 1) === 0 && rng.chance(0.5 + 0.4 * P.confirm)) return Btn.S;
+      return 0;
+    }
     // contact follow-ups (once per move)
     const key = state.frame - me.moveFrame;
     if (mem.contactKey === key) return 0;
@@ -481,6 +494,17 @@ export class CpuController {
     if (!best) {
       for (const p of state.projectiles) {
         if (p.owner === this.player) continue;
+        if (p.fuse) {
+          // delayed blast (Thunder Spear): judge the spot where it will detonate, not its flight line
+          const left = Math.max(0, p.life - p.fuse);
+          const bx = me.pos.x - (p.pos.x + p.vel.x * left), bz = me.pos.z - (p.pos.z + p.vel.z * left);
+          const br = (p.blastR ?? p.r) + mR + 120;
+          if (bx * bx + bz * bz > br * br || left > 40) continue;
+          const seen = this.mem.projSeen[String(p.id)] ?? state.frame;
+          best = { kind: 'proj', low: false, frames: left, mi: null, key: -1000 - p.id, remain: left + p.fuse + 2, track: 'full' };
+          (best as Threat & { age?: number }).age = state.frame - seen;
+          break;
+        }
         const rx = me.pos.x - p.pos.x, rz = me.pos.z - p.pos.z;
         const sp = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) || 1;
         const along = (rx * p.vel.x + rz * p.vel.z) / sp;
@@ -620,7 +644,10 @@ export class CpuController {
   private neutral(state: GameState, me: FighterState, opp: FighterState, cat: CharCatalog, ocat: CharCatalog, pers: (typeof PERSONALITY)[CharId], dist: number, oR: number, rng: Rng): number {
     const mem = this.mem, P = this.prof;
     void ocat;
-    const pref = pers.spacing * cat.maxReach + 0.55 * oR;
+    // PRESS: break zoning stalemates. Nothing landed for 5 s, or the round clock is running out while not
+    // ahead -> stop zoning / charging and walk in at close range (both CPUs zoning forever = time-out draws).
+    const press = this.pressing(state, me, opp);
+    const pref = (press ? Math.min(pers.spacing, 0.7) : pers.spacing) * cat.maxReach + 0.55 * oR;
     const ready = (n: number) => state.frame + n;
     const set = (p: Posture, n: number): number => { mem.post = p; mem.postUntil = ready(n); return this.postureBits(p, me); };
 
@@ -642,18 +669,19 @@ export class CpuController {
     }
 
     // charge ki when safe at range
-    if (dist > 2000 && me.ki < 230 && opp.mode !== 'attack' && state.projectiles.every((p) => p.owner === this.player) && rng.chance(0.2 + 0.3 * P.aggression)) {
+    if (!press && dist > 2000 && me.ki < 230 && opp.mode !== 'attack' && state.projectiles.every((p) => p.owner === this.player) && rng.chance(0.2 + 0.3 * P.aggression)) {
       return set('charge', 40 + rng.int(40));
     }
 
     // zoning: projectiles
-    if (dist > 1500 && dist < 4200 && opp.mode !== 'attack' && rng.chance(Math.min(0.9, pers.zoning * 1.6 * (0.4 + P.aggression)))) {
+    if (dist > 1500 && dist < 4200 && opp.mode !== 'attack' && rng.chance(Math.min(0.9, pers.zoning * (press ? 0.3 : 1.6) * (0.4 + P.aggression)))) {
       const pr = this.pickProjectile(me, cat, dist, rng);
       if (pr) { const f = this.frames(state, me, pr); mem.plan = f.slice(1); return f[0]; }
     }
 
     // character tricks
-    if (me.char === 'ren' && cat.stance && dist > 1000 && dist < 2000 && opp.mode !== 'attack' && rng.chance(pers.trick * 0.7 * (0.5 + P.stance))) {
+    const petal = !!state.realm && state.realm.phase === 'active' && state.realm.kind === 'petal_storm' && state.realm.owner === this.player;
+    if (me.char === 'ren' && cat.stance && dist > (petal ? 600 : 1000) && dist < 2000 && opp.mode !== 'attack' && rng.chance(petal ? 0.8 : pers.trick * 0.7 * (0.5 + P.stance))) {
       const f = this.frames(state, me, cat.stance);
       mem.plan = f.slice(1);
       return f[0];
@@ -709,6 +737,18 @@ export class CpuController {
     if (dist > pref + 250) return set('in', 6 + rng.int(10));
     if (rng.chance(0.15 * P.sidestep)) { mem.plan = [0, 0]; return rng.chance(0.5) ? R_UP : 0; }
     return rng.chance(0.5) ? set('guard', 8) : 0;
+  }
+
+  /** stalemate / clock pressure (see neutral) */
+  private pressing(state: GameState, me: FighterState, opp: FighterState): boolean {
+    const mem = this.mem;
+    const hp = me.hp * 4096 + opp.hp;
+    if (hp !== mem.hpSeen) { mem.hpSeen = hp; mem.dmgAt = state.frame; }
+    if (state.training) return false;
+    if (state.frame - mem.dmgAt > 300) return true;
+    const t = state.round.timer;
+    const behind = me.hp * opp.maxHp <= opp.hp * me.maxHp;
+    return t < 25 * 60 && behind;
   }
 
   private pickProjectile(me: FighterState, cat: CharCatalog, dist: number, rng: Rng): MoveInfo | null {

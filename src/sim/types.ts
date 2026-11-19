@@ -287,6 +287,12 @@ export interface FighterState {
   form?: string;
   /** (optional, crossover) Gojo Infinity charges left this round (0/1) — HUD shimmer indicator */
   infinity?: number;
+  /** (optional, Soul Realm) 1 = hidden by Shiori's Moonless Void (draw her invisible / a faint shimmer; she shows while attacking) */
+  veiled?: number;
+  /** (optional, Soul Realm) 1 = Goro's Mountain Temple armor is up (stone-skin glow); 0 while it refreshes */
+  realmArmor?: number;
+  /** (optional, Soul Realm) Sun Forge burn damage still to tick on this fighter (flames on the body while > 0) */
+  burn?: number;
 }
 
 /** Internal per-fighter sim data (plain JSON). Not part of the render contract. */
@@ -356,6 +362,8 @@ export interface FighterSimData {
   bounceExtra?: number;
   /** (optional, crossover) training: frames until Gojo's Infinity recharges */
   infinityCd?: number;
+  /** (optional, Soul Realm) Mountain Temple: frames until Goro's realm armor refreshes */
+  templeCd?: number;
 }
 
 export interface TrainingOptions {
@@ -407,7 +415,7 @@ export interface ProjectileState {
  */
 export interface RealmState {
   owner: 0 | 1;
-  kind: string; // 'infinite_void' | 'tailed_beast_bomb' | 'king_of_hell' | 'gear_fifth' | 'paths'
+  kind: string; // 'infinite_void' | 'tailed_beast_bomb' | 'king_of_hell' | 'gear_fifth' | 'paths' | 'sun_forge' | 'moonless_void' | 'petal_storm' | 'mountain_temple'
   phase: 'cine' | 'active';
   frame: number; // frames since this phase began
   duration: number; // active-phase length
@@ -466,7 +474,8 @@ export interface SimEvent {
     | 'clashStart' | 'clashEnd' | 'sidestep' | 'dash' | 'jump' | 'guardCrush'
     | 'moveStart' | 'roundStart' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd'
     // crossover pack (additive, see docs/CROSSOVER.md)
-    | 'realmStart' | 'realmEnd' | 'realmClash' | 'infinityBlock' | 'formChange' | 'summon' | 'summonDispel';
+    | 'realmStart' | 'realmEnd' | 'realmClash' | 'infinityBlock' | 'formChange' | 'summon' | 'summonDispel'
+    | 'burn';
   frame: number;
   player: 0 | 1; // who caused it
   target?: 0 | 1;

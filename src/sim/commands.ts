@@ -13,7 +13,7 @@ import { CHARS, moveDef } from '../data';
 import { canAwaken, startAwaken, startVanish, spendKi, ultCost } from './meters';
 import { VANISH_COST, BUFFER } from './constants';
 import { hooks } from './hit';
-import { canRealm, cloneCount, onMoveStart, consumeClones, REALM_COST } from './crossover';
+import { canRealm, cloneCount, onMoveStart, consumeClones, REALM_COST, moonlessSkip, realmActive } from './crossover';
 
 const LHK = [B_L, B_H, B_K];
 const TOK = ['L', 'H', 'K'];
@@ -24,7 +24,7 @@ export function startMove(state: GameState, i: number, m: MoveDef, easy = false)
   f.mode = 'attack';
   f.modeFrame = 0;
   f.moveId = m.id;
-  f.moveFrame = 0;
+  f.moveFrame = moonlessSkip(state, i, m); // Shiori's Moonless Void: strikes start 2 frames in (startup -2)
   f.stance = false;
   s.hitMask = 0;
   s.contact = 0;
@@ -253,6 +253,12 @@ export function attackThink(state: GameState, i: number): void {
     return;
   }
   const fr = f.moveFrame + 1;
+  // ---- Ren's Petal Storm Dojo: Quick Draw cancels into another Quick Draw (S) from its first active frame
+  if (m.id === 'ren_quick_draw' && fr > m.startup && fresh(f, B_S) && realmActive(state, 'petal_storm', i)) {
+    consume(f, [B_S]);
+    startMove(state, i, m, s.easyMove);
+    return;
+  }
   const win = m.cancelWindow ?? [m.startup + 1, m.startup + m.active + 10];
   // a follow-up never cuts off the current move's active frames unless it already connected
   const open = s.contact > 0 ? win[0] : Math.max(win[0], m.startup + m.active + 1);

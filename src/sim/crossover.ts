@@ -27,6 +27,13 @@ export const TITAN_FRAMES = 600;
 export const INFINITY_SLOW = 30; // percent speed of enemy projectiles inside the Infinity radius
 export const INFINITY_R = 1200;
 export const LOW_HP_PCT = 20; // Nine-Tails Chakra Mode / Gear Fourth threshold (while awakened)
+// Soul Realms of the original four
+export const BURN_PCT = 35; // Sun Forge: blocked hits burn for 35% of their damage
+export const BURN_EVERY = 5; // burn ticks every 5 frames ...
+export const BURN_TICK = 6; // ... for up to 6 damage (cannot KO, like chip)
+export const MOONLESS_SKIP = 2; // Moonless Void: Shiori's strikes start 2 frames faster
+export const MOONLESS_REACT = 6; // ... and CPU reactions to her are 6 frames late
+export const TEMPLE_CD = 45; // Mountain Temple: armor refreshes 45 frames after it absorbed a hit
 
 /** base form for a character (Zoro starts in Three-Sword Style) */
 export function baseForm(char: string): string {
@@ -169,6 +176,13 @@ function realmActivate(state: GameState): void {
         stunnedThisStep[oi] = true;
       }
       break;
+    case 'mountain_temple':
+      f.sim.templeCd = 0;
+      break;
+    case 'sun_forge':
+      // the forge stokes Kaito's flame: Heat stacks fill up
+      f.heatStacks = 3;
+      break;
     case 'tailed_beast_bomb': {
       const m = moveDef(f.char, 'naruto_tbb_blast');
       if (m) realmStrike(state, r.owner, m, true);
@@ -204,9 +218,11 @@ export function updateRealmActive(state: GameState): void {
   for (let i = 0; i < 2; i++) {
     const s = F(state, i).sim;
     if ((s.realmFreeze ?? 0) > 0) s.realmFreeze = (s.realmFreeze ?? 0) - 1;
+    if ((s.templeCd ?? 0) > 0) s.templeCd = (s.templeCd ?? 0) - 1;
+    tickBurn(state, i);
   }
   const r = state.realm;
-  if (!r || r.phase !== 'active') return;
+  if (!r || r.phase !== 'active') { realmFlags(state); return; }
   r.frame++;
   const f = F(state, r.owner);
   switch (r.kind) {
@@ -222,6 +238,70 @@ export function updateRealmActive(state: GameState): void {
     default: break;
   }
   if (state.realm && r.frame >= r.duration) endRealm(state, 'time');
+  realmFlags(state);
+}
+
+/** render flags for the original four's realms (veiled Shiori, Goro's temple armor) */
+function realmFlags(state: GameState): void {
+  const r = state.realm && state.realm.phase === 'active' ? state.realm : null;
+  for (let i = 0; i < 2; i++) {
+    const f = F(state, i);
+    const own = !!r && r.owner === i;
+    const v = own && r!.kind === 'moonless_void' && f.mode !== 'attack' && f.mode !== 'hitstun' && f.mode !== 'juggle'
+      && f.mode !== 'knockdown' && f.mode !== 'thrown' && f.mode !== 'wallsplat' ? 1 : 0;
+    if (v || f.veiled) f.veiled = v;
+    const a = own && r!.kind === 'mountain_temple' && (f.sim.templeCd ?? 0) === 0 ? 1 : 0;
+    if (a || f.realmArmor) f.realmArmor = a;
+  }
+}
+
+// ---------------------------------------------------------------- Sun Forge (Kaito): blocked hits still burn
+/** a strike / projectile of attacker `ai` was blocked: inside Sun Forge the defender starts to burn */
+export function forgeBurn(state: GameState, ai: number, move: MoveDef): void {
+  if (!realmActive(state, 'sun_forge', ai)) return;
+  const d = F(state, 1 - ai);
+  const add = Math.trunc((move.damage * BURN_PCT) / 100);
+  if (add > 0) d.burn = (d.burn ?? 0) + add;
+}
+
+function tickBurn(state: GameState, i: number): void {
+  const d = F(state, i);
+  const b = d.burn ?? 0;
+  if (b <= 0) return;
+  if (state.frame % BURN_EVERY !== 0) return;
+  const t = b < BURN_TICK ? b : BURN_TICK;
+  d.burn = b - t;
+  const dmg = d.hp - 1 < t ? Math.max(0, d.hp - 1) : t; // burn cannot KO
+  if (dmg > 0) {
+    d.hp -= dmg;
+    if (state.training && d.hp < 1) d.hp = 1;
+  }
+  emit(state, { type: 'burn', player: (1 - i) as 0 | 1, target: i as 0 | 1, pos: chest(d), damage: dmg, element: 'fire', charId: F(state, 1 - i).char, tag: 'sun_forge' });
+}
+
+// ---------------------------------------------------------------- Moonless Void (Shiori): unreadable, faster strikes
+/** Shiori's strikes inside her realm skip their first frames (startup -2) */
+export function moonlessSkip(state: GameState, i: number, m: MoveDef): number {
+  if (!realmActive(state, 'moonless_void', i)) return 0;
+  if (m.internal || m.kind === 'ultimate' || m.kind === 'throw' || m.height === 'throw' || m.stance || m.realm) return 0;
+  if (!m.hitboxes.length && !m.projectile) return 0;
+  return Math.min(MOONLESS_SKIP, Math.max(0, m.startup - 2));
+}
+
+// ---------------------------------------------------------------- Mountain Temple (Goro): 1-hit armor that refreshes
+/** returns true if Goro's realm armor absorbs this strike (caller applies damage, no stun) */
+export function templeArmor(state: GameState, di: number, move: MoveDef): boolean {
+  const ai = 1 - di;
+  if (!realmActive(state, 'mountain_temple', di)) return false;
+  const d = F(state, di);
+  if ((d.sim.templeCd ?? 0) > 0) return false;
+  if (move.height === 'low' || move.height === 'throw' || move.height === 'unblockable' || move.kind === 'ultimate') return false;
+  const m = d.mode;
+  if (m === 'hitstun' || m === 'juggle' || m === 'knockdown' || m === 'thrown' || m === 'wallsplat' || m === 'clash' || d.airborne) return false;
+  void ai;
+  d.sim.templeCd = TEMPLE_CD;
+  d.realmArmor = 0;
+  return true;
 }
 
 export function endRealm(state: GameState, reason: string): void {
@@ -229,6 +309,9 @@ export function endRealm(state: GameState, reason: string): void {
   if (!r) return;
   const o = F(state, 1 - r.owner);
   o.sim.realmFreeze = 0;
+  const f = F(state, r.owner);
+  if (f.veiled) f.veiled = 0;
+  if (f.realmArmor) f.realmArmor = 0;
   emit(state, { type: 'realmEnd', player: r.owner, target: (1 - r.owner) as 0 | 1, pos: chest(F(state, r.owner)), moveId: r.moveId, tag: reason });
   state.realm = null;
 }
@@ -267,6 +350,7 @@ export function autoGuard(state: GameState, ai: number, move: MoveDef, point: Ve
   const m = d.mode;
   if (m === 'hitstun' || m === 'juggle' || m === 'wallsplat' || m === 'knockdown' || m === 'thrown' || m === 'blockstun' || m === 'clash') return null;
   if (frozenByRealm(d)) return null;
+  if (realmActive(state, 'moonless_void', ai)) return null; // cannot read what it cannot see
   let kind: 'infinity' | 'sixEyes' | null = null;
   if ((d.sim.autoGuard ?? 0) > 0) { kind = 'sixEyes'; d.sim.autoGuard = 0; }
   else if ((d.infinity ?? 0) > 0) { kind = 'infinity'; d.infinity = 0; if (state.training) d.sim.infinityCd = 300; }
@@ -368,6 +452,8 @@ export function onTeleportedBehind(state: GameState, victim: number): boolean {
 export function projectileSlow(state: GameState, p: ProjectileState): number {
   const t = F(state, 1 - p.owner);
   if (t.char !== 'gojo') return 100;
+  // Limitless vs Limitless: another Gojo's techniques are not slowed (mirror zoning must stay breakable)
+  if (F(state, p.owner).char === 'gojo') return 100;
   // Infinity drops while he is being comboed (hit / juggled / down)
   const m = t.mode;
   if (m === 'hitstun' || m === 'juggle' || m === 'wallsplat' || m === 'knockdown' || m === 'thrown') return 100;

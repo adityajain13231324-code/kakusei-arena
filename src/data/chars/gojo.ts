@@ -63,11 +63,11 @@ export const GOJO: CharDef = {
     // ---------------------------------------------------------------- specials
     // Blue: slow attraction orb. Negative pushback = the opponent is DRAGGED toward Gojo (combo starter).
     mv({ id: 'gojo_blue', name: 'Cursed Technique Lapse: Blue', kind: 'special', input: '236S', easy: '6S', s: 16, a: 1, r: 19, dmg: 50,
-      h: 'mid', str: 'medium', el: 'void', hitstun: 40, blockstun: 14, push: -900, ki: 8,
+      h: 'mid', str: 'medium', el: 'void', hitstun: 36, blockstun: 10, push: -900, ki: 8,
       anim: [[0, 'palmWind'], [14, 'palmExt'], [30, 'recover'], [37, 'idle']],
-      projectile: { kind: 'blue', spawnFrame: 17, x: 500, y: 1200, speed: 34, life: 70, r: 230, hits: 1 }, fx: 'blue_orb' }),
+      projectile: { kind: 'blue', spawnFrame: 17, x: 500, y: 1200, speed: 36, life: 66, r: 230, hits: 1 }, fx: 'blue_orb' }),
     // Red: point-blank repel blast, reversal with invulnerability, wall bounce / splat
-    mv({ id: 'gojo_red', name: 'Reversal: Red', kind: 'special', input: '623S', easy: '2S', s: 9, a: 4, r: 30, dmg: 100,
+    mv({ id: 'gojo_red', name: 'Reversal: Red', kind: 'special', input: '623S', easy: '2S', s: 9, a: 4, r: 30, dmg: 92,
       h: 'mid', str: 'heavy', el: 'void', blk: -26, onHit: 'wallbounce', invuln: [1, 7], push: 600, ki: 8, movement: [[0, 22, 0], [9, 0, 0]],
       box: { x: 150, y: 1200, len: 460, r: 220 }, wind: 'palmWind', ext: 'palmExt', fx: 'red_blast' }),
     // Blink: short teleport behind the opponent (his own Vanish), costs half a bar

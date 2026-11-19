@@ -62,7 +62,7 @@ export const NARUTO: CharDef = {
       blk: -4, onHit: 'knockdown', box: { x: 150, y: 820, len: 470, r: 165 }, wind: 'axeKickUp', ext: 'axeKickDown', fx: 'kick_heavy' }),
 
     // ---------------------------------------------------------------- specials
-    mv({ id: 'naruto_rasengan', name: 'Rasengan', kind: 'special', input: '236S', easy: '6S', s: 20, a: 4, r: 26, dmg: 95,
+    mv({ id: 'naruto_rasengan', name: 'Rasengan', kind: 'special', input: '236S', easy: '6S', s: 20, a: 4, r: 26, dmg: 88,
       h: 'mid', str: 'heavy', el: 'wind', blk: -18, onHit: 'launch', launch: 60, ki: 8,
       movement: [[0, 8, 0], [6, 40, 0], [20, 0, 0]], box: { x: 150, y: 1150, len: 450, r: 200 },
       anim: [[0, 'palmWind'], [6, 'dash'], [17, 'palmExt'], [32, 'recover'], [44, 'idle']], fx: 'rasengan' }),

@@ -8,8 +8,8 @@ export const GORO: CharDef = {
   id: 'goro',
   name: 'GORO ISHIGAMI',
   title: 'The Gentle Giant',
-  maxHp: 1080,
-  walkSpeed: 40,
+  maxHp: 1140,
+  walkSpeed: 44,
   backWalkSpeed: 30,
   dashSpeed: 86,
   sidestepSpeed: 42,
@@ -20,6 +20,7 @@ export const GORO: CharDef = {
   palette: { primary: '#7a6a52', secondary: '#3d4f3a', accent: '#d9a441', hair: '#2a2420', skin: '#d6a77f', aura: '#c08b3e' },
   ultimateId: 'goro_ult',
   awakenedUltimateId: 'goro_ult_aw',
+  realmId: 'goro_mountain_temple',
   autoComboEnder: 'goro_avalanche',
   moves: [
     mv({ id: 'goro_jab', name: 'Stone Jab', input: 'L', s: 11, a: 2, r: 13, dmg: 45, h: 'high', str: 'light',
@@ -96,5 +97,10 @@ export const GORO: CharDef = {
     ultCine('goro_ult_aw_cine', 'Continental Drop', 190, [30, 90, 150, 160],
       [[0, 'throwGrab'], [20, 'liftOverhead'], [40, 'jumpUp'], [85, 'bodySlam'], [95, 'jumpUp'], [140, 'bodySlam'], [152, 'groundPound'], [180, 'win']],
       'earth', 'earth_meteor'),
+    // Soul Realm: Mountain Temple (permanent 1-hit armor that refreshes)
+    mv({ id: 'goro_mountain_temple', name: 'Soul Realm: Mountain Temple', kind: 'special', input: '', s: 20, a: 1, r: 10, dmg: 0,
+      h: 'mid', str: 'super', el: 'earth', invuln: [1, 31], ki: 0,
+      anim: [[0, 'liftOverhead'], [10, 'awakenPose'], [20, 'groundPound'], [29, 'idle']], fx: 'mountain_temple',
+      extra: { internal: true, realm: { kind: 'mountain_temple', duration: 360 } } }),
   ],
 };

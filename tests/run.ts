@@ -8,6 +8,7 @@ import {
   type GameState, type CharId, type MatchConfig, type MoveDef, type SimEvent,
 } from '../src/sim/index';
 import { makeRng } from '../src/core/rng';
+import { moveDef } from '../src/data';
 import { startMove } from '../src/sim/commands';
 import { F, totalFrames } from '../src/sim/fighter';
 import { PREJUMP, INTRO_FRAMES, HITSTOP, COUNTER_HITSTOP, ULT_FREEZE, JUGGLE_HIT_CAP, GUARD_MAX } from '../src/sim/constants';
@@ -922,6 +923,118 @@ section('(l) crossover: sword styles, Oni Giri, Asura echo, King of Hell, Gear f
     const ev = run(st, 300, 0, (f) => (f > 150 ? D | Btn.Guard : 0));
     const stomps = ev.filter((e) => e.moveId === 'eren_paths_stomp');
     check('Paths: stomps hit standing, blocked crouching', stomps.some((e) => e.type === 'hit') && stomps.some((e) => e.type === 'block'), stomps.map((e) => e.type).join());
+  }
+}
+
+// ---------------------------------------------------------------- (m) Soul Realms of the original four
+section('(m) Soul Realms: Sun Forge, Moonless Void, Petal Storm Dojo, Mountain Temple, clash with a crossover realm');
+{
+  const R = Btn.Right, D = Btn.Down, L = Btn.Left;
+  const m236 = (b: number) => [D, D | R, R | b];
+  const awaken = (f: ReturnType<typeof F>, ki = 300) => { f.awakened = true; f.awakenUsed = true; f.awakenTimer = 3000; f.ki = ki; };
+  const openRealm = (st: GameState) => run(st, 140, seq(...m236(Btn.H | Btn.S)));
+  // Kaito: Sun Forge — blocked hits still burn, Heat stacks fill up
+  {
+    const st = training('kaito', 'shiori', { trainingOpts: { hpRegen: false } }); place(st, 1400); awaken(F(st, 0));
+    const ev = openRealm(st);
+    check('Sun Forge opens (realmStart sun_forge, 300 Ki spent)', ev.some((e) => e.type === 'realmStart' && e.tag === 'sun_forge') && st.realm?.kind === 'sun_forge' && st.realm.phase === 'active' && F(st, 0).ki === 0);
+    check('Sun Forge: Heat stacks fill to 3', F(st, 0).heatStacks === 3);
+    place(st, 900);
+    const hp0 = F(st, 1).hp;
+    const ev2 = run(st, 90, seq(Btn.H), Btn.Guard);
+    const burns = ev2.filter((e) => e.type === 'burn');
+    const want = Math.trunc((moveDef('kaito', 'kaito_straight')!.damage * 35) / 100);
+    check('Sun Forge: a blocked hit burns for 35% of its damage over time', ev2.some((e) => e.type === 'block') && burns.length >= 3 && hp0 - F(st, 1).hp === want && (F(st, 1).burn ?? 0) === 0, `${hp0 - F(st, 1).hp} / ${want}, ${burns.length} ticks`);
+    const st2 = training('kaito', 'shiori', { trainingOpts: { hpRegen: false } }); place(st2, 900);
+    const h2 = F(st2, 1).hp;
+    run(st2, 90, seq(Btn.H), Btn.Guard);
+    check('no burn outside the realm', F(st2, 1).hp === h2 && !(F(st2, 1).burn ?? 0));
+  }
+  // Shiori: Moonless Void — veiled between attacks, strikes 2 f faster, Gojo's Infinity cannot read her
+  {
+    const firstHit = (realm: boolean): number => {
+      const st2 = training('shiori', 'kaito', { trainingOpts: { hpRegen: false } }); place(st2, 1400);
+      if (realm) { awaken(F(st2, 0)); openRealm(st2); }
+      place(st2, 800);
+      for (let f = 0; f < 30; f++) { step(st2, [f === 0 ? Btn.L : 0, 0]); if (st2.events.some((e) => e.type === 'hit' && e.player === 0)) return f; }
+      return -1;
+    };
+    const st = training('shiori', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1400); awaken(F(st, 0));
+    const ev = openRealm(st);
+    check('Moonless Void opens (realmStart moonless_void)', ev.some((e) => e.type === 'realmStart' && e.tag === 'moonless_void') && st.realm?.phase === 'active');
+    check('Moonless Void: Shiori is veiled while not attacking', F(st, 0).veiled === 1);
+    const a = firstHit(false), b = firstHit(true);
+    check('Moonless Void: her jab lands 2 frames sooner (startup -2)', a > 0 && b === a - 2, `${a} -> ${b}`);
+    const sg = training('shiori', 'gojo', { trainingOpts: { hpRegen: false } }); place(sg, 1400); awaken(F(sg, 0));
+    openRealm(sg); place(sg, 800);
+    const evg = run(sg, 30, seq(Btn.L));
+    check("Moonless Void: Gojo's Infinity cannot auto-guard her", !evg.some((e) => e.type === 'infinityBlock') && evg.some((e) => e.type === 'hit' && e.player === 0) && F(sg, 1).infinity === 1);
+    run(st, 400);
+    check('Moonless Void ends: veil off', !st.realm && !F(st, 0).veiled);
+  }
+  // Ren: Petal Storm Dojo — Quick Draw cancels into Quick Draw
+  {
+    const draws = (realm: boolean): number => {
+      const st = training('ren', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1400);
+      if (realm) { awaken(F(st, 0)); openRealm(st); }
+      place(st, 1100);
+      // 4S sheath stance, hold S, release -> Quick Draw; tap S again during the draw
+      const inp = (f: number) => (f === 0 ? L | Btn.S : f < 9 ? Btn.S : f === 9 ? 0 : (f === 17 || f === 27 ? Btn.S : 0));
+      const ev = run(st, 60, inp, Btn.Guard);
+      return ev.filter((e) => e.type === 'moveStart' && e.moveId === 'ren_quick_draw').length;
+    };
+    const st = training('ren', 'kaito'); place(st, 1400); awaken(F(st, 0));
+    const ev = openRealm(st);
+    check('Petal Storm Dojo opens (realmStart petal_storm)', ev.some((e) => e.type === 'realmStart' && e.tag === 'petal_storm') && st.realm?.phase === 'active');
+    const n0 = draws(false), n1 = draws(true);
+    check('Petal Storm: Quick Draw chains into Quick Draw (S)', n0 === 1 && n1 >= 3, `outside ${n0}, inside ${n1}`);
+  }
+  // Goro: Mountain Temple — permanent 1-hit armor that refreshes; lows go through
+  {
+    const st = training('goro', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1400); awaken(F(st, 0));
+    const ev = openRealm(st);
+    check('Mountain Temple opens (realmStart mountain_temple), armor up', ev.some((e) => e.type === 'realmStart' && e.tag === 'mountain_temple') && F(st, 0).realmArmor === 1);
+    place(st, 800);
+    const hp0 = F(st, 0).hp;
+    const ev2 = run(st, 22, 0, seq(Btn.H));
+    const g = F(st, 0);
+    check('Mountain Temple: an idle Goro absorbs a hit (armor, half damage, no stun)', ev2.some((e) => e.type === 'hit' && e.player === 1 && e.tag === 'armor') && g.mode !== 'hitstun' && hp0 - g.hp === Math.trunc(moveDef('kaito', 'kaito_straight')!.damage / 2) && g.realmArmor === 0, `${hp0 - g.hp} ${g.mode}`);
+    const ev3 = run(st, 34, 0, (f) => (f >= 8 && f % 4 === 0 ? Btn.L : 0));
+    check('Mountain Temple: the next hit inside 45 f lands normally', ev3.some((e) => e.type === 'hit' && e.player === 1 && e.tag !== 'armor'));
+    run(st, 60);
+    check('Mountain Temple: armor refreshes', F(st, 0).realmArmor === 1);
+    place(st, 800);
+    const ev4 = run(st, 24, 0, seq(D | Btn.L));
+    check('Mountain Temple: lows go through the armor', ev4.some((e) => e.type === 'hit' && e.player === 1 && e.tag !== 'armor') && F(st, 0).realmArmor === 1);
+  }
+  // Realm Clash: Kaito's Sun Forge vs Zoro's King of Hell; the masher wins and opens its realm
+  {
+    const st = training('kaito', 'zoro', { trainingOpts: { hpRegen: false } }); place(st, 1600);
+    for (const f of [F(st, 0), F(st, 1)]) awaken(f);
+    const ev = run(st, 320, (f) => (f < 3 ? m236(Btn.H | Btn.S)[f] : f > 60 ? [Btn.L, Btn.H][f & 1] : 0),
+      (f) => (f >= 40 && f < 43 ? [D, D | L, L | Btn.H | Btn.S][f - 40] : 0));
+    const end = ev.find((e) => e.type === 'clashEnd' && e.tag === 'realm');
+    check('Realm Clash: Sun Forge vs King of Hell starts a clash', ev.some((e) => e.type === 'realmClash'));
+    check('Realm Clash: Kaito mashes, wins, Sun Forge opens; both realms used', !!end && end.player === 0 && st.realm?.kind === 'sun_forge' && !!F(st, 0).sim?.realmUsed && !!F(st, 1).sim?.realmUsed);
+  }
+  // mirrored: Moonless Void + Mountain Temple stay side-symmetric
+  {
+    const a1 = training('shiori', 'goro'), a2 = training('goro', 'shiori');
+    run(a1, 1); run(a2, 1);
+    F(a1, 0).pos = { x: -700, y: 0, z: 0 }; F(a1, 1).pos = { x: 700, y: 0, z: 0 };
+    F(a2, 1).pos = { x: 700, y: 0, z: 0 }; F(a2, 0).pos = { x: -700, y: 0, z: 0 };
+    for (const [st, si, gi] of [[a1, 0, 1], [a2, 1, 0]] as Array<[GameState, number, number]>) { awaken(F(st, si)); awaken(F(st, gi)); }
+    const sIn = (f: number) => (f < 3 ? [D, D | R, R | Btn.H | Btn.S][f] : f % 11 === 0 ? Btn.L : f % 17 === 0 ? Btn.H : 0);
+    const gIn = (f: number) => (f >= 260 && f < 263 ? [D, D | L, L | Btn.H | Btn.S][f - 260] : f % 13 === 0 ? Btn.H : 0);
+    let diff = '';
+    for (let f = 0; f < 700 && !diff; f++) {
+      const a = sIn(f), b = mirrorInput(gIn(f));
+      step(a1, [a, b]);
+      step(a2, [mirrorInput(b), mirrorInput(a)]);
+      diff = stateMirrorDiff(a1, a2);
+      if (diff) diff = `frame ${f}: ${diff}`;
+    }
+    check('Moonless Void + Mountain Temple are side-symmetric', !diff, diff);
   }
 }
 
