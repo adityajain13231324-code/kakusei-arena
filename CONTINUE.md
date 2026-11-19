@@ -78,6 +78,11 @@ Each item: previews in `public/characters/previews/` or `public/props/previews/`
 ## 7. When you finish a task
 Commit on `astra/continue`, push, and add a line under "Log" below: date, task, what changed, anything left.
 
+## Current status (2026-11-19, end of cloud chat)
+- `main`: 9 fighters (Kaito, Shiori, Ren, Goro + crossover Gojo, Naruto, Zoro, Luffy, Eren — crossover use grey mannequin until owner drops licensed models in `public/characters/<id>/`), Soul Realm framework + 5 crossover realms (visuals + music), fightkaro-style UI with CROSSOVER row, motion pass, guard crush, OTG, CPU AI, online rollback, QA fixes. Astra's Mika/Lyra/Kitsu merged (not playable yet).
+- Branch `claude-wip-3`: UNFINISHED balance pass + Soul Realms for the original 4 (stopped mid-work, typechecks, NOT verified). Run all tests; finish it or drop it.
+- NEXT: `docs/PLAN_V3.md` → "★ NEXT: Polish Pass P8" (animation v2, compact HUD, sound v2 with real SFX + voices, graphics settings, feel, ship to Vercel). Meshy: sign in at meshy.ai in the browser you use with Claude (credits per model; only original assets — no likenesses of the licensed characters).
+
 ## Log
 - 2026-11-18 — Claude (lead): all modules on `main`. The v2 renderer, model upgrade and UI polish helpers were STOPPED mid-work and their work committed as-is. State at handoff: typecheck 0 errors, sim tests 256/256, build OK, a live match runs with GLB fighters, HUD, commentator + ticker, crowd (see `docs/screenshots/live-match-v2.png`), no console errors in a smoke test. NOT verified: every pose on bones, awakened swap, Goro plates, menu 3D scenes, phone layout, All 4 models ARE at v2 (manifest version 2, 21–25k tris each) — T3 is a visual quality check, not a rebuild. Match camera looked close/dark in the smoke test — check framing + lighting in T2/T4.
 
