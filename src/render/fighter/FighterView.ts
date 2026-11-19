@@ -421,10 +421,16 @@ export class FighterView {
 
   setQuality(q: Q): void {
     this.quality = q;
-    const sh = q !== 'low';
-    for (const m of this.bodyMeshes) m.castShadow = sh;
-    if (this.handWeapon) this.handWeapon.castShadow = sh;
   }
+
+  /** cast shadows into the stage (settings: shadows off/low/high) */
+  setShadows(on: boolean): void {
+    for (const m of this.bodyMeshes) m.castShadow = on;
+    if (this.handWeapon) this.handWeapon.castShadow = on;
+  }
+
+  /** toon outline pass on/off (one shared material, so one flag covers every outline mesh) */
+  setOutlines(on: boolean): void { this.outlineMat.visible = on; }
 
   /** stage shadow tint blend */
   setShadowTint(stageTint: THREE.Color | null): void {

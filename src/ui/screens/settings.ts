@@ -3,6 +3,9 @@ import { ACTIONS, ACTION_LABEL, DEFAULT_P1, DEFAULT_P2, cloneBindings, keyLabel 
 import type { Action } from '../../input/bindings';
 import type { MenuAction } from '../../input';
 import { defaultSettings } from '../../app/settings';
+import type { BroadcastMode } from '../../app/settings';
+import { PRESET_ORDER, applyPreset, relabel } from '../../app/gfx';
+import type { CrowdQ, FpsCap, GfxPreset, Level3, ShadowQ } from '../../app/gfx';
 import { h, sfx } from '../dom';
 import { BaseScreen, mbtn } from './base';
 
@@ -10,10 +13,16 @@ interface SRow {
   label: string;
   hint?: string;
   value: () => string;
+  /** 0..1 fill for slider rows; `setFrac` is called when the track is clicked / touched */
   slider?: () => number;
+  setFrac?: (f: number) => void;
   left?: () => void; right?: () => void; act?: () => void;
   section?: string;
 }
+
+const BC_MODES: BroadcastMode[] = ['off', 'ticker', 'full'];
+const BC_LABEL: Record<BroadcastMode, string> = { off: 'OFF', ticker: 'TICKER', full: 'FULL' };
+const FPS_CAPS: FpsCap[] = [30, 60, 120, 0];
 
 export class SettingsScreen extends BaseScreen {
   private rows: SRow[] = [];
@@ -32,34 +41,68 @@ export class SettingsScreen extends BaseScreen {
 
   enter(): void {
     const s = this.app.settings.data;
+    const g = s.gfx;
+    /** a manual graphics tweak: relabel (matching preset or Custom), persist, apply live */
+    const gsave = (): void => { relabel(g); g.benchDone = true; this.save(); };
+    const pct = (v: number) => Math.round(v * 100) + '%';
     const vol = (k: 'master' | 'music' | 'sfx', label: string): SRow => ({
-      label, value: () => Math.round(s[k] * 100) + '%', slider: () => s[k],
+      label, value: () => pct(s[k]), slider: () => s[k],
+      setFrac: (f) => { s[k] = Math.round(f * 20) / 20; this.save(); },
       left: () => { s[k] = Math.max(0, Math.round((s[k] - 0.05) * 100) / 100); this.save(); },
       right: () => { s[k] = Math.min(1, Math.round((s[k] + 0.05) * 100) / 100); this.save(); },
     });
-    const Q: ('auto' | 'low' | 'medium' | 'high')[] = ['auto', 'low', 'medium', 'high'];
+    /** numeric slider row (min..max in steps of `step`), `after` runs on every change */
+    const num = (label: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void, after: () => void): SRow => {
+      const q = (v: number) => Math.round(Math.min(max, Math.max(min, v)) / step) * step;
+      const apply = (v: number) => { set(Math.round(q(v) * 100) / 100); after(); };
+      return {
+        label, value: () => pct(get()), slider: () => (get() - min) / (max - min),
+        setFrac: (f) => apply(min + f * (max - min)),
+        left: () => apply(get() - step), right: () => apply(get() + step),
+      };
+    };
+    const choice = <T,>(label: string, list: T[], get: () => T, set: (v: T) => void, fmt: (v: T) => string, after: () => void): SRow => ({
+      label, value: () => fmt(get()),
+      left: () => { set(this.cycle(list, get(), -1)); after(); }, right: () => { set(this.cycle(list, get(), 1)); after(); },
+    });
+    const toggle = (label: string, get: () => boolean, set: (v: boolean) => void, after: () => void): SRow =>
+      choice<boolean>(label, [true, false], get, set, (v) => (v ? 'ON' : 'OFF'), after);
+    const up = (v: string) => v.toUpperCase();
     const T: ('auto' | 'on' | 'off')[] = ['auto', 'on', 'off'];
     const sch = (p: 0 | 1): SRow => ({
       label: `Default scheme P${p + 1}`, value: () => s.scheme[p].toUpperCase(),
       left: () => { s.scheme[p] = s.scheme[p] === 'pro' ? 'easy' : 'pro'; this.save(); },
       right: () => { s.scheme[p] = s.scheme[p] === 'pro' ? 'easy' : 'pro'; this.save(); },
     });
+    const presetRow = choice<GfxPreset>('Preset', PRESET_ORDER, () => g.preset, (v) => { applyPreset(g, v); g.benchDone = true; }, up, () => this.save());
     this.rows = [
       { section: 'AUDIO', ...vol('master', 'Master volume') } as SRow, vol('music', 'Music'), vol('sfx', 'Sound effects'),
-      { section: 'GRAPHICS', label: 'Quality', value: () => s.quality.toUpperCase(),
-        left: () => { s.quality = this.cycle(Q, s.quality, -1); this.save(); }, right: () => { s.quality = this.cycle(Q, s.quality, 1); this.save(); } },
-      { label: 'Reduce flashing', value: () => (s.reduceFlashing ? 'ON' : 'OFF'),
-        left: () => { s.reduceFlashing = !s.reduceFlashing; this.save(); }, right: () => { s.reduceFlashing = !s.reduceFlashing; this.save(); } },
-      { label: 'Announcer voice', value: () => (s.announcer ? 'ON' : 'OFF'),
-        left: () => { s.announcer = !s.announcer; this.save(); }, right: () => { s.announcer = !s.announcer; this.save(); } },
-      { label: 'Broadcast (commentary + ticker)', value: () => (s.broadcast ? 'ON' : 'OFF'),
-        left: () => { s.broadcast = !s.broadcast; this.save(); }, right: () => { s.broadcast = !s.broadcast; this.save(); } },
+      { section: 'DISPLAY', ...presetRow } as SRow,
+      num('Render scale', 0.5, 1.5, 0.05, () => g.renderScale, (v) => { g.renderScale = v; }, gsave),
+      choice<FpsCap>('FPS cap', FPS_CAPS, () => g.fpsCap, (v) => { g.fpsCap = v; }, (v) => (v ? String(v) : 'UNLIMITED'), gsave),
+      toggle('Show FPS counter', () => g.showFps, (v) => { g.showFps = v; }, () => this.save()),
+      toggle('Anti-aliasing (next launch)', () => g.aa, (v) => { g.aa = v; }, gsave),
+      choice<1024 | 2048>('Texture resolution', [1024, 2048], () => g.texRes, (v) => { g.texRes = v; }, (v) => String(v), gsave),
+      toggle('Reduce flashing', () => s.reduceFlashing, (v) => { s.reduceFlashing = v; }, () => this.save()),
+      { label: 'Re-run auto benchmark', value: () => (g.benchMs ? `LAST ${g.benchMs} ms` : 'RUN'), act: () => { this.app.runBenchmark(); } },
+      { section: 'GRAPHICS', ...choice<ShadowQ>('Shadows', ['off', 'low', 'high'], () => g.shadows, (v) => { g.shadows = v; }, up, gsave) } as SRow,
+      toggle('Outlines', () => g.outlines, (v) => { g.outlines = v; }, gsave),
+      choice<Level3>('Particles', ['low', 'medium', 'high'], () => g.particles, (v) => { g.particles = v; }, up, gsave),
+      choice<CrowdQ>('Crowd density', ['off', 'low', 'high'], () => g.crowd, (v) => { g.crowd = v; }, up, gsave),
+      choice<'low' | 'high'>('Realm / sky quality', ['low', 'high'], () => g.realmSky, (v) => { g.realmSky = v; }, up, gsave),
+      toggle('Post FX: bloom', () => g.bloom, (v) => { g.bloom = v; }, gsave),
+      toggle('Post FX: impact frames', () => g.impactFrames, (v) => { g.impactFrames = v; }, gsave),
+      toggle('Post FX: speed lines', () => g.speedLines, (v) => { g.speedLines = v; }, gsave),
+      toggle('Post FX: color grade', () => g.colorGrade, (v) => { g.colorGrade = v; }, gsave),
+      { section: 'HUD', ...num('HUD scale', 0.7, 1.2, 0.05, () => s.hudScale, (v) => { s.hudScale = v; }, () => this.save()) } as SRow,
+      choice<BroadcastMode>('Broadcast', BC_MODES, () => s.broadcastMode, (v) => { s.broadcastMode = v; }, (v) => BC_LABEL[v], () => this.save()),
+      { section: 'GAMEPLAY', ...toggle('Announcer voice', () => s.announcer, (v) => { s.announcer = v; }, () => this.save()) } as SRow,
       { section: 'CONTROLS', label: 'Touch controls', value: () => s.touch.toUpperCase(),
         left: () => { s.touch = this.cycle(T, s.touch, -1); this.save(); }, right: () => { s.touch = this.cycle(T, s.touch, 1); this.save(); } },
       sch(0), sch(1),
       { label: 'Key bindings: Player 1', value: () => 'REMAP ▶', act: () => this.app.ui.push('remap', { slot: 0 }) },
       { label: 'Key bindings: Player 2', value: () => 'REMAP ▶', act: () => this.app.ui.push('remap', { slot: 1 }) },
-      { label: 'Reset all settings', value: () => 'RESET', act: () => { Object.assign(s, defaultSettings()); this.save(); } },
+      { label: 'Reset all settings', value: () => 'RESET', act: () => { Object.assign(s, defaultSettings()); this.save(); this.enter(); } },
       { label: 'Back', value: () => '', act: () => this.back() },
     ];
     this.list.replaceChildren();
@@ -70,12 +113,19 @@ export class SettingsScreen extends BaseScreen {
       if (r.slider) {
         const fill = h('i', null);
         const track = h('div', { class: 'set-track' }, fill);
+        const setFromPointer = (e: PointerEvent) => {
+          const b = track.getBoundingClientRect();
+          r.setFrac?.(Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)));
+          this.paintRows();
+        };
         track.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
-          const b = track.getBoundingClientRect();
-          const v = Math.min(1, Math.max(0, (e.clientX - b.left) / b.width));
-          const key = (['master', 'music', 'sfx'] as const)[i];
-          s[key] = Math.round(v * 20) / 20; this.nav.focus(i, true); this.save(); this.paintRows();
+          this.nav.focus(i, true);
+          setFromPointer(e);
+          track.setPointerCapture?.(e.pointerId);
+          const move = (ev: PointerEvent) => setFromPointer(ev);
+          const end = () => { track.removeEventListener('pointermove', move); track.removeEventListener('pointerup', end); track.removeEventListener('pointercancel', end); };
+          track.addEventListener('pointermove', move); track.addEventListener('pointerup', end); track.addEventListener('pointercancel', end);
         });
         val.append(track, h('b', null, ''));
       } else if (r.left && r.right) {
@@ -95,7 +145,7 @@ export class SettingsScreen extends BaseScreen {
       const el = els[i]; if (!el) return;
       const b = el.querySelector('.set-val > b'); if (b) b.textContent = r.value();
       const fill = el.querySelector('.set-track i') as HTMLElement | null;
-      if (fill && r.slider) fill.style.transform = `scaleX(${r.slider()})`;
+      if (fill && r.slider) fill.style.transform = `scaleX(${Math.min(1, Math.max(0, r.slider()))})`;
     });
   }
   private back(): void { sfx('back'); this.app.ui.pop(); }

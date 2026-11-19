@@ -5,14 +5,15 @@
  */
 import * as THREE from 'three';
 import { toonGradient } from '../materials';
-import { canvas, rand } from './common';
+import { canvas, rand, stageTuning } from './common';
 
 // ------------------------------------------------------------------ crowd
 export interface CrowdSpot { x: number; y: number; z: number; yaw: number }
 
 /** Spots on tiered rows along the 4 sides of a square ring (inner half-size `inner`), facing the centre. */
 export function ringSpots(inner: number, rows: number, opts: { spacing?: number; rowDepth?: number; tier?: number; y0?: number; sides?: Array<'n' | 's' | 'e' | 'w'>; jitter?: number; seed?: number; skip?: (x: number, z: number) => boolean } = {}): CrowdSpot[] {
-  const sp = opts.spacing ?? 0.62, rd = opts.rowDepth ?? 0.8, tier = opts.tier ?? 0.35, y0 = opts.y0 ?? 0;
+  if (stageTuning.crowd <= 0) return [];
+  const sp = (opts.spacing ?? 0.62) / Math.max(0.3, stageTuning.crowd), rd = opts.rowDepth ?? 0.8, tier = opts.tier ?? 0.35, y0 = opts.y0 ?? 0;
   const sides = opts.sides ?? ['n', 'e', 'w'];
   const rnd = rand(opts.seed ?? 7);
   const j = opts.jitter ?? 0.12;

@@ -43,6 +43,7 @@ export interface AppApi {
   nextFight(): void;
   toCharSelect(): void;
   applySettings(): void;
+  runBenchmark(): void;
   menuScene(chars: CharId[] | null, stage?: StageId): void;
   toast(msg: string): void;
   openMoveList(): void;
