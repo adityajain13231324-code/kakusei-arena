@@ -19,7 +19,7 @@ export interface FxCtx {
   low: boolean;
 }
 
-const FALLBACK_AURA: Record<CharId, number> = { kaito: 0xff5a1f, shiori: 0x9b5cff, ren: 0x8fd3ff, goro: 0xd9a441 };
+const FALLBACK_AURA: Partial<Record<CharId, number>> = { kaito: 0xff5a1f, shiori: 0x9b5cff, ren: 0x8fd3ff, goro: 0xd9a441, gojo: 0x7fb8ff, naruto: 0xff9a2e, zoro: 0x3fd17a, luffy: 0xff3b3b, eren: 0x58e07a };
 const auraCache: Partial<Record<CharId, number>> = {};
 export function auraColor(id: CharId): number {
   const c = auraCache[id];

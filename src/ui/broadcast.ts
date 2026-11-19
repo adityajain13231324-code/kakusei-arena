@@ -120,7 +120,24 @@ const LINES: Record<string, Bit[]> = {
 };
 
 /** fighter-specific quips (used on first hit, clash, idle, ultimate for that fighter) */
-const QUIPS: Record<CharId, Bit[]> = {
+const QUIPS: Partial<Record<CharId, Bit[]>> = {
+  gojo: [
+    [H('Gojo just yawned mid-fight. HE YAWNED!'), P('The Infinity means his opponent technically never touched him. Rude.')],
+    [H('Blindfold still on and he is WINNING!')],
+  ],
+  naruto: [
+    [H('There are three Narutos now! Which one do I commentate?!'), P('All of them. Unfortunately.')],
+    [H('Naruto just promised to win. Historically, that is bad news for the other guy!')],
+  ],
+  zoro: [
+    [H('Zoro has a sword in his MOUTH and he still talks more trash than me!'), P('He walked into the arena from the wrong side. Twice.')],
+  ],
+  luffy: [
+    [H('That punch came from across the stage! HIS ARM IS STILL OUT THERE!'), P('Physics has filed for leave.')],
+  ],
+  eren: [
+    [H('Eren is grappling around like the arena owes him money!'), P('Please do not turn giant near the commentary booth.')],
+  ],
   kaito: [
     [H("Kaito's hair is now 40% fire, 60% plot armor!"), P('I keep telling him hair is not a heat source. He does not listen.')],
     [H('Kaito yelled a power-up speech. Nobody asked. Everyone loved it!')],
@@ -143,7 +160,12 @@ const QUIPS: Record<CharId, Bit[]> = {
   ],
 };
 
-const ENDERS: Record<CharId, string> = {
+const ENDERS: Partial<Record<CharId, string>> = {
+  gojo: 'Gojo files noise complaint against everyone standing near his Infinity',
+  naruto: 'Ramen shops report record sales after Naruto declares "believe it" a business plan',
+  zoro: 'Zoro found 3 km from the arena, insists the arena moved',
+  luffy: 'Luffy eats the entire stadium buffet between rounds, refs too scared to stop him',
+  eren: 'Eren keeps saying "tatakae", commentators unsure if it is strategy or a lifestyle',
   kaito: "Kaito's hair has been declared a fire hazard by three neighbouring dimensions",
   shiori: 'Shiori\'s shadow clone files complaint about unpaid overtime',
   ren: 'Ren still has not opened his eyes. Experts remain hopeful',
@@ -325,7 +347,7 @@ export class Broadcast {
           }
           if (!this.firstHit && e.type === 'hit' && st.round.phase === 'fight') {
             this.firstHit = true;
-            if (Math.random() < 0.4) this.say('quip', 1.4, a, {}, 0, QUIPS[this.chars[a]]);
+            if (Math.random() < 0.4) this.say('quip', 1.4, a, {}, 0, QUIPS[this.chars[a]] ?? []);
             else this.say('firstHit', 1.5, a, { F: Math.max(1, st.frame % 97 + 3) });
             this.pushHeadline(`${this.names[a].toUpperCase()} draws first blood, ${this.names[t]} files a polite complaint`);
           }
@@ -355,7 +377,7 @@ export class Broadcast {
           this.pushHeadline(`ALERT: ${this.names[a].toUpperCase()}'s hair has gone SUPER. Experts say "oh no"`, true);
           break;
         case 'ultimateStart':
-          if (Math.random() < 0.35) this.say('quip', 3, a, {}, 0, QUIPS[this.chars[a]]); else this.say('ultimate', 3, a);
+          if (Math.random() < 0.35) this.say('quip', 3, a, {}, 0, QUIPS[this.chars[a]] ?? []); else this.say('ultimate', 3, a);
           this.pushHeadline(`${this.names[a].toUpperCase()} yells ultimate name; earplug stocks plummet`, true);
           break;
         case 'clashStart':
@@ -420,7 +442,7 @@ export class Broadcast {
       ];
       return pick(picks);
     }
-    if (r < 0.62) return ENDERS[this.chars[Math.random() < 0.5 ? 0 : 1]];
+    if (r < 0.62) return ENDERS[this.chars[Math.random() < 0.5 ? 0 : 1]] ?? 'Both fighters refuse to leave the arena until someone admits defeat';
     let t = pick(TICKER_POOL);
     if (t === this.lastTick) t = pick(TICKER_POOL, t);
     return t;
@@ -456,7 +478,7 @@ export class Broadcast {
       this.idleT += dt;
       if (this.idleT > 8.5 && !this.cur) {
         this.idleT = 0;
-        if (Math.random() < 0.35) this.say('quip', 0.2, Math.random() < 0.5 ? 0 : 1 as 0 | 1, {}, 0, QUIPS[this.chars[Math.random() < 0.5 ? 0 : 1]]);
+        if (Math.random() < 0.35) this.say('quip', 0.2, Math.random() < 0.5 ? 0 : 1 as 0 | 1, {}, 0, QUIPS[this.chars[Math.random() < 0.5 ? 0 : 1]] ?? []);
         else this.say('idle', 0.2, 0);
       }
     }
