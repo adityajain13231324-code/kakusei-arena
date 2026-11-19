@@ -8,7 +8,7 @@ export const KAITO: CharDef = {
   id: 'kaito',
   name: 'KAITO HOMURA',
   title: 'The Hot-Blooded Hero',
-  maxHp: 1020,
+  maxHp: 1050,
   walkSpeed: 48,
   backWalkSpeed: 36,
   dashSpeed: 95,
@@ -20,6 +20,7 @@ export const KAITO: CharDef = {
   palette: { primary: '#d8352a', secondary: '#1f2a44', accent: '#ffb627', hair: '#e8402c', skin: '#f2c9a0', aura: '#ff7a1a' },
   ultimateId: 'kaito_ult',
   awakenedUltimateId: 'kaito_ult_aw',
+  realmId: 'kaito_sun_forge',
   autoComboEnder: 'kaito_blaze_knuckle',
   moves: [
     // ---------------------------------------------------------------- normals / strings
@@ -104,5 +105,10 @@ export const KAITO: CharDef = {
     ultCine('kaito_ult_aw_cine', 'Crimson Sun Barrage', 190, [20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 160],
       [[0, 'straightExt'], ...flurry(16, 100, 3, ['jabExt', 'hookExt', 'straightExt', 'uppercutExt']), [100, 'awakenPose'], [130, 'beamCharge'], [150, 'beamFire'], [180, 'win']],
       'fire', 'fire_phoenix_crimson'),
+    // Soul Realm: Sun Forge (blocked hits still burn; Heat stacks fill up)
+    mv({ id: 'kaito_sun_forge', name: 'Soul Realm: Sun Forge', kind: 'special', input: '', s: 20, a: 1, r: 10, dmg: 0,
+      h: 'mid', str: 'super', el: 'fire', invuln: [1, 31], ki: 0,
+      anim: [[0, 'beamCharge'], [10, 'awakenPose'], [20, 'beamCharge'], [29, 'idle']], fx: 'sun_forge',
+      extra: { internal: true, realm: { kind: 'sun_forge', duration: 360 } } }),
   ],
 };

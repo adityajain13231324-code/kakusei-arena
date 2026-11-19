@@ -20,6 +20,7 @@ export const SHIORI: CharDef = {
   palette: { primary: '#2b1f3d', secondary: '#5b3a8c', accent: '#c9c9d6', hair: '#141218', skin: '#f0d2b6', aura: '#8a5cff' },
   ultimateId: 'shiori_ult',
   awakenedUltimateId: 'shiori_ult_aw',
+  realmId: 'shiori_moonless_void',
   autoComboEnder: 'shiori_kunai_fan',
   moves: [
     mv({ id: 'shiori_jab', name: 'Kunai Jab', input: 'L', s: 10, a: 2, r: 11, dmg: 44, h: 'high', str: 'light',
@@ -100,5 +101,10 @@ export const SHIORI: CharDef = {
     ultCine('shiori_ult_aw_cine', 'Moonless Night', 180, [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 150],
       [[0, 'slashExt'], [20, 'vanish'], ...flurry(48, 116, 5, ['slashExt', 'slashUpExt', 'spinAttack', 'slashLowExt']), [120, 'sheathStance'], [150, 'slashExt'], [170, 'win']],
       'shadow', 'shadow_twelve_slashes'),
+    // Soul Realm: Moonless Void (invisible between attacks; strikes start 2 f faster and track fully)
+    mv({ id: 'shiori_moonless_void', name: 'Soul Realm: Moonless Void', kind: 'special', input: '', s: 20, a: 1, r: 10, dmg: 0,
+      h: 'mid', str: 'super', el: 'shadow', invuln: [1, 31], ki: 0,
+      anim: [[0, 'awakenPose'], [12, 'vanish'], [20, 'awakenPose'], [29, 'idle']], fx: 'moonless_void',
+      extra: { internal: true, realm: { kind: 'moonless_void', duration: 300 } } }),
   ],
 };

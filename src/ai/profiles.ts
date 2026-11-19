@@ -84,5 +84,5 @@ export const PERSONALITY: Record<CharId, Personality> = {
   /** Luffy: long pokes from far away, Rocket in, Gatling up close */
   luffy: { spacing: 0.9, rush: 1.1, zoning: 0.1, trick: 0.2, likes: { pistol: 0.7, whip: 0.5, gatling: 0.5 } },
   /** Eren: grapples in and out, Thunder Spears at range, goes Titan when it can */
-  eren: { spacing: 0.85, rush: 1.05, zoning: 0.3, trick: 0.4, likes: { slash: 0.5, spin: 0.4, titan: 0.6 } },
+  eren: { spacing: 0.85, rush: 1.05, zoning: 0.15, trick: 0.5, likes: { slash: 0.5, spin: 0.4, titan: 0.6 } },
 };

@@ -85,7 +85,7 @@ export const ZORO: CharDef = {
     mv({ id: 'zoro_style', name: 'Sword Style Swap', kind: 'special', input: '5S', easy: '5S', s: 4, a: 1, r: 12, dmg: 0,
       h: 'mid', str: 'light', el: 'blade', ki: 0, anim: [[0, 'sheathStance'], [10, 'recover'], [15, 'idle']], fx: 'blade_style',
       extra: { cycleForms: STYLES } }),
-    mv({ id: 'zoro_oni_giri', name: 'Oni Giri', kind: 'special', input: '236S', easy: '6S', s: 19, a: 6, r: 28, dmg: 95,
+    mv({ id: 'zoro_oni_giri', name: 'Oni Giri', kind: 'special', input: '236S', easy: '6S', s: 21, a: 6, r: 28, dmg: 85,
       h: 'mid', str: 'heavy', el: 'blade', blk: -16, onHit: 'knockdown', ki: 8,
       movement: [[0, 6, 0], [12, 85, 0], [28, 0, 0]], box: { x: -250, y: 1200, len: 750, r: 210 },
       anim: [[0, 'sheathStance'], [12, 'dash'], [19, 'slashExt'], [34, 'recover'], [51, 'idle']], fx: 'oni_giri', extra: { passThrough: true } }),

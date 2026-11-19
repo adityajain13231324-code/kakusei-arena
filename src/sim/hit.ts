@@ -12,7 +12,7 @@ import { STAGGER_EXTRA, COUNTER_HITSTOP, GUARD_MAX, GUARD_CRUSH_STUN, KD_MIN, KD
 import { addKi, startUltCine } from './meters';
 import { moveDef, CHARS } from '../data';
 import { chance } from '../core/rng';
-import { autoGuard, capDamage, frozenByRealm, queueEcho, realmActive, hitClones } from './crossover';
+import { autoGuard, capDamage, frozenByRealm, queueEcho, realmActive, hitClones, forgeBurn, templeArmor } from './crossover';
 
 /** per-step scratch: fighters that got stunned this step skip the end-of-step stun decrement */
 export const stunnedThisStep = [false, false];
@@ -118,9 +118,15 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
   if (move.height === 'high' && crouch) return 'none';
   // sidestep evasion: linear strikes whiff during the evasive part of a sidestep
   if (!proj && d.mode === 'sidestep' && d.modeFrame >= SIDESTEP_EVADE_FROM && d.modeFrame <= SIDESTEP_EVADE_TO
-    && d.sim.ssLateral >= SIDESTEP_EVADE_DIST && !trackingCatches(move, a, d)) return 'none';
+    && d.sim.ssLateral >= SIDESTEP_EVADE_DIST && !trackingCatches(move, a, d)
+    && !realmActive(state, 'moonless_void', ai)) return 'none'; // Moonless Void: her strikes track fully
 
-  const from: Vec3 = proj ? { x: proj.pos.x - proj.vel.x * 4, y: 0, z: proj.pos.z - proj.vel.z * 4 } : a.pos;
+  // dash-through moves (Oni Giri ...) come from where the attacker started the dash: blockable from the front,
+  // and not a back hit just because the attacker's body is already past the defender
+  // a delayed blast (Thunder Spear) is guarded toward its thrower: it may detonate behind a guarding defender
+  const from: Vec3 = proj && proj.fuse ? F(state, ai).pos
+    : proj ? { x: proj.pos.x - proj.vel.x * 4, y: 0, z: proj.pos.z - proj.vel.z * 4 }
+    : move.passThrough ? { x: a.pos.x - Math.trunc((a.facing.x * 1500) / 1000), y: 0, z: a.pos.z - Math.trunc((a.facing.z * 1500) / 1000) } : a.pos;
   let dirx = proj ? proj.vel.x : a.facing.x, dirz = proj ? proj.vel.z : a.facing.z;
   if (proj) { const l = Math.abs(dirx) + Math.abs(dirz); if (l > 0) { dirx = Math.trunc((dirx * 1000) / l); dirz = Math.trunc((dirz * 1000) / l); } }
   const hs = move.hitstop ?? HITSTOP[move.strength];
@@ -194,6 +200,7 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     // Zoro's King of Hell realm: blocked slashes still cut (40% damage) and wear the guard down twice as fast
     if (realmActive(state, 'king_of_hell', ai)) { chip = Math.max(chip, Math.trunc((move.damage * 40) / 100)); drainGuard(d, move, !!proj); }
     if (chip) d.hp = Math.max(1, d.hp - capDamage(state, ai, chip));
+    forgeBurn(state, ai, move); // Kaito's Sun Forge: blocked hits still burn
     queueEcho(state, ai, move, !!proj);
     push(d, dirx, dirz, Math.trunc((pb * 12) / 10));
     d.hitstop = Math.max(d.hitstop, hs - 2);
@@ -255,6 +262,18 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
       emit(state, { type: 'hit', player: ai as 0 | 1, target: di as 0 | 1, pos: { ...point }, strength: move.strength, element: move.element, moveId: move.id, damage: dmg, charId: a.char, tag: 'armor' });
       return 'hit';
     }
+  }
+
+  // Goro's Mountain Temple realm: a 1-hit armor that is always on and refreshes 45 frames after it absorbs
+  if (templeArmor(state, di, move)) {
+    const dmg = capDamage(state, ai, Math.max(1, Math.trunc((move.damage * (a.awakened ? 11 : 10)) / 20))); // stone skin: half damage
+    d.hp -= dmg;
+    if (state.training && d.hp < 1) d.hp = 1;
+    d.hitstop = Math.max(d.hitstop, hs);
+    if (!proj) { a.hitstop = Math.max(a.hitstop, hs); a.sim.contact = 1; }
+    addKi(state, ai, move.kiGain ?? 0);
+    emit(state, { type: 'hit', player: ai as 0 | 1, target: di as 0 | 1, pos: { ...point }, strength: move.strength, element: move.element, moveId: move.id, damage: dmg, charId: a.char, tag: 'armor' });
+    return 'hit';
   }
 
   // damage

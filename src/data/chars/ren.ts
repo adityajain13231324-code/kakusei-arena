@@ -21,6 +21,7 @@ export const REN: CharDef = {
   palette: { primary: '#f1f1ee', secondary: '#27324a', accent: '#9fc6ff', hair: '#1b1d2a', skin: '#eccaa8', aura: '#bfe0ff' },
   ultimateId: 'ren_ult',
   awakenedUltimateId: 'ren_ult_aw',
+  realmId: 'ren_petal_storm',
   autoComboEnder: 'ren_rising_moon',
   moves: [
     mv({ id: 'ren_pommel', name: 'Pommel Strike', input: 'L', s: 10, a: 2, r: 12, dmg: 42, h: 'high', str: 'light',
@@ -101,5 +102,10 @@ export const REN: CharDef = {
     ultCine('ren_ult_aw_cine', 'Silent Moon Requiem', 185, [120, 126, 132, 138, 144, 150, 156, 170],
       [[0, 'quickDraw'], [30, 'quickDraw'], [60, 'sheathStance'], [110, 'awakenPose'], [118, 'idle2'], [175, 'win']],
       'blade', 'blade_petal_storm'),
+    // Soul Realm: Petal Storm Dojo (Quick Draw cancels into Quick Draw)
+    mv({ id: 'ren_petal_storm', name: 'Soul Realm: Petal Storm Dojo', kind: 'special', input: '', s: 20, a: 1, r: 10, dmg: 0,
+      h: 'mid', str: 'super', el: 'blade', invuln: [1, 31], ki: 0,
+      anim: [[0, 'sheathStance'], [10, 'awakenPose'], [20, 'sheathStance'], [29, 'idle']], fx: 'petal_storm',
+      extra: { internal: true, realm: { kind: 'petal_storm', duration: 360 } } }),
   ],
 };
