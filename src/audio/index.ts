@@ -5,8 +5,9 @@ import type { GameState, SimEvent } from '../sim/types';
 import { Engine } from './engine';
 import { Music } from './music';
 import { Sfx } from './sfx';
+import { CHAR_REALM } from './crossover';
 
-export type UiSound = 'move' | 'select' | 'back' | 'start' | 'error';
+export type UiSound = 'move' | 'select' | 'back' | 'start' | 'error' | 'hover' | 'press';
 export type MusicTrack = 'menu' | 'rooftop' | 'shrine' | 'training' | 'victory' | 'none';
 
 export class AudioSystem {
@@ -24,9 +25,46 @@ export class AudioSystem {
     if (this.pendingMusic && this.e.ctx) { const t = this.pendingMusic; this.pendingMusic = null; this.mus.set(t); }
   }
 
+  private realmSeen = new Set<string>();
+  private lastRealmT = 0;
+
   handleEvents(events: SimEvent[], state: GameState): void {
     if (this.paused) return;
     this.sfx.handle(events, state);
+    this.realmMusic(events, state);
+  }
+
+  /** Soul Realm music: duck the stage track + layer the owner's realm theme; both themes on a Realm Clash */
+  private realmMusic(events: SimEvent[], state: GameState): void {
+    if (!this.e.ctx) return;
+    const now = this.e.now;
+    const dt = Math.min(0.5, Math.max(0, now - this.lastRealmT));
+    this.lastRealmT = now;
+    for (const ev of events) {
+      if (ev.type !== 'realmStart' && ev.type !== 'realmEnd' && ev.type !== 'realmClash' && ev.type !== 'clashEnd') continue;
+      if (ev.type === 'clashEnd' && ev.tag !== 'realm' && ev.tag !== 'realmDraw') continue;
+      const key = `${ev.frame}:${ev.type}:${ev.player}`;
+      if (this.realmSeen.has(key)) continue;
+      if (this.realmSeen.size > 40) this.realmSeen.clear();
+      this.realmSeen.add(key);
+      switch (ev.type) {
+        case 'realmStart': this.mus.realmOn(ev.tag ?? ''); break;
+        case 'realmClash':
+          for (const f of state.fighters) { const k = CHAR_REALM[f.char]; if (k) this.mus.realmOn(k); }
+          break;
+        case 'clashEnd': {
+          if (ev.tag === 'realmDraw') { this.mus.realmOff(); break; }
+          // the loser's world collapses; the winner's realm keeps playing (its own realmStart follows)
+          const loser = state.fighters[1 - ev.player as 0 | 1];
+          const lk = loser ? CHAR_REALM[loser.char] : undefined;
+          if (lk) this.mus.realmOff(lk);
+          break;
+        }
+        case 'realmEnd': this.mus.realmOff(); break;
+        default: break;
+      }
+    }
+    this.mus.realmWatch(!!state.realm || state.clash.active, dt);
   }
 
   ui(s: UiSound): void {

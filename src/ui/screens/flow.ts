@@ -8,8 +8,27 @@ import { META, STAGES, charName, charTitle, portraitEl, refreshPortraits } from 
 // ------------------------------------------------------------------ VS screen
 export interface VsParams { p1: CharId; p2: CharId; stage: string; label: string; cpu: boolean }
 
+const TIPS: string[] = [
+  'Hold S to charge Ki. Three full bars unlock your ultimate.',
+  'Tap Up or Down to sidestep. Straight attacks whiff, tracking moves curve in.',
+  'Below 35% HP you can AWAKEN once per match: L + H + K.',
+  'Blocked too long? Your guard meter drains and a GUARD CRUSH leaves you wide open.',
+  'Awakened with 3 Ki bars, your ultimate input opens your SOUL REALM instead.',
+  'Two Soul Realms at once cause a REALM CLASH. Mash to win it.',
+  'Gojo\'s Infinity stops the first hit each round and slows projectiles near him.',
+  'Naruto\'s clones copy his next attack from the side. Hitting a clone makes it poof.',
+  'Zoro: tap S with no direction to cycle between one, two and three swords.',
+  'Luffy has the longest normals in the game. Stay at the edge of his reach.',
+  'Eren\'s Thunder Spear flies harmless and blows up at the end. Do not stand there.',
+  'Throws beat guard. Press the same throw buttons to break them.',
+  'Press H + K to Vanish: a short invincible blink that costs Ki.',
+  'Training mode shows frame data and lets you turn on Infinite Ki.',
+];
+let tipIx = Math.floor(Math.random() * TIPS.length);
+
 export class VsScreen extends BaseScreen {
   private l: HTMLElement; private r: HTMLElement; private info: HTMLElement; private status: HTMLElement;
+  private tip: HTMLElement; private bar: HTMLElement; private lines: HTMLElement;
   constructor(app: AppApi) {
     super(app, '');
     this.el.classList.add('vs');
@@ -17,7 +36,16 @@ export class VsScreen extends BaseScreen {
     this.r = h('div', { class: 'vs-side r' });
     this.info = h('div', { class: 'vs-info' });
     this.status = h('div', { class: 'vs-status' }, h('i', null), 'LOADING');
-    this.el.append(this.l, this.r, h('div', { class: 'vs-slash' }), h('div', { class: 'vs-mark' }, h('span', null, 'VS')), this.info, this.status);
+    // speed-line cinematic: two counter-rotating ray layers + horizontal streaks (transform-only animation)
+    const streaks: HTMLElement[] = [];
+    for (let i = 0; i < 18; i++) {
+      const r1 = (i * 37 % 100) / 100, r2 = (i * 59 % 100) / 100;
+      streaks.push(h('i', { class: 'vs-streak', style: `top:${(i * 5.6 + r1 * 4).toFixed(1)}%;width:${(18 + r2 * 34).toFixed(0)}%;--d:${(0.55 + r1 * 0.7).toFixed(2)}s;--o:${(-r2 * 1.2).toFixed(2)}s;--dir:${i % 2 ? 1 : -1}` }));
+    }
+    this.lines = h('div', { class: 'vs-speed' }, h('div', { class: 'vs-rays a' }), h('div', { class: 'vs-rays b' }), ...streaks);
+    this.tip = h('div', { class: 'vs-tip' });
+    this.bar = h('div', { class: 'vs-bar' }, h('i', null));
+    this.el.append(this.lines, this.l, this.r, h('div', { class: 'vs-slash' }), h('div', { class: 'vs-mark' }, h('span', null, 'VS')), this.info, this.tip, this.bar, this.status);
   }
   private side(el: HTMLElement, id: CharId, tag: string): void {
     el.style.setProperty('--c', META[id].color);
@@ -34,12 +62,17 @@ export class VsScreen extends BaseScreen {
     const st = STAGES.find((s) => s.id === p.stage);
     this.info.replaceChildren(h('b', null, p.label), h('span', null, st ? st.name : ''));
     this.status.classList.remove('done');
+    this.bar.classList.remove('done');
     this.status.lastChild!.textContent = 'LOADING';
+    tipIx = (tipIx + 1) % TIPS.length;
+    this.tip.replaceChildren(h('small', null, 'TIP'), TIPS[tipIx]);
+    this.el.style.setProperty('--l', META[p.p1].color);
+    this.el.style.setProperty('--r', META[p.p2].color);
     this.el.classList.remove('play');
     void this.el.offsetWidth;
     this.el.classList.add('play');
   }
-  setReady(): void { this.status.classList.add('done'); this.status.lastChild!.textContent = 'READY'; }
+  setReady(): void { this.status.classList.add('done'); this.bar.classList.add('done'); this.status.lastChild!.textContent = 'READY'; }
   onMenu(): void {}
 }
 

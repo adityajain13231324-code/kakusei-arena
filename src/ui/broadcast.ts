@@ -113,6 +113,71 @@ const LINES: Record<string, Bit[]> = {
     [H('A ground pound! {B} became part of the stage!'), P('Dust level: dramatic. Respect level: conflicted.')],
     [H('{B} tried to relax on the floor and {A} charged an admission fee!'), P('Wake-up timing matters. So does not lying around.')],
   ],
+  // ---- crossover pack: realms, forms, clones, Infinity, titan
+  realm: [
+    [H('A SOUL REALM! The stage just changed channels!'), P('Reality has been replaced by a more expensive background.')],
+    [H('{A} opens their world! Hold on to your snacks AND your sanity!'), P('One per match. Dramatic timing is not rationed.')],
+    [P('Soul Realm confirmed: 300 Ki, one hand sign, zero respect for the venue.')],
+  ],
+  realm_infinite_void: [
+    [H('DOMAIN EXPANSION! {B} is buffering! Please wait!'), P('Infinite information, finite patience. {B} has run out of both.')],
+    [H('INFINITE VOID! {B} cannot move a SINGLE eyelash!'), P('Damage is capped at 35 percent. Mercy, but make it mathematical.')],
+  ],
+  realm_tailed_beast_bomb: [
+    [H('TAILED BEAST BOMB! That is not a Rasengan, that is a WEATHER EVENT!'), P('Arena blast is unblockable. Clones arrive on a schedule. Fun is not scheduled.')],
+    [H('The whole arena just went orange! And so did {B}!')],
+  ],
+  realm_king_of_hell: [
+    [H('KING OF HELL! Even the BLOCKS are getting cut now!'), P('Guard drain doubled. Blocking is now a subscription service.')],
+    [H('{A} stares at {B} with three swords and zero doubts!')],
+  ],
+  realm_gear_fifth: [
+    [H('GEAR FIFTH! The laws of physics just left the group chat!'), P('Juggle gravity reduced to two thirds. Giggling increased to one hundred.')],
+    [H('{B} is bouncing off the floor like a rubber ball! Which is a LUFFY thing to do!')],
+  ],
+  realm_paths: [
+    [H('THE PATHS! A TITAN ARMY is marching and {B} is in the way!'), P('Stomps arrive every second. Crouch or jump. Panic is also an option.')],
+    [H('The ground is shaking! That is not the crowd, that is HISTORY!')],
+  ],
+  realmClash: [
+    [H('REALM CLASH!! TWO WORLDS, ONE ARENA, ZERO PERSONAL SPACE!'), P('The universe has filed a noise complaint. Mash accordingly.')],
+    [H('Two Soul Realms collide! MASH! MASH! MASH!'), P('Whoever loses gets evicted from their own dimension.')],
+  ],
+  realmEnd: [
+    [H('And the realm fades! Back to the boring old arena!'), P('Reality restored. Please check your belongings for leftover fate.')],
+  ],
+  sixEyes: [
+    [H('The blindfold is OFF! SIX EYES! Everyone can see everything now!'), P('Ki gain doubled. Ego gain: also doubled.')],
+  ],
+  sage: [
+    [H('SAGE MODE! Orange eyeliner, plot armor, and a lot of toads!'), P('Speed up five percent. Dignity unchanged.')],
+  ],
+  kurama: [
+    [H('NINE-TAILS CHAKRA MODE! He is GLOWING and also ANGRY!'), P('Low health unlocks a gold cloak. The cloak has opinions.')],
+  ],
+  gear: [
+    [H('GEAR CHANGE! Steam, drums, bigger fists!'), P('Rubber in, speed out. Please keep limbs inside the vehicle.')],
+    [H('That arm just got an upgrade! A ridiculous, rubbery upgrade!')],
+  ],
+  gear5: [
+    [H('GEAR FIFTH! The heartbeat drums are back and so is the laughing!'), P('Cartoon physics enabled. Drop anvils responsibly.')],
+  ],
+  titan: [
+    [H('LIGHTNING STRIKE! EREN IS A TITAN! A FIFTY METRE... well, a big one!'), P('Hurtbox ×2.5. Damage taken 75 percent. Sorry, Armin.')],
+    [H('TITAN SHIFT! The camera has been asked to step back, politely!'), P('Ten seconds of colossal regret for the opponent.')],
+  ],
+  clone: [
+    [H('POOF! Shadow clones! There are TWO more Narutos!'), P('Each clone repeats his next attack at 40 percent. Math, but louder.')],
+    [H('That was a clone! Or was that the clone? Or is THIS the clone?!'), P('A single hit dispels one. Aim for the one that is not smiling.')],
+  ],
+  cloneDispel: [
+    [H('Clone popped! Like a very orange balloon!'), P('Hits on clones count as lessons for the opponent.')],
+  ],
+  infinity: [
+    [H('INFINITY! {B} swung and the hit just... never arrived!'), P('The first strike each round is auto-guarded. It is called a free pass.')],
+    [H('{A} did not even blink! Because the blindfold covers the blink!'), P('The distance between them is mathematically non-zero. Rude.')],
+    [H('Stopped by a force field made of pure arithmetic!')],
+  ],
   wall: [
     [H('WALL SPLAT! {B} is now a decorative poster!'), P('Arena structural integrity: questionable. {B} structural integrity: worse.')],
     [P('The wall was not consulted about this.')],
@@ -158,6 +223,10 @@ const QUIPS: Partial<Record<CharId, Bit[]>> = {
     [P('Goro is the only fighter who says sorry before and after.')],
     [H('Goro just picked up a vending machine to apologize to it!')],
   ],
+};
+
+const REALM_NAME: Record<string, string> = {
+  infinite_void: 'INFINITE VOID', tailed_beast_bomb: 'TAILED BEAST BOMB', king_of_hell: 'KING OF HELL', gear_fifth: 'GEAR FIFTH', paths: 'THE PATHS',
 };
 
 const ENDERS: Partial<Record<CharId, string>> = {
@@ -276,6 +345,7 @@ export class Broadcast {
     this.firstHit = false; this.lowSaid = [false, false];
     this.seq = []; this.cur = null; this.seqPri = -1; this.hold = 0; this.idleT = 0;
     this.cool = {}; this.clock = 0; this.prio = [];
+    this.lastState = null; // never reuse the previous match's state (stale 0% HP in the first headlines)
     this.who.textContent = ''; this.txt.textContent = '';
     this.avH.classList.remove('talk'); this.avP.classList.remove('talk');
     this.track.replaceChildren(); this.x = 0; this.lastTick = ''; this.tickSec = -1;
@@ -381,9 +451,43 @@ export class Broadcast {
           this.pushHeadline(`${this.names[a].toUpperCase()} yells ultimate name; earplug stocks plummet`, true);
           break;
         case 'clashStart':
+          if (e.tag === 'realm') break; // handled by realmClash
           this.say('clash', 3, a);
           this.pushHeadline('BEAM CLASH! Physicists announce they have "no idea either"', true);
           break;
+        case 'realmStart': {
+          const k = (e.tag ?? '');
+          this.hold = 0;
+          const nm = REALM_NAME[k] ?? 'SOUL REALM';
+          if (LINES['realm_' + k] && Math.random() < 0.8) this.say('realm_' + k, 4, a);
+          else this.say('realm', 4, a);
+          this.pushHeadline(`${this.names[a].toUpperCase()} opens ${nm}; the venue manager "needs a minute and a chair"`, true);
+          break;
+        }
+        case 'realmClash':
+          this.hold = 0;
+          this.say('realmClash', 4.2, 0);
+          this.pushHeadline('REALM CLASH! Two dimensions disagree about who owns the floor', true);
+          break;
+        case 'realmEnd': this.say('realmEnd', 1.2, a, {}, 3); break;
+        case 'infinityBlock':
+          if (e.tag === 'infinity' || e.tag === 'sixEyes') {
+            this.say('infinity', 2.2, a, {}, 7);
+            if (e.tag === 'infinity') this.pushHeadline(`${this.names[a].toUpperCase()}'s Infinity stops a hit mid-air; ${this.names[t]} calls it "suspiciously convenient"`);
+          }
+          break;
+        case 'formChange': {
+          const tg = e.tag ?? '';
+          if (tg === 'six_eyes') this.say('sixEyes', 2.8, a, {}, 5);
+          else if (tg === 'sage') this.say('sage', 2.8, a, {}, 5);
+          else if (tg === 'kurama') { this.say('kurama', 3, a, {}, 5); this.pushHeadline(`${this.names[a].toUpperCase()} goes gold; wallpaper in three rooms catches fire`, true); }
+          else if (tg === 'gear2' || tg === 'gear4') this.say('gear', 2.6, a, {}, 5);
+          else if (tg === 'gear5') this.say('gear5', 3, a, {}, 5);
+          else if (tg === 'titan') { this.say('titan', 3.4, a, {}, 5); this.pushHeadline(`${this.names[a].toUpperCase()} is now the size of a building; local birds file complaint`, true); }
+          break;
+        }
+        case 'summon': this.say('clone', 1.2, a, {}, 16); break;
+        case 'summonDispel': if (e.tag === 'hit') this.say('cloneDispel', 0.9, a, {}, 12); break;
         case 'ko': {
           const loser = st.fighters[0].hp <= 0 ? 0 : 1;
           this.say('ko', 4, (1 - loser) as 0 | 1);
@@ -429,9 +533,10 @@ export class Broadcast {
     const [a, b] = this.names;
     const A = a.toUpperCase(), B = b.toUpperCase();
     const r = Math.random();
-    if (st && r < 0.5) {
+    if (st && r < 0.5 && st.fighters[0].maxHp > 0 && st.fighters[1].maxHp > 0) {
       const f = st.fighters;
-      const pa = Math.round((f[0].hp / f[0].maxHp) * 100), pb = Math.round((f[1].hp / f[1].maxHp) * 100);
+      const pct = (x: number, m: number): number => Math.max(0, Math.min(100, Math.round((x / m) * 100)));
+      const pa = pct(f[0].hp, f[0].maxHp), pb = pct(f[1].hp, f[1].maxHp);
       const picks = [
         `LIVE STATS: ${A} has landed ${this.hits[0]} hits, ${B} has landed ${this.hits[1]}. Math checks out`,
         `HEALTH REPORT: ${A} at ${pa}%, ${B} at ${pb}%. Both describe themselves as "fine"`,

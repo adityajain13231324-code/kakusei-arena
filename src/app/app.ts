@@ -93,6 +93,7 @@ export class App implements AppApi {
     this.debugEl = h('pre', { class: 'debug' });
     uiRoot.append(this.toastEl, this.debugEl);
     this.input.attachTouch(uiRoot);
+    this.attachUiFeel(uiRoot);
 
     this.input.onMenu((a, slot) => this.onMenu(a, slot));
     window.addEventListener('resize', () => this.resize());
@@ -119,6 +120,22 @@ export class App implements AppApi {
     this.checkJoinHash();
     window.addEventListener('hashchange', () => this.checkJoinHash());
     requestAnimationFrame(this.loop);
+  }
+
+  // ------------------------------------------------------------ hover / press feel (sounds; the CSS does the motion)
+  private hoverEl: Element | null = null;
+  private attachUiFeel(root: HTMLElement): void {
+    // elements whose own Nav/hover logic already plays sounds are left out
+    const HOVER = '.cx-pill, .cx-chip, .cx-tab, .cx-big, .tool-btn, .seg, .tp-toggle, .tp-arrow, .tp-reset, .ml-tab, .pause-btn, .on-btn';
+    const PRESS = '.cx-card, .mbtn, .cx-big, .st-card';
+    root.addEventListener('pointerover', (e) => {
+      if ((e as PointerEvent).pointerType === 'touch') return;
+      const el = (e.target as Element).closest(HOVER);
+      if (el && el !== this.hoverEl) { this.hoverEl = el; this.audio.ui('hover'); } else if (!el) this.hoverEl = null;
+    });
+    root.addEventListener('pointerdown', (e) => {
+      if ((e.target as Element).closest(PRESS)) this.audio.ui('press');
+    });
   }
 
   // ------------------------------------------------------------ helpers

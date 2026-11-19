@@ -1,6 +1,7 @@
 // Procedural music: lookahead scheduler (100 ms) + five seeded, deterministic tracks.
 import { Engine } from './engine';
 import type { MusicTrack } from './index';
+import { choir } from './crossover';
 
 const N = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 /** deterministic pseudo-random in [0,1) from an integer */
@@ -9,6 +10,7 @@ function rn(n: number, salt = 0): number {
   return x - Math.floor(x);
 }
 
+interface RealmLayer { kind: string; def: TrackDef; tg: GainNode; next: number; step: number }
 interface TrackDef {
   bpm: number; bars: number; loop: boolean; swing?: number; salt: number;
   play(m: Music, s: number, bar: number, t: number): void;
@@ -22,6 +24,9 @@ export class Music {
   private step = 0;
   private timer: number | null = null;
   onEnd: (() => void) | null = null;
+  private layers: RealmLayer[] = [];
+  private rtimer: number | null = null;
+  private realmIdle = 0;
   /** destination for instruments of the current track */
   d!: AudioNode;
   constructor(readonly e: Engine) {}
@@ -32,6 +37,7 @@ export class Music {
     const e = this.e;
     if (!e.ctx || track === this.cur) return;
     const now = e.now;
+    if (this.layers.length) this.realmOff();
     if (this.tg) {
       const old = this.tg;
       old.gain.cancelScheduledValues(now);
@@ -88,6 +94,72 @@ export class Music {
       setTimeout(() => { try { tg.disconnect(); } catch { /* ignore */ } }, 4000);
     }
     this.onEnd?.();
+  }
+
+
+  // ------------------------------------------------------------ Soul Realm themes (layer over the stage music)
+  /** duck the stage track and start the realm theme (two layers = Realm Clash) */
+  realmOn(kind: string): void {
+    const e = this.e;
+    const def = REALM_TRACKS[kind];
+    if (!e.ctx || !def || this.layers.some((l) => l.kind === kind)) return;
+    const now = e.now;
+    const tg = e.ctx.createGain();
+    tg.gain.setValueAtTime(0.0001, now);
+    tg.gain.setTargetAtTime(1, now + 0.03, 0.2);
+    tg.connect(e.musicBus);
+    this.layers.push({ kind, def, tg, next: now + 0.06, step: 0 });
+    this.duckStage(true);
+    if (this.rtimer === null) this.rtimer = window.setInterval(() => this.tickRealm(), 30);
+  }
+  /** stop one realm theme (or all) and restore the stage track once none is left */
+  realmOff(kind?: string): void {
+    const e = this.e;
+    const now = e.ctx ? e.now : 0;
+    const keep: RealmLayer[] = [];
+    for (const l of this.layers) {
+      if (kind && l.kind !== kind) { keep.push(l); continue; }
+      l.tg.gain.cancelScheduledValues(now);
+      l.tg.gain.setTargetAtTime(0, now, 0.25);
+      const g = l.tg;
+      setTimeout(() => { try { g.disconnect(); } catch { /* ignore */ } }, 1500);
+    }
+    this.layers = keep;
+    if (!keep.length) {
+      if (this.rtimer !== null) { clearInterval(this.rtimer); this.rtimer = null; }
+      this.duckStage(false);
+    }
+  }
+  get realmActive(): boolean { return this.layers.length > 0; }
+  /** fail-safe: stop realm themes if neither a realm nor a clash is running for a moment */
+  realmWatch(live: boolean, dt: number): void {
+    if (!this.layers.length) { this.realmIdle = 0; return; }
+    this.realmIdle = live ? 0 : this.realmIdle + dt;
+    if (this.realmIdle > 0.7) { this.realmIdle = 0; this.realmOff(); }
+  }
+  private duckStage(on: boolean): void {
+    if (!this.tg || !this.e.ctx) return;
+    this.tg.gain.cancelScheduledValues(this.e.now);
+    this.tg.gain.setTargetAtTime(on ? 0.16 : 1, this.e.now, on ? 0.12 : 0.6);
+  }
+  private tickRealm(): void {
+    const e = this.e;
+    if (!e.ctx || e.ctx.state !== 'running') return;
+    for (const l of this.layers) {
+      const sd = 60 / l.def.bpm / 4;
+      if (l.next < e.now - 0.25) l.next = e.now + 0.02;
+      while (l.next < e.now + 0.1) {
+        const total = l.def.bars * 16;
+        if (l.step >= total) l.step = 0;
+        this.d = l.tg;
+        l.def.play(this, l.step % 16, Math.floor(l.step / 16), l.next);
+        l.next += sd;
+        l.step++;
+      }
+    }
+  }
+  choir(t: number, notes: number[], dur: number, g = 0.05, vowel: 'ah' | 'oh' | 'oo' = 'ah'): void {
+    choir(this.e, t, notes, dur, g, this.d, { vowel, wet: 0.5 });
   }
 
   // ------------------------------------------------------------ instruments
@@ -325,6 +397,96 @@ const victory: TrackDef = {
     if (bar === 3 && s >= 8) m.snare(t, 0.3 + (s - 8) * 0.06);
     if (step === 56) m.kick(t, 1, 1.5);
   },
+};
+
+// ====================================================================== Soul Realm themes (loop under the stage music)
+// infinite_void: eerie ambient pad, no drums. 54 bpm, 8 bars.
+const IV_PINGS = [86, 87, 91, 93, 98, 79];
+const infiniteVoid: TrackDef = {
+  bpm: 54, bars: 8, loop: true, salt: 11,
+  play(m, s, bar, t) {
+    const bd = 60 / 54 * 4;
+    if (s === 0 && bar % 2 === 0) {
+      m.pad(t, [38, 45, 51], bd * 2.1, 0.05, 650);
+      m.pad(t, [62, 69, 75].map((n) => n + (bar % 4 === 2 ? 1 : 0)), bd * 2.1, 0.022, 1500);
+    }
+    if (s === 0 && bar % 2 === 1) m.e.tone(t, 1.4, { f0: 44, f1: 38, g: 0.28, a: 0.02, dest: m.d });
+    if (s % 4 === 2 && rn(bar * 16 + s, 11) < 0.2) m.e.tone(t, 1.8, { f0: N(IV_PINGS[Math.floor(rn(bar * 16 + s, 12) * IV_PINGS.length)]!), g: 0.05, a: 0.004, dest: m.d });
+    if (s === 8 && bar % 4 === 3) m.e.noise(t, 3.2, { ft: 'bandpass', f0: 3500, f1: 1200, q: 6, g: 0.05, a: 1.6, dest: m.d });
+  },
+};
+
+// tailed_beast_bomb: ominous drums + low drone, 72 bpm, 8 bars.
+const TBB_BASS = [31, 31, 34, 29];
+const tailedBeastBomb: TrackDef = {
+  bpm: 72, bars: 8, loop: true, salt: 12,
+  play(m, s, bar, t) {
+    const bd = 60 / 72 * 4;
+    if (s === 0 && bar % 2 === 0) m.reese(t, N(TBB_BASS[(bar >> 1) % 4]!), bd * 2, 0.22);
+    if (s === 0) m.taiko(t, 1);
+    if (s === 6) m.taiko(t, 0.55, true);
+    if (s === 8) m.taiko(t, 0.85);
+    if (s === 11) m.taiko(t, 0.5, true);
+    if (s === 14 && bar % 2 === 1) m.taiko(t, 0.7, true);
+    if (bar >= 4 && s % 2 === 0 && bar % 4 === 3 && s >= 8) m.taiko(t, 0.35 + (s - 8) * 0.04, true);
+    if (s === 0 && bar % 4 === 0) { m.brass(t, N(38), bd * 0.8, 0.09); m.brass(t, N(45), bd * 0.8, 0.06); }
+    if (s === 0 && bar % 4 === 2) m.e.noise(t, bd * 1.4, { type: 'brown', ft: 'lowpass', f0: 160, f1: 800, g: 0.45, a: bd * 0.8, dest: m.d });
+  },
+};
+
+// king_of_hell: taiko + low strings (D phrygian), 96 bpm, 8 bars.
+const KOH_LINE = [0, 0, 3, 0, 5, 3, 0, -2];
+const kingOfHell: TrackDef = {
+  bpm: 96, bars: 8, loop: true, salt: 13,
+  play(m, s, bar, t) {
+    const bd = 60 / 96 * 4;
+    const root = bar % 4 === 3 ? 36 : 38;
+    if (s === 0) m.pad(t, [root, root + 7, root + 15], bd * 1.02, 0.055, 900); // low strings
+    if (s === 0 || s === 8) m.taiko(t, 1);
+    if (s === 4 || s === 10) m.taiko(t, 0.5);
+    if (s === 12 || s === 14) m.taiko(t, 0.65, true);
+    if (bar >= 2 && s % 2 === 0) m.bass(t, N(root + KOH_LINE[(s >> 1) % 8]!), 0.15, 0.18, 800, 'sawtooth'); // spiccato
+    if (bar >= 4 && s === 0) m.shaku(t, N(root + 36 + (bar % 8 === 4 ? 0 : 1)), bd * 0.9, 0.1);
+    if (bar % 4 === 2 && s === 6) m.koto(t, N(root + 24 + 3), 0.16);
+    if (s === 0 && bar % 4 === 0) m.crash(t);
+  },
+};
+
+// gear_fifth: playful heartbeat "dum-dum" drums + bouncy plucks, 112 bpm, 8 bars.
+const G5_PENT = [72, 74, 76, 79, 81, 84];
+const gearFifth: TrackDef = {
+  bpm: 112, bars: 8, loop: true, salt: 14,
+  play(m, s, bar, t) {
+    if (s === 0 || s === 8) m.kick(t, 1, 1.1);
+    if (s === 2 || s === 10) m.kick(t, 0.7, 0.9);
+    if (s === 4 || s === 12) m.clap(t, 0.5);
+    if (s % 4 === 2 && bar >= 1) m.hat(t, 0.5);
+    if (s === 6 || s === 14) m.bass(t, N(36 + (bar % 2) * 5), 0.14, 0.3, 500, 'sine');
+    if (bar >= 1 && s % 2 === 0 && rn(bar * 16 + s, 14) < 0.6) {
+      const n = G5_PENT[Math.floor(rn(bar * 16 + s, 15) * G5_PENT.length)]!;
+      m.arp(t, N(n), 0.07, 'triangle', 3000, 0.11);
+      if (s % 8 === 0) m.arp(t, N(n - 12), 0.05, 'sine', 2000, 0.2);
+    }
+    if (s === 0 && bar % 4 === 0) m.pad(t, [60, 64, 67, 72], 60 / 112 * 16, 0.035, 1800);
+  },
+};
+
+// paths: ethereal choir, 60 bpm, 8 bars.
+const PATHS_CH = [[57, 62, 66, 69], [55, 62, 67, 71], [54, 61, 66, 69], [52, 59, 64, 68]];
+const paths: TrackDef = {
+  bpm: 60, bars: 8, loop: true, salt: 15,
+  play(m, s, bar, t) {
+    if (s === 0 && bar % 2 === 0) {
+      m.choir(t, PATHS_CH[(bar >> 1) % 4]!, 8.1, 0.06, bar % 4 === 2 ? 'oo' : 'ah');
+      m.e.tone(t, 8, { f0: N(38), g: 0.16, a: 2, dest: m.d });
+    }
+    if (s % 8 === 4 && rn(bar * 16 + s, 16) < 0.6) m.rhodes(t, N(PATHS_CH[(bar >> 1) % 4]![Math.floor(rn(bar + s, 17) * 4)]! + 24), 1.6, 0.06);
+    if (s === 0 && bar % 4 === 3) m.taiko(t, 0.5);
+  },
+};
+
+const REALM_TRACKS: Record<string, TrackDef> = {
+  infinite_void: infiniteVoid, tailed_beast_bomb: tailedBeastBomb, king_of_hell: kingOfHell, gear_fifth: gearFifth, paths,
 };
 
 const TRACKS: Partial<Record<MusicTrack, TrackDef>> = { menu, rooftop, shrine, training, victory };

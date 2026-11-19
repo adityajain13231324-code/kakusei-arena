@@ -5,7 +5,8 @@ import { DUMMY_LABEL, DUMMY_MODES } from '../../app/session';
 import type { MatchSession } from '../../app/session';
 import { h, sfx } from '../dom';
 import { BaseScreen } from './base';
-import { META, charName, fillPortrait, portraitEl } from '../meta';
+import { getChar } from '../../sim';
+import { META, charName, fillPortrait, portraitEl, realmOfKind } from '../meta';
 import { Broadcast } from '../broadcast';
 
 function secsOf(t: number): number { return t > 99 ? Math.ceil(t / 60) : Math.max(0, Math.ceil(t)); }
@@ -14,7 +15,25 @@ interface SideEls {
   root: HTMLElement; fill: HTMLElement; trail: HTMLElement; name: HTMLElement; family: HTMLElement; scheme: HTMLElement;
   portrait: HTMLElement; pips: HTMLElement; ki: HTMLElement[]; kiFill: HTMLElement[]; kiBlock: HTMLElement; kiNum: HTMLElement;
   awk: HTMLElement; awkTxt: HTMLElement; combo: HTMLElement; comboHits: HTMLElement; comboDmg: HTMLElement; pct: HTMLElement;
+  hp: HTMLElement; chip: HTMLElement; chipTxt: HTMLElement; inf: HTMLElement; soul: HTMLElement;
 }
+
+/** form id (FighterState.form) -> chip text + colour */
+const FORMS: Record<string, { t: string; c: string }> = {
+  six_eyes: { t: 'SIX EYES', c: '#7cc4ff' },
+  sage: { t: 'SAGE MODE', c: '#ff9a2a' },
+  kurama: { t: 'NINE-TAILS', c: '#ffd23f' },
+  santoryu: { t: 'SANTORYU', c: '#4ae07a' },
+  ittoryu: { t: 'ITTORYU', c: '#4ae07a' },
+  nitoryu: { t: 'NITORYU', c: '#4ae07a' },
+  gear2: { t: 'GEAR 2', c: '#ff7a5c' },
+  gear4: { t: 'GEAR 4', c: '#ff3b3b' },
+  gear5: { t: 'GEAR 5', c: '#ffffff' },
+  titan: { t: 'TITAN', c: '#b8d96a' },
+};
+/** brush-stroke band behind the realm title (irregular ink edges) */
+const INK = '<svg viewBox="0 0 800 140" preserveAspectRatio="none"><path d="M0 38 C60 22 120 44 190 30 S330 14 420 30 S590 20 680 32 S780 22 800 34 L792 60 C770 66 790 84 772 96 C700 108 640 94 560 108 S400 120 320 108 S170 124 100 108 S20 112 0 100 L8 70 C-6 60 6 48 0 38 Z" fill="currentColor"/><path d="M40 12 L180 18 L120 26 Z M600 126 L720 118 L690 132 Z" fill="currentColor"/></svg>';
+const ICON_INF = '<svg viewBox="0 0 24 14"><path d="M12 7C10 4 8 2.5 6 2.5a4.5 4.5 0 0 0 0 9c2 0 4-1.5 6-4.5zm0 0c2 3 4 4.500 6 4.500a4.500 4.500 0 0 0 0-9c-2 0-4 1.500-6 4.500z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
 
 export class HudScreen extends BaseScreen {
   opaque = true;
@@ -22,7 +41,9 @@ export class HudScreen extends BaseScreen {
   private timer: HTMLElement;
   private roundLbl: HTMLElement;
   private callouts: HTMLElement;
-  private clash: HTMLElement; private clashMark: HTMLElement; private clashP1: HTMLElement; private clashP2: HTMLElement;
+  private clash: HTMLElement; private clashMark: HTMLElement; private clashP1: HTMLElement; private clashP2: HTMLElement; private clashT: HTMLElement;
+  private realmTag: HTMLElement; private realmTagTxt: HTMLElement; private bars: HTMLElement; private lastClashKind = '';
+  private hpShake: [number, number] = [0, 0];
   private session: MatchSession | null = null;
   private trail: [number, number] = [1, 1];
   private hold: [number, number] = [0, 0];
@@ -33,6 +54,7 @@ export class HudScreen extends BaseScreen {
   private chars: [CharId, CharId] = ['kaito', 'shiori'];
   private bc = new Broadcast();
   awakenReady = false;
+  private realmChars: [boolean, boolean] = [false, false];
 
   constructor(app: AppApi) {
     super(app, '');
@@ -54,18 +76,23 @@ export class HudScreen extends BaseScreen {
       const awkTxt = h('small', null, '');
       const awk = h('div', { class: 'awk', title: 'Awakening' }, h('b', null, '覚'), h('span', null, 'AWAKEN'), awkTxt);
       const kiNum = h('em', null, '0');
+      const soul = h('div', { class: 'soul', title: 'Soul Realm ready' }, h('b', null, '魂'), h('span', null, 'SOUL REALM'));
       const kiBlock = h('div', { class: 'kiblock p' + (p + 1) },
-        h('div', { class: 'ki-head' }, h('b', null, 'KI'), kiNum, awk), kiWrap);
+        h('div', { class: 'ki-head' }, h('b', null, 'KI'), kiNum, awk), kiWrap, soul);
       const comboHits = h('b', null, ''), comboDmg = h('span', null, '');
       const combo = h('div', { class: 'combo' }, comboHits, comboDmg);
       const frame = h('div', { class: 'frame' }, portrait);
+      const chipTxt = h('b', null, '');
+      const chip = h('div', { class: 'fchip' }, h('i', null), chipTxt);
+      const inf = h('div', { class: 'inf', title: 'Infinity ready', html: ICON_INF });
+      const hpEl = h('div', { class: 'hp' }, h('div', { class: 'hp-bg' }), trail, fill, h('div', { class: 'hp-gloss' }), h('div', { class: 'hp-flash' }), pct);
       const root = h('div', { class: 'side p' + (p + 1) },
         frame,
         h('div', { class: 'col' },
           h('div', { class: 'who' }, h('div', { class: 'hn' }, name, family), scheme),
-          h('div', { class: 'hp' }, h('div', { class: 'hp-bg' }), trail, fill, h('div', { class: 'hp-gloss' }), pct),
-          h('div', { class: 'sub' }, pips)));
-      return { root, fill, trail, name, family, scheme, portrait, pips, ki, kiFill, kiBlock, kiNum, awk, awkTxt, combo, comboHits, comboDmg, pct };
+          hpEl,
+          h('div', { class: 'sub' }, h('div', { class: 'fx-row' }, chip, inf), pips)));
+      return { root, fill, trail, name, family, scheme, portrait, pips, ki, kiFill, kiBlock, kiNum, awk, awkTxt, combo, comboHits, comboDmg, pct, hp: hpEl, chip, chipTxt, inf, soul };
     };
     this.sides = [mk(0), mk(1)];
     this.timer = h('div', { class: 'timer' }, '60');
@@ -73,14 +100,18 @@ export class HudScreen extends BaseScreen {
     const pauseBtn = h('button', { class: 'pause-btn', type: 'button', 'aria-label': 'Pause' }, h('i', null), h('i', null));
     for (const ev of ['pointerdown', 'touchstart', 'mousedown']) pauseBtn.addEventListener(ev, (e) => e.stopPropagation());
     pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); sfx('select'); app.pause(); });
-    const mid = h('div', { class: 'mid' }, h('div', { class: 'timer-frame' }, this.timer), this.roundLbl, pauseBtn);
+    this.realmTagTxt = h('b', null, '');
+    this.realmTag = h('div', { class: 'realm-tag' }, h('small', null, 'SOUL REALM'), this.realmTagTxt);
+    this.bars = h('div', { class: 'letterbox' }, h('i', { class: 't' }), h('i', { class: 'b' }));
+    const mid = h('div', { class: 'mid' }, h('div', { class: 'timer-frame' }, this.timer), this.roundLbl, this.realmTag, pauseBtn);
     this.callouts = h('div', { class: 'callouts' });
     this.clashMark = h('i', { class: 'clash-mark' });
     this.clashP1 = h('b', null, '0'); this.clashP2 = h('b', null, '0');
-    this.clash = h('div', { class: 'clash' }, h('div', { class: 'clash-t' }, 'CLASH! MASH!'),
+    this.clashT = h('div', { class: 'clash-t' }, 'CLASH! MASH!');
+    this.clash = h('div', { class: 'clash' }, this.clashT,
       h('div', { class: 'clash-row' }, this.clashP1, h('div', { class: 'clash-bar' }, this.clashMark), this.clashP2));
     this.training = new TrainingPanel(app);
-    this.el.append(h('div', { class: 'hud-top' }, this.sides[0].root, mid, this.sides[1].root),
+    this.el.append(this.bars, h('div', { class: 'hud-top' }, this.sides[0].root, mid, this.sides[1].root),
       this.sides[0].kiBlock, this.sides[1].kiBlock,
       this.sides[0].combo, this.sides[1].combo, this.callouts, this.clash, this.training.root,
       this.bc.panel, this.bc.ticker);
@@ -93,6 +124,7 @@ export class HudScreen extends BaseScreen {
     this.session = session;
     const st = session.state;
     this.chars = [st.fighters[0].char, st.fighters[1].char];
+    this.realmChars = [!!this.hasRealm(this.chars[0]), !!this.hasRealm(this.chars[1])];
     const cpu1 = session.mode === 'arcade';
     for (const p of [0, 1] as const) {
       const id = this.chars[p];
@@ -113,11 +145,17 @@ export class HudScreen extends BaseScreen {
     this.comboShow.forEach((c) => { c.hits = 0; c.hold = 0; });
     this.callouts.replaceChildren();
     this.clash.classList.remove('on');
+    this.el.classList.remove('realm-cine');
+    this.realmTag.classList.remove('on');
+    this.el.querySelectorAll('.realm-card').forEach((n) => n.remove());
+    this.hpShake = [0, 0];
     this.el.classList.toggle('training', session.mode === 'training');
     this.training.begin(session);
     this.bc.setEnabled(this.app.settings.data.broadcast);
     this.bc.begin(this.chars, session.mode);
   }
+
+  private hasRealm(id: CharId): boolean { try { return !!getChar(id).realmId; } catch { return false; } }
 
   private set(key: string, el: HTMLElement, v: string | number, prop: 'text' | 'scale' | 'class', cls?: string): void {
     if (this.cache[key] === v) return;
@@ -142,6 +180,12 @@ export class HudScreen extends BaseScreen {
       const target = Math.max(hp, Math.min(1, f.redHp / f.maxHp));
       // delayed trail
       if (hp < this.lastHp[p] - 0.0005) this.hold[p] = 0.55;
+      if (hp < this.lastHp[p] - 0.07 && this.hpShake[p] <= 0) {
+        // big hit: shake + flash the bar (restart the CSS animation)
+        s.hp.classList.remove('shake'); void s.hp.offsetWidth; s.hp.classList.add('shake');
+        this.hpShake[p] = 0.3;
+      }
+      if (this.hpShake[p] > 0) this.hpShake[p] -= dt;
       this.lastHp[p] = hp;
       if (target >= this.trail[p]) this.trail[p] = target;
       else if (this.hold[p] > 0) this.hold[p] -= dt;
@@ -163,6 +207,24 @@ export class HudScreen extends BaseScreen {
       this.set(k + 'awa', s.awk, f.awakened ? 1 : 0, 'class', 'active');
       this.set(k + 'awu', s.awk, f.awakenUsed && !f.awakened ? 1 : 0, 'class', 'used');
       this.set(k + 'awt', s.awkTxt, f.awakened ? Math.ceil(f.awakenTimer / 60) + 's' : '', 'text');
+      // ---- crossover: form chip, Infinity shimmer, Soul Realm ready glow
+      let form = f.form ?? '';
+      let fm = FORMS[form];
+      if (!fm && f.awakened && f.char === 'zoro') fm = { t: 'ASURA', c: '#ff4a2e' };
+      let label = fm ? fm.t : '';
+      if (fm && f.char === 'zoro' && f.awakened && form) label += ' · ASURA';
+      if (form === 'titan' && f.sim?.formTimer) label += ' ' + Math.ceil(f.sim.formTimer / 60) + 's';
+      this.set(k + 'chipv', s.chip, label ? 1 : 0, 'class', 'show');
+      if (label) {
+        this.set(k + 'chipt', s.chipTxt, label, 'text');
+        if (this.cache[k + 'chipc'] !== fm!.c) { this.cache[k + 'chipc'] = fm!.c; s.chip.style.setProperty('--fc', fm!.c); }
+        if (this.cache[k + 'chipf'] !== form) { this.cache[k + 'chipf'] = form; s.chip.classList.remove('pop'); void s.chip.offsetWidth; s.chip.classList.add('pop'); }
+      }
+      this.set(k + 'inf', s.inf, f.char === 'gojo' && (f.infinity ?? 0) > 0 && f.hp > 0 ? 1 : 0, 'class', 'on');
+      const hasRealm = !!this.realmChars[p];
+      const soulReady = hasRealm && f.awakened && f.ki >= 300 && !f.sim?.realmUsed && !st.realm;
+      this.set(k + 'soul', s.soul, soulReady ? 1 : 0, 'class', 'on');
+      this.set(k + 'soulk', s.kiBlock, soulReady ? 1 : 0, 'class', 'soulready');
       // pips
       for (let i = 0; i < s.pips.children.length; i++) {
         (s.pips.children[i] as HTMLElement).classList.toggle('on', i < f.wins);
@@ -183,13 +245,44 @@ export class HudScreen extends BaseScreen {
     // clash
     const c = st.clash;
     this.set('clash', this.clash, c.active ? 1 : 0, 'class', 'on');
+    const ck = c.active ? (c.kind === 'realm' ? 'realm' : 'beam') : '';
+    if (ck && ck !== this.lastClashKind) {
+      this.lastClashKind = ck;
+      this.clashT.textContent = ck === 'realm' ? 'REALM CLASH! MASH!' : 'CLASH! MASH!';
+      this.clash.classList.toggle('realm', ck === 'realm');
+    } else if (!ck) this.lastClashKind = '';
     if (c.active) {
       this.clashMark.style.left = `${Math.min(100, Math.max(0, (c.balance + 1000) / 20))}%`;
       this.set('cm0', this.clashP1, c.mash[0], 'text');
       this.set('cm1', this.clashP2, c.mash[1], 'text');
     }
+    // realm: letterbox bars during the cinematic, small tag with the countdown while the rule twist runs
+    const rl = st.realm ?? null;
+    this.set('rcine', this.el, rl && rl.phase === 'cine' ? 1 : 0, 'class', 'realm-cine');
+    this.set('rtag', this.realmTag, rl && rl.phase === 'active' ? 1 : 0, 'class', 'on');
+    if (rl) {
+      const rm = realmOfKind(rl.kind);
+      if (rm) {
+        this.realmTag.style.setProperty('--rc', rm.color);
+        this.set('rtagn', this.realmTagTxt, rl.phase === 'active' ? `${rm.name}  ${Math.max(0, Math.ceil((rl.duration - rl.frame) / 60))}s` : rm.name, 'text');
+      }
+    }
     this.training.update(session);
     this.bc.update(dt, st);
+  }
+
+  /** big brush-ink realm title card: "DOMAIN EXPANSION - INFINITE VOID" */
+  realmCard(kind: string, owner: 0 | 1): void {
+    const rm = realmOfKind(kind);
+    if (!rm) return;
+    this.el.querySelectorAll('.realm-card').forEach((n) => n.remove());
+    const card = h('div', { class: 'realm-card r' + (owner + 1), style: `--rc:${rm.color}` },
+      h('div', { class: 'rc-jp' }, rm.jp),
+      h('div', { class: 'rc-ink', html: INK }),
+      h('div', { class: 'rc-txt' }, h('small', null, rm.kicker), h('b', null, rm.name), h('em', null, charName(this.chars[owner]).toUpperCase())));
+    this.el.appendChild(card);
+    card.addEventListener('animationend', (e) => { if ((e.target as HTMLElement) === card && (e as AnimationEvent).animationName === 'rc-life') card.remove(); });
+    window.setTimeout(() => card.remove(), 4200);
   }
 
   // ------------------------------------------------------------ callouts
@@ -229,7 +322,14 @@ export class HudScreen extends BaseScreen {
         }
         case 'awaken': this.callout('AWAKENING!', 'big awaken', e.charId ? META[e.charId].color : META[st.fighters[e.player].char].color); break;
         case 'ultimateStart': this.callout('ULTIMATE', 'mini ultimate ' + (e.player === 0 ? 'l' : 'r'), META[st.fighters[e.player].char].color); break;
-        case 'clashStart': this.callout('CLASH! MASH!', 'big clash'); break;
+        case 'clashStart': this.callout(e.tag === 'realm' ? 'REALM CLASH!' : 'CLASH! MASH!', 'big clash' + (e.tag === 'realm' ? ' realm' : '')); break;
+        case 'realmStart': this.realmCard(e.tag ?? '', e.player); break;
+        case 'infinityBlock': this.callout(e.tag === 'infinity' ? 'INFINITY' : 'SIX EYES', 'mini infinity ' + (e.player === 0 ? 'l' : 'r'), '#7cc4ff'); break;
+        case 'formChange': {
+          const fm = FORMS[e.tag ?? ''];
+          if (fm && e.tag !== 'santoryu' && e.tag !== 'ittoryu' && e.tag !== 'nitoryu') this.callout(fm.t + '!', 'big form', fm.c);
+          break;
+        }
         default: break;
       }
     }

@@ -61,10 +61,23 @@ export class UI {
     const visible = new Set(this.stack.slice(Math.max(0, first)));
     const top = this.top();
     for (const [name, s] of this.screens) {
-      s.el.classList.toggle('on', visible.has(name));
+      const was = s.el.classList.contains('on');
+      const on = visible.has(name);
+      if (was && !on) this.leave(s.el);
+      else if (on) s.el.classList.remove('leaving');
+      s.el.classList.toggle('on', on);
       s.el.classList.toggle('top', name === top);
     }
   }
+
+  /** keep a screen visible for one short exit transition (CSS .leaving), then hide it */
+  private leave(el: HTMLElement): void {
+    el.classList.add('leaving');
+    const t = this.leaveT.get(el);
+    if (t) clearTimeout(t);
+    this.leaveT.set(el, window.setTimeout(() => { el.classList.remove('leaving'); this.leaveT.delete(el); }, 260));
+  }
+  private leaveT = new Map<HTMLElement, number>();
 
   handleMenu(a: MenuAction, slot: 0 | 1): void {
     const t = this.top();

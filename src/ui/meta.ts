@@ -1,4 +1,6 @@
 import { getChar } from '../sim';
+import { getLoadedCharacter } from '../render/fighter/assets';
+import { ALL_CHARS, CROSSOVER_CHARS } from '../sim/types';
 import type { CharId, StageId } from '../sim/types';
 import { h } from './dom';
 
@@ -62,12 +64,45 @@ export const ULT_DESC: Record<CharId, string> = {
   shiori: 'Vanishes into a moonless void and carves twelve shadow slashes before anyone can blink.',
   ren: 'One sheathed breath, a thousand petals. A single draw cuts through everything in front of him.',
   goro: 'Grabs the opponent, leaps into the sky and returns as a falling mountain. Please clap.',
-  gojo: 'Merges Blue and Red into Hollow Purple: an imaginary mass that erases everything in its path. Awakened with 3 bars: Domain Expansion, Infinite Void.',
-  naruto: 'Calls a crowd of shadow clones for a Rasengan barrage. Awakened with 3 bars: the Tailed Beast Bomb levels the arena.',
-  zoro: 'Nine swords, three heads, one demon: Asura Ichibugin. Awakened with 3 bars: King of Hell, where even blocked slashes cut.',
-  luffy: 'Gear Fourth\'s King Kong Gun: a fist the size of a house. Awakened with 3 bars: Gear Fifth, the most ridiculous power in the world.',
-  eren: 'Hardened Titan smash that cracks the arena floor. Awakened with 3 bars: the Paths, where an army of Titans marches on the opponent.',
+  gojo: 'Merges Blue and Red into Hollow Purple: an imaginary mass that erases everything in its path.',
+  naruto: 'Calls a crowd of shadow clones for a Rasengan barrage that launches the opponent skyward.',
+  zoro: 'Nine swords, three heads, one demon: Asura Ichibugin. A slash for every head.',
+  luffy: 'Gear Fourth\'s King Kong Gun: a fist the size of a house.',
+  eren: 'A barrage of ODM blade cuts to the nape. Awakened: Hardened Titan Smash cracks the floor.',
 };
+// ---------------------------------------------------------------- Soul Realms (select info panel, HUD title card, move list)
+export interface RealmMeta {
+  kind: string;
+  /** small line above the name on the title card */
+  kicker: string;
+  name: string;
+  /** big brush kanji behind the name */
+  jp: string;
+  /** one-line rule twist */
+  desc: string;
+  color: string;
+}
+export const REALM: Partial<Record<CharId, RealmMeta>> = {
+  gojo: { kind: 'infinite_void', kicker: 'DOMAIN EXPANSION', name: 'INFINITE VOID', jp: '無量空処', color: '#7cc4ff', desc: 'Freezes the opponent in a flood of information. Your damage is capped at 35% of their HP.' },
+  naruto: { kind: 'tailed_beast_bomb', kicker: 'NINE-TAILS LINK', name: 'TAILED BEAST BOMB', jp: '尾獣玉', color: '#ff9a2a', desc: 'An unblockable arena blast, then shadow clones keep joining the fight.' },
+  zoro: { kind: 'king_of_hell', kicker: 'ASURA UNSHEATHED', name: 'KING OF HELL', jp: '閻魔', color: '#4ae07a', desc: 'Blocked slashes still cut, and their guard drains twice as fast.' },
+  luffy: { kind: 'gear_fifth', kicker: 'THE SUN GOD AWAKENS', name: 'GEAR FIFTH', jp: '五', color: '#ffffff', desc: 'Cartoon physics: floaty juggles and extra floor bounces.' },
+  eren: { kind: 'paths', kicker: 'THE RUMBLING', name: 'THE PATHS', jp: '道', color: '#b8d96a', desc: 'A Titan army stomps the floor every second. Crouch or jump it.' },
+};
+export function realmOfKind(kind: string): RealmMeta | undefined {
+  for (const id of CROSSOVER_CHARS) if (REALM[id]?.kind === kind) return REALM[id];
+  return undefined;
+}
+
+/** Passive / form notes shown on top of a crossover fighter's move list */
+export const KIT_NOTES: Partial<Record<CharId, string[]>> = {
+  gojo: ['INFINITY: slows enemy projectiles near him and auto-guards the first hit each round (the ∞ icon under your health bar).', 'SIX EYES (awakened): Ki x2, reads one teleport, next strike is auto-guarded.', 'BLINK costs 50 Ki. Hold the ultimate input with 3 Ki bars awake for INFINITE VOID.'],
+  naruto: ['SHADOW CLONES (4S / 214S): up to 2 clones flank the opponent and copy your next attack at 40% damage. Any hit dispels them.', 'SAGE MODE (awakened). Under 20% HP: NINE-TAILS chakra mode, faster, with Kurama moves.', 'CLONE RUSH needs a clone out. With 3 Ki bars awake: TAILED BEAST BOMB.'],
+  zoro: ['TAP S (5S) to cycle SANTORYU, ITTORYU and NITORYU. Only the H strings change.', 'ASURA (awakened): every slash hits twice.', 'With 3 Ki bars awake: KING OF HELL.'],
+  luffy: ['Longest normals in the game. Slightly slower startup.', 'GEAR SECOND (awakened), GEAR FOURTH below 20% HP, with armored Kong Gun and Leo Bazooka.', 'With 3 Ki bars awake: GEAR FIFTH.'],
+  eren: ['TITAN SHIFT (awakened): 10 seconds as the Attack Titan. Huge, armored, slow, takes 75% damage.', 'Thunder Spear flies harmless, then detonates. Hardened Fist is a counter stance.', 'With 3 Ki bars awake: THE PATHS.'],
+};
+
 export function ultName(id: CharId): string {
   try {
     const c = getChar(id);
@@ -109,7 +144,13 @@ let snapFn: ((id: CharId, size: number) => string) | null = null;
 const snapCache = new Map<string, string>();
 export function setPortraitSource(fn: ((id: CharId, size: number) => string) | null): void { snapFn = fn; }
 
+/** true if the fighter has no real model yet (grey mannequin stand-in): then the card shows a stylized silhouette instead */
+export function isMannequin(id: CharId): boolean {
+  try { return !!(getLoadedCharacter(id, 2048) ?? getLoadedCharacter(id, 1024))?.mannequin; } catch { return false; }
+}
+
 export function portraitUrl(id: CharId, size = 256): string {
+  if (isMannequin(id)) return '';
   const key = id + size;
   const c = snapCache.get(key);
   if (c) return c;
@@ -128,6 +169,7 @@ export function fillPortrait(el: HTMLElement, id: CharId, size = 256): void {
   el.dataset.id = id;
   el.dataset.size = String(size);
   el.style.setProperty('--c', charColor(id));
+  el.classList.toggle('xo', CROSSOVER_CHARS.includes(id));
   const k = el.querySelector('.kanji');
   if (k) k.textContent = META[id].kanji;
   const img = el.querySelector('img') as HTMLImageElement | null;
@@ -148,6 +190,11 @@ export function refreshPortraits(): void {
   document.querySelectorAll<HTMLElement>('.portrait[data-id]:not(.has)').forEach((el) => {
     fillPortrait(el, el.dataset.id as CharId, Number(el.dataset.size) || 256);
   });
+}
+
+export function cardOrder(): (CharId | 'random')[] {
+  const base = ALL_CHARS.filter((c) => !CROSSOVER_CHARS.includes(c));
+  return [...base, 'random', ...ALL_CHARS.filter((c) => CROSSOVER_CHARS.includes(c))];
 }
 
 export function stars(n: number, max = 5): HTMLElement {

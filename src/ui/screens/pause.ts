@@ -5,7 +5,7 @@ import { getChar } from '../../sim';
 import { DUMMY_LABEL, DUMMY_MODES } from '../../app/session';
 import { h, sfx } from '../dom';
 import { BaseScreen, mbtn } from './base';
-import { META, charName } from '../meta';
+import { KIT_NOTES, META, REALM, charName } from '../meta';
 
 // ------------------------------------------------------------------ pause
 interface PRow { label: () => string; act: () => void; side?: (d: -1 | 1) => void; cls?: string }
@@ -76,6 +76,7 @@ function notate(s: string): string {
   return out.replace(/([←-↙·])(?=[A-Za-z])/g, '$1 ');
 }
 const sgn = (n: number) => (n > 0 ? '+' + n : String(n));
+const m2o = (k: string, o: Record<string, number>): number => (k === 'realm' ? 6 : o[k] ?? 9);
 
 export class MoveListScreen extends BaseScreen {
   private tabs: HTMLElement; private body: HTMLElement; private scroller: HTMLElement;
@@ -110,20 +111,44 @@ export class MoveListScreen extends BaseScreen {
     if (!moves.length) { this.body.replaceChildren(h('div', { class: 'ml-empty' }, 'Move data is still loading. Try again once the fighting engine is ready.')); return; }
     const easy = this.schemes[this.tab] === 'easy';
     const order: Record<string, number> = { universal: 0, normal: 1, throw: 2, special: 3, ki: 4, ultimate: 5 };
-    const sorted = [...moves].sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+    const SEC: Record<string, string> = { universal: 'SYSTEM', normal: 'NORMALS', throw: 'THROWS', special: 'SPECIALS', ki: 'KI MOVES', ultimate: 'ULTIMATE', realm: 'SOUL REALM' };
+    const ch = getChar(id);
+    const ult = ch.moves.find((x) => x.id === ch.ultimateId);
+    const secOf = (m: MoveDef): string => (m.realm ? 'realm' : m.kind);
+    const shown = moves.filter((m) => !m.internal || m.realm);
+    const sorted = [...shown].sort((a, b) => (m2o(secOf(a), order)) - (m2o(secOf(b), order)));
     const head = h('div', { class: 'ml-row head' }, h('span', null, 'MOVE'), h('span', null, 'INPUT'), h('span', null, 'TYPE'), h('span', null, 'DMG'), h('span', null, 'START'), h('span', null, 'BLOCK*'));
-    const rows = sorted.map((m) => {
-      const inp = easy && m.easyInput ? m.easyInput : m.input;
+    const out: HTMLElement[] = [];
+    const notes = KIT_NOTES[id];
+    if (notes) {
+      const rm = REALM[id];
+      out.push(h('div', { class: 'ml-kit', style: `--c:${META[id].color}` },
+        h('b', null, 'KIT'), ...notes.map((n) => h('p', null, n)),
+        rm ? h('p', { class: 'ml-realm', style: `--rc:${rm.color}` }, h('i', null, rm.name), ' ' + rm.desc) : null));
+    }
+    out.push(head);
+    let lastSec = '';
+    sorted.forEach((m) => {
+      const sec = secOf(m);
+      if (notes && sec !== lastSec) { lastSec = sec; out.push(h('div', { class: 'ml-sec' }, SEC[sec] ?? sec.toUpperCase())); }
+      let inp = easy && m.easyInput ? m.easyInput : m.input;
+      let alt: string | null = !easy && m.easyInput ? 'easy ' + notate(m.easyInput) : null;
+      if (m.realm && ult) { inp = easy ? (ult.easyInput || 'Ult') : ult.input; alt = 'awakened + 3 Ki'; }
       const blk = m.blockstun - m.recovery - (m.active - 1);
-      return h('div', { class: 'ml-row k-' + m.kind },
-        h('span', { class: 'mv' }, m.name),
-        h('span', { class: 'in' }, notate(inp), !easy && m.easyInput ? h('small', null, 'easy ' + notate(m.easyInput)) : null),
-        h('span', { class: 'ty' }, m.kind),
-        h('span', null, String(m.damage)),
+      const tags: HTMLElement[] = [];
+      if (m.needForm) tags.push(h('i', { class: 'ml-tag' }, m.needForm.toUpperCase()));
+      if (m.requires === 'awakened') tags.push(h('i', { class: 'ml-tag aw' }, 'AWAKENED'));
+      else if (m.requires === 'air') tags.push(h('i', { class: 'ml-tag' }, 'AIR'));
+      if (m.kiCost) tags.push(h('i', { class: 'ml-tag ki' }, Math.round(m.kiCost / 100 * 10) / 10 + ' KI'));
+      out.push(h('div', { class: 'ml-row k-' + (m.realm ? 'ultimate' : m.kind) },
+        h('span', { class: 'mv' }, m.name, ...tags),
+        h('span', { class: 'in' }, inp ? notate(inp) : 'AUTO', alt ? h('small', null, alt) : null),
+        h('span', { class: 'ty' }, m.realm ? 'realm' : m.kind),
+        h('span', null, m.realm ? '-' : String(m.damage)),
         h('span', null, m.startup + 'f'),
-        h('span', { class: blk >= 0 ? 'pos' : 'neg' }, sgn(blk)));
+        m.realm ? h('span', null, '-') : h('span', { class: blk >= 0 ? 'pos' : 'neg' }, sgn(blk))));
     });
-    this.body.replaceChildren(head, ...rows);
+    this.body.replaceChildren(...out);
   }
   onMenu(a: MenuAction): void {
     if (a === 'back' || a === 'confirm') { sfx('back'); this.app.ui.pop(); return; }

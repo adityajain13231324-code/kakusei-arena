@@ -1,14 +1,18 @@
 import type { AppApi, Mode } from '../../app/api';
 import type { Difficulty } from '../../ai';
 import type { MenuAction } from '../../input';
-import { ALL_CHARS, ALL_STAGES } from '../../sim/types';
+import { ALL_CHARS, ALL_STAGES, CROSSOVER_CHARS } from '../../sim/types';
 import type { CharId, ControlScheme, StageId } from '../../sim/types';
 import { h, sfx } from '../dom';
 import { BaseScreen } from './base';
-import { CHAPTER2, META, STAGES, ULT_DESC, charName, charTitle, portraitEl, refreshPortraits, ultName } from '../meta';
+import { CHAPTER2, META, REALM, STAGES, ULT_DESC, cardOrder, charTitle, portraitEl, refreshPortraits, ultName } from '../meta';
 import { ICON_GLOBE, ICON_LOCK, audioTools } from '../widgets';
 
-const RANDOM = 4;
+/** visual order: CHAPTER 1 originals + RANDOM, then the CROSSOVER row (5 columns each) */
+const ORDER = cardOrder();
+const RANDOM = ORDER.indexOf('random');
+const COLS = 5;
+const cardOf = (id: CharId): number => Math.max(0, ORDER.indexOf(id));
 const SIL =
   '<svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMax meet"><path d="M50 14c-12 0-20 9-20 22 0 8 3 14 8 18-14 4-26 12-28 30l-2 36h84l-2-36c-2-18-14-26-28-30 5-4 8-10 8-18 0-13-8-22-20-22z" /></svg>';
 const DIFFS: { id: Difficulty; name: string }[] = [
@@ -18,7 +22,8 @@ type Zone = 'tabs' | 'grid' | 'chips' | 'btns';
 const ZONES: Zone[] = ['tabs', 'grid', 'chips', 'btns'];
 
 interface Info {
-  root: HTMLElement; tag: HTMLElement; name: HTMLElement; title: HTMLElement; ult: HTMLElement; desc: HTMLElement;
+  root: HTMLElement; tag: HTMLElement; name: HTMLElement; title: HTMLElement; tags: HTMLElement; ult: HTMLElement; desc: HTMLElement;
+  realm: HTMLElement; realmName: HTMLElement; realmDesc: HTMLElement;
   scheme: HTMLElement; lock: HTMLElement; rnd: HTMLElement;
 }
 
@@ -67,20 +72,23 @@ export class CharSelectScreen extends BaseScreen {
       return t;
     };
     const tabsRow = h('div', { class: 'cx-tabs' }, mkTab(0), mkTab(1));
-    // ---- chapter 1 grid
+    // ---- chapter 1 grid (originals + RANDOM) and the CROSSOVER row
     const grid = h('div', { class: 'cx-grid' });
-    for (let i = 0; i <= RANDOM; i++) {
-      const isR = i === RANDOM;
-      const card = h('button', { class: 'cx-card' + (isR ? ' random' : ''), type: 'button', style: isR ? '--c:#ffffff' : `--c:${META[ALL_CHARS[i]].color}` });
+    const gridX = h('div', { class: 'cx-grid xo' });
+    ORDER.forEach((slot, i) => {
+      const isR = slot === 'random';
+      const xo = !isR && CROSSOVER_CHARS.includes(slot);
+      const card = h('button', { class: 'cx-card stg' + (isR ? ' random' : '') + (xo ? ' xo' : ''), type: 'button', style: `--c:${isR ? '#ffffff' : META[slot].color};--i:${i}` });
       if (isR) card.append(h('div', { class: 'portrait rnd' }, h('span', { class: 'q' }, '?')));
-      else card.append(portraitEl(ALL_CHARS[i], '', 256));
-      card.append(h('div', { class: 'cx-nm' }, isR ? 'RANDOM' : META[ALL_CHARS[i]].given),
+      else card.append(portraitEl(slot, '', 256));
+      card.append(h('div', { class: 'cx-nm' }, isR ? 'RANDOM' : META[slot].given),
         h('span', { class: 'cx-tag t1' }, '1P'), h('span', { class: 'cx-tag t2' }, 'CPU'));
+      if (xo) card.append(h('span', { class: 'cx-xo' }, 'X'));
       card.addEventListener('pointerenter', (e) => { if ((e as PointerEvent).pointerType !== 'touch') this.hover(i); });
       card.addEventListener('click', () => this.click(i));
-      grid.appendChild(card);
+      (xo ? gridX : grid).appendChild(card);
       this.cards.push(card);
-    }
+    });
     // ---- chapter 2 (locked)
     const grid2 = h('div', { class: 'cx-grid two' });
     CHAPTER2.forEach((f, i) => {
@@ -116,6 +124,7 @@ export class CharSelectScreen extends BaseScreen {
     this.fightBtn.addEventListener('click', () => { if (this.finishing) return; this.fight(); });
     const panel = h('div', { class: 'cx-panel' }, tabsRow,
       h('div', { class: 'cx-chap' }, h('div', { class: 'cx-chap-h' }, h('b', null, 'CHAPTER 1'), ' · AWAKENING'), grid),
+      h('div', { class: 'cx-chap xo' }, h('div', { class: 'cx-chap-h' }, h('b', null, 'CROSSOVER'), ' · LEGENDS COLLIDE'), gridX),
       h('div', { class: 'cx-chap two' }, h('div', { class: 'cx-chap-h' }, h('b', null, 'CHAPTER 2'), ' · COMING SOON'), grid2),
       this.chipsRow, h('div', { class: 'cx-btns' }, this.friendBtn, this.fightBtn));
     this.info = [this.makeInfo(0), this.makeInfo(1)];
@@ -126,14 +135,17 @@ export class CharSelectScreen extends BaseScreen {
     const tag = h('div', { class: 'ci-tag' });
     const name = h('div', { class: 'ci-name' }), title = h('div', { class: 'ci-title' });
     const ult = h('div', { class: 'ci-ult' }), desc = h('p', { class: 'ci-desc' });
+    const tags = h('div', { class: 'ci-tags' });
+    const realmName = h('b', null), realmDesc = h('span', null);
+    const realm = h('div', { class: 'ci-realm' }, h('small', null, 'SOUL REALM'), realmName, realmDesc);
     const rnd = h('span', { class: 'ci-rnd' }, 'RANDOM');
     const mkSeg = (v: ControlScheme) => h('button', { class: 'seg', type: 'button', 'data-v': v }, v.toUpperCase());
     const e = mkSeg('easy'), pr = mkSeg('pro');
     const scheme = h('div', { class: 'ci-scheme' }, h('small', null, 'CONTROLS'), e, pr);
     for (const b of [e, pr]) b.addEventListener('click', () => this.setScheme(p, b.getAttribute('data-v') as ControlScheme));
     const lock = h('div', { class: 'ci-lock' }, 'LOCKED IN');
-    const root = h('div', { class: 'cx-info p' + (p + 1) }, tag, name, rnd, title, ult, desc, scheme, lock);
-    return { root, tag, name, title, ult, desc, scheme, lock, rnd };
+    const root = h('div', { class: 'cx-info p' + (p + 1) }, tag, name, rnd, title, tags, ult, desc, realm, scheme, lock);
+    return { root, tag, name, title, tags, ult, desc, realm, realmName, realmDesc, scheme, lock, rnd };
   }
 
   // ------------------------------------------------------------ lifecycle
@@ -145,9 +157,9 @@ export class CharSelectScreen extends BaseScreen {
     this.locked = [false, false];
     this.finishing = false;
     this.active = 0;
-    this.cursor = [Math.max(0, ALL_CHARS.indexOf(f.p1)), Math.max(0, ALL_CHARS.indexOf(f.p2))];
-    if (this.cursor[0] === this.cursor[1]) this.cursor[1] = (this.cursor[0] + 1) % 4;
-    this.rolled = [ALL_CHARS[this.cursor[0]], ALL_CHARS[this.cursor[1]]];
+    this.cursor = [cardOf(f.p1), cardOf(f.p2)];
+    if (this.cursor[0] === this.cursor[1]) this.cursor[1] = this.cursor[0] === 0 ? 1 : 0;
+    this.rolled = [this.id(0), this.id(1)];
     this.schemes = [...this.app.settings.data.scheme];
     this.app.input.setVersus(this.mode === 'versus');
     this.stageIds = ALL_STAGES.filter((s) => this.mode === 'training' || s !== 'training');
@@ -170,11 +182,16 @@ export class CharSelectScreen extends BaseScreen {
     refreshPortraits();
     this.refresh();
     this.paintFocus();
+    this.reveal();
+  }
+  /** staggered card reveal (CSS animation restarts when the class is re-added) */
+  private reveal(): void {
+    this.el.classList.remove('reveal'); void this.el.offsetWidth; this.el.classList.add('reveal');
   }
   exit(): void { clearTimeout(this.timer); }
 
   // ------------------------------------------------------------ state helpers
-  private id(p: 0 | 1): CharId { const c = this.cursor[p]; return c === RANDOM ? this.rolled[p] : ALL_CHARS[c]; }
+  private id(p: 0 | 1): CharId { const c = this.cursor[p]; return c === RANDOM ? this.rolled[p] : ORDER[c] as CharId; }
   private roll(p: 0 | 1): void {
     const other = this.players === 2 ? this.id(1 - p as 0 | 1) : null;
     let c: CharId;
@@ -285,8 +302,14 @@ export class CharSelectScreen extends BaseScreen {
     const items = this.zoneItems(this.zone);
     const z = ZONES.indexOf(this.zone);
     switch (a) {
-      case 'up': if (z > 0) { this.zone = ZONES[z - 1]; this.entering(); sfx('move'); } break;
-      case 'down': if (z < ZONES.length - 1) { this.zone = ZONES[z + 1]; this.entering(); sfx('move'); } break;
+      case 'up':
+        if (this.zone === 'grid' && this.cursor[this.active] >= COLS) { this.setCursor(this.active, this.cursor[this.active] - COLS); sfx('move'); this.refresh(); }
+        else if (z > 0) { this.zone = ZONES[z - 1]; this.entering(); sfx('move'); }
+        break;
+      case 'down':
+        if (this.zone === 'grid' && this.cursor[this.active] < COLS) { this.setCursor(this.active, this.cursor[this.active] + COLS); sfx('move'); this.refresh(); }
+        else if (z < ZONES.length - 1) { this.zone = ZONES[z + 1]; this.entering(); sfx('move'); }
+        break;
       case 'left': case 'right': {
         const d = a === 'left' ? -1 : 1;
         if (this.zone === 'grid') {
@@ -333,8 +356,9 @@ export class CharSelectScreen extends BaseScreen {
     }
     if (this.locked[p]) return;
     switch (a) {
-      case 'left': this.setCursor(p, (this.cursor[p] + RANDOM) % (RANDOM + 1)); sfx('move'); break;
-      case 'right': this.setCursor(p, (this.cursor[p] + 1) % (RANDOM + 1)); sfx('move'); break;
+      case 'left': this.setCursor(p, (this.cursor[p] + ORDER.length - 1) % ORDER.length); sfx('move'); break;
+      case 'right': this.setCursor(p, (this.cursor[p] + 1) % ORDER.length); sfx('move'); break;
+      case 'down': this.setCursor(p, (this.cursor[p] + COLS) % ORDER.length); sfx('move'); break; // jump between the two rows
       case 'up': this.setScheme(p, this.schemes[p] === 'pro' ? 'easy' : 'pro'); return;
       case 'confirm': this.setActive(p, true); this.lock(p); return;
       default: return;
@@ -346,7 +370,7 @@ export class CharSelectScreen extends BaseScreen {
   // ------------------------------------------------------------ render
   private refresh(): void {
     const f = this.app.flow;
-    for (let i = 0; i <= RANDOM; i++) {
+    for (let i = 0; i < this.cards.length; i++) {
       const c = this.cards[i];
       const s1 = this.cursor[0] === i, s2 = this.cursor[1] === i;
       c.classList.toggle('s1', s1); c.classList.toggle('s2', s2);
@@ -369,6 +393,14 @@ export class CharSelectScreen extends BaseScreen {
       pn.title.textContent = charTitle(id);
       pn.ult.replaceChildren(h('b', null, 'ULTIMATE'), ' · ', ultName(id));
       pn.desc.textContent = ULT_DESC[id];
+      pn.tags.replaceChildren(...m.tags.map((t) => h('i', null, t)));
+      const rm = REALM[id];
+      pn.realm.style.display = rm ? '' : 'none';
+      if (rm) {
+        pn.realm.style.setProperty('--rc', rm.color);
+        pn.realmName.textContent = rm.name;
+        pn.realmDesc.textContent = rm.desc;
+      }
       const showScheme = p === 0 || this.mode === 'versus';
       pn.scheme.style.display = showScheme ? '' : 'none';
       pn.scheme.querySelectorAll('.seg').forEach((b) => b.classList.toggle('on', b.getAttribute('data-v') === this.schemes[p]));

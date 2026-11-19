@@ -1,12 +1,14 @@
 // Synthesised sound effects + state-driven loops (ki charge hum, beam clash roar).
 import type { Element, GameState, SimEvent, Strength } from '../sim/types';
 import { Engine } from './engine';
+import { XSfx } from './crossover';
 
 const LVL: Record<Strength, number> = { light: 0, medium: 1, heavy: 2, super: 3 };
 const EV_IDX: Record<string, number> = {};
 ['hit', 'block', 'counter', 'whiff', 'parry', 'throw', 'throwBreak', 'launch', 'wallSplat', 'groundBounce', 'land', 'knockdown',
   'projectile', 'projectileHit', 'projectileDestroy', 'kiCharge', 'kiFull', 'vanish', 'awaken', 'ultimateStart', 'ultimateHit',
-  'clashStart', 'clashEnd', 'sidestep', 'dash', 'jump', 'guardCrush', 'moveStart', 'roundStart', 'fight', 'ko', 'timeout', 'roundEnd', 'matchEnd']
+  'clashStart', 'clashEnd', 'sidestep', 'dash', 'jump', 'guardCrush', 'moveStart', 'roundStart', 'fight', 'ko', 'timeout', 'roundEnd', 'matchEnd',
+  'realmStart', 'realmEnd', 'realmClash', 'infinityBlock', 'formChange', 'summon', 'summonDispel']
   .forEach((k, i) => (EV_IDX[k] = i));
 
 interface Loop { g: GainNode; srcs: Array<OscillatorNode | AudioBufferSourceNode>; a?: OscillatorNode; f?: BiquadFilterNode; b?: OscillatorNode; lfo?: GainNode }
@@ -24,7 +26,8 @@ export class Sfx {
   private lastMashT = 0;
   private lastSpeak = '';
 
-  constructor(private e: Engine) {}
+  private x: XSfx;
+  constructor(private e: Engine) { this.x = new XSfx(e); }
 
   // ------------------------------------------------------------ small building blocks
   private wet(): AudioNode { return this.e.sfxWet; }
@@ -69,7 +72,7 @@ export class Sfx {
         e.noise(t, 0.08, { f0: 5000, q: 2, g: 0.2 * k });
         e.tone(t, 0.1, { type: 'square', f0: 3000, f1: 600, g: 0.06 * k });
         break;
-      default:
+      default: this.x.elem(t, el ?? 'none', k);
     }
   }
 
@@ -173,10 +176,18 @@ export class Sfx {
     const t = e.now + 0.003;
     const st = ev.strength ?? 'medium';
     const l = LVL[st];
-    const big = ev.type === 'ko' || ev.type === 'guardCrush' || ev.type === 'awaken' || ev.type === 'ultimateStart' || ev.type === 'ultimateHit' || ev.type === 'fight' || ev.type === 'roundStart';
+    const big = ev.type === 'ko' || ev.type === 'guardCrush' || ev.type === 'awaken' || ev.type === 'ultimateStart' || ev.type === 'ultimateHit' || ev.type === 'fight' || ev.type === 'roundStart' || ev.type === 'realmStart' || ev.type === 'realmClash' || ev.type === 'formChange';
+    if (ev.type === 'moveStart') {
+      if (!XSfx.has(ev.moveId ?? '') || !e.claim(0.5)) return;
+      this.x.move(t, ev.moveId ?? '');
+      return;
+    }
     if (!e.claim(ev.type === 'ko' ? 2 : 0.4, big || ev.type === 'counter')) return;
     switch (ev.type) {
-      case 'hit': if (ev.tag === 'otg') this.otg(t); else this.hit(t, st, ev.element, false); break;
+      case 'hit':
+        if (ev.tag === 'otg') this.otg(t);
+        else { this.hit(t, st, ev.element, false); if (ev.tag === 'realm') this.x.realmHit(t); }
+        break;
       case 'guardCrush': this.guardCrush(t); break;
       case 'counter': this.hit(t, st, ev.element, true); break;
       case 'block': this.block(t, l); break;
@@ -241,6 +252,7 @@ export class Sfx {
         e.noise(t, 0.7, { ft: 'bandpass', f0: 300, f1: 5000, q: 0.7, g: 0.4, a: 0.35, dest: this.wet() });
         this.chord(t, [60, 64, 67, 72], 1.4, 0.07, 400, 6000);
         e.tone(t, 0.8, { f0: 80, f1: 160, g: 0.35, type: 'sawtooth', lp: 500 });
+        if (ev.moveId === 'gojo_ult' || ev.moveId === 'gojo_ult_aw') this.x.hollowSwell(t);
         e.duckMusic(0.3, 2.6, 0.8);
         break;
       case 'ultimateHit':
@@ -287,12 +299,22 @@ export class Sfx {
       case 'matchEnd':
         e.tone(t, 1.5, { f0: 110, f1: 55, g: 0.5, dest: this.wet() });
         break;
+      // ---- crossover pack
+      case 'infinityBlock': this.x.infinity(t, ev.tag); break;
+      case 'formChange': this.x.form(t, ev.tag ?? ''); break;
+      case 'summon': this.x.summon(t); break;
+      case 'summonDispel': this.x.summonDispel(t, ev.tag); break;
+      case 'realmStart': this.x.realmStart(t, ev.tag ?? ''); break;
+      case 'realmClash': this.x.realmClash(t); break;
+      case 'realmEnd': this.x.realmEnd(t); break;
       default: break;
     }
   }
 
   private projectileLaunch(t: number, ev: SimEvent): void {
     const e = this.e;
+    if (ev.tag === 'detonate') { this.x.detonate(t); return; }
+    if (ev.tag && this.x.projectile(t, ev.tag)) return;
     const el = ev.element ?? 'none';
     const id = (ev.moveId ?? '').toLowerCase();
     if (el === 'fire' || id.includes('fire')) {
@@ -436,11 +458,17 @@ export class Sfx {
   }
 
   // ------------------------------------------------------------ UI
-  ui(s: 'move' | 'select' | 'back' | 'start' | 'error'): void {
+  private lastUi = 0;
+  ui(s: 'move' | 'select' | 'back' | 'start' | 'error' | 'hover' | 'press'): void {
     const e = this.e;
     if (!e.ready) return;
     const t = e.now + 0.002;
+    // tiny feedback sounds never pile up: at most one per 45 ms
+    if ((s === 'hover' || s === 'press') && t - this.lastUi < 0.045) return;
+    this.lastUi = t;
     switch (s) {
+      case 'hover': e.tone(t, 0.03, { type: 'sine', f0: 2100, f1: 2500, g: 0.035, a: 0.001 }); break;
+      case 'press': e.tone(t, 0.07, { type: 'triangle', f0: 190, f1: 95, g: 0.2, a: 0.001 }); e.click(t, 0.1); break;
       case 'move': e.tone(t, 0.04, { type: 'square', f0: 1400, g: 0.1 }); e.click(t, 0.1); break;
       case 'select':
         e.tone(t, 0.12, { type: 'square', f0: 880, g: 0.12 });
