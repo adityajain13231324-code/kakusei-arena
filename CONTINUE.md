@@ -50,6 +50,16 @@ Online dev without internet: open two tabs with `?net=local` (add `&lag=40&jitte
 - [ ] **T10 Deploy** to Vercel (static `dist/`). Test online with 2 real devices (one on mobile data). If players can't connect, add a TURN server per `docs/NETCODE.md`.
 - [ ] **T11 (later)** Known gaps: guard crush, wall/floor breaks into new stage zones, Shiori's shadow clone, clash stick-rotation mashing. New fighters (Mika, Lyra, Daichi, Aiko, Seraph-09, Koji, boss Oboro) follow the `src/data/chars/` pattern + a model in `tools/assets/`.
 
+
+## 5b. Work split (from 2026-11-19)
+**Claude track (code, on `main` via Claude's helpers):** §5 tasks T2–T9 — renderer polish, camera/lighting, stages + crowd, playtest + bug fixes, P1-side bias, feel + balance, perf, re-publish preview.
+
+**Astra track (assets only, branch `astra/assets-ch2`, never touch `src/`):**
+- [ ] A1 **Chapter 2 fighter models** with the same v2 pipeline + specs as the current 4 (`tools/assets/`, same bone names, file layout `public/characters/<id>/…`, 15–25k tris, awakened atlas, expression strip, previews). Order: **mika** (lightning speedster: blue-yellow track jacket, headphones round neck, electric-blue twin tails), **lyra** (spirit summoner: shrine-maiden-inspired ash-grey + teal outfit, paper charms in hair) **+ `kitsu.glb`** (her spectral fox, rigged: spine + 4 legs + 3 tail bones), **daichi** (cursed arm: bandaged sealed right arm, tired eyes, long coat, chain earrings), **aiko** (mecha inventor: oversized goggles, oil-stained overalls, robotic backpack arm), **seraph** (android: white-gold, segmented light-wing meshes on extra bones, visor), **koji** (delinquent: long school coat with original kanji-style patches, pompadour), **oboro** (boss demon king, 1.3× scale, horned armor + cape bones). Full looks: plan doc Section 7. All ORIGINAL — no resemblance to existing anime characters.
+- [ ] A2 **Stage prop pack v2** (`public/props/`, ≤5k tris each, toon flat colors, no real brands): rooftop (water tank, AC units, antenna, vending machine, neon frames, billboard frame), shrine (gate, lanterns, cherry trees, stone path tiles, offering box, bamboo fence), **new stage "Monsoon Market"** (spice stall with awning, chai stall, hanging string lights, wet street tiles, auto-rickshaw-style generic 3-wheeler, crates, railway platform bench).
+- [ ] A3 **Crowd spectator models** (3–4 low-poly stylized body types, ≤800 tris each, one atlas with color variants, simple rig: Hips/Spine/Head/Arms for a cheer motion).
+Each item: previews in `public/characters/previews/` or `public/props/previews/`, update the README/manifest, commit on `astra/assets-ch2`, PR into `main` when A1 (mika + lyra) is done.
+
 ## 6. Module map
 | Folder | What |
 |---|---|
