@@ -34,7 +34,7 @@ Status: FIXED (re-tested), OPEN (owner has to act), NOTE (not a bug, environment
 
 | ID | Sev | Bug | Repro | Owner | Status |
 |---|---|---|---|---|---|
-| QA-20 | S2 | Training dummy **Jump** does not jump: it taps Up for 4 frames every 100 frames, which the sim treats as a **sidestep in** (CONTROLS.md: jump needs Up+6/4 or double-tap Up). | Training -> pause -> Dummy: JUMP, watch P2: pose `sideStep`, mode `sidestep`, it never leaves the ground. | `src/ai/dummy.ts` (e.g. Up, release, Up within 12 frames, or Up + Btn forward) | OPEN (ai owner) |
+| QA-20 | S2 | Training dummy **Jump** does not jump: it taps Up for 4 frames every 100 frames, which the sim treats as a **sidestep in** (CONTROLS.md: jump needs Up+6/4 or double-tap Up). | Training -> pause -> Dummy: JUMP, watch P2: pose `sideStep`, mode `sidestep`, it never leaves the ground. | `src/ai/dummy.ts` (e.g. Up, release, Up within 12 frames, or Up + Btn forward) | FIXED (lead: double-tap Up) |
 | QA-21 | S3 | Mirror-match P1-side advantage hinted at by AI tests (CONTINUE.md T6) was not investigated in this UI pass. | `npm run test:ai` mirror matches | `src/sim` (step / movement order) | OPEN (sim owner) |
 | QA-22 | S3 | Render canvas backing store is always 0.75 x the CSS size (633x292 for 844x390 at DPR 1, 960x540 at 1280x720, also on `medium`/`high`). Looks soft; presumably an intentional render scale. | Any match, compare `canvas.width` to `innerWidth`. | `src/render` | NOTE for render owner: confirm intended |
 | QA-23 | S3 | 3D stage sign ("KAKUSEI" banner) sits behind the top-left HUD name on 844x390 (pink letters under REN / TSUKISHIRO). Cosmetic. | 844x390, Rooftop, match start. | `src/render/stage` | OPEN (render owner, low) |
