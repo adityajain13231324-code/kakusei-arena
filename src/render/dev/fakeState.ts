@@ -31,7 +31,7 @@ export const DEMO_MOVES: Record<string, MoveDef> = {
   axe: mv('axe', [[0, 'axeKickUp'], [10, 'axeKickDown'], [20, 'axeKickDown'], [28, 'idle']], 30),
 };
 
-const MOVESETS: Record<CharId, string[]> = {
+const MOVESETS: Partial<Record<CharId, string[]>> = {
   kaito: ['jab', 'straight', 'hook', 'uppercut', 'highKick', 'axe', 'beam'],
   shiori: ['jab', 'midKick', 'kunai', 'roundhouse', 'sweep', 'spin'],
   ren: ['slash', 'quickDraw', 'slashUp', 'midKick', 'slash'],
@@ -85,7 +85,7 @@ export class DemoFight {
       } else if (this.timer[i] <= 0) {
         this.timer[i] = 30 + ((s.frame * 7 + i * 13) % 50);
         if ((s.frame + i) % 5 === 0) { setMode(f, 'sidestep', 'sideStep'); continue; }
-        const set = MOVESETS[f.char];
+        const set = MOVESETS[f.char] ?? ['jab', 'straight', 'midKick', 'sweep'];
         const id = set[this.idx[i]++ % set.length];
         f.moveId = id; f.moveFrame = 0; setMode(f, 'attack', 'idle');
       } else if (f.mode !== 'idle') setMode(f, 'idle', 'idle');

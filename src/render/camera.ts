@@ -41,6 +41,8 @@ export class FightCamera {
   readonly normal = new THREE.Vector3(0, 0, 1);
   /** camera x/z are kept inside ±bound (stage walls / props never block the view); 0 = off */
   bound = 0;
+  /** framing scale (>1 pulls back, e.g. while a fighter is in a giant form) */
+  zoom = 1;
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
@@ -83,8 +85,9 @@ export class FightCamera {
     const dist = Math.max(5.6, Math.min(13, Math.max(3.4 + sep * 0.85, needW)));
     const height = 1.38 + Math.min(0.22, sep * 0.03);
     const airY = Math.max(f0.y, f1.y);
-    _p.copy(_c).addScaledVector(_n, dist); _p.y = height + airY * 0.35;
-    _t.copy(_c); _t.y = 1.22 + airY * 0.45;
+    const z = this.zoom;
+    _p.copy(_c).addScaledVector(_n, dist * z); _p.y = height * (1 + (z - 1) * 0.8) + airY * 0.35;
+    _t.copy(_c); _t.y = 1.22 * (1 + (z - 1) * 0.9) + airY * 0.45;
     let omegaP = 7, omegaL = 9;
     let fov = 40, roll = 0;
     // ---- cinematics
@@ -142,6 +145,16 @@ export class FightCamera {
           _p.y = 0.9;
           _t.copy(other); _t.y = 0.6;
           omegaP = 3; omegaL = 5; fov = 38;
+          break;
+        }
+        case 'realm': {
+          // Soul Realm opening: slow rising orbit around the owner, wide lens
+          const ang = -0.9 + t * 0.5;
+          const r = 4.2 - Math.min(1, t / 1.5) * 1.0;
+          _p.copy(me).addScaledVector(_side, Math.cos(ang) * r).addScaledVector(_f, Math.sin(ang) * r);
+          _p.y = 0.6 + Math.min(1, t / 1.5) * 1.4;
+          _t.copy(me); _t.y = me.y + 1.3;
+          fov = 50; omegaP = 4; omegaL = 8;
           break;
         }
         case 'clash': {

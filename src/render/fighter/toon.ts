@@ -30,6 +30,8 @@ export interface FighterUniforms {
   uOutlineWidth: { value: number };
   /** Face_Expressions panel offset (glTF UV space), only read by the face material */
   uFaceOff: { value: THREE.Vector2 };
+  /** outline opacity (ghost copies) */
+  uOpacity: { value: number };
 }
 
 export function makeFighterUniforms(): FighterUniforms {
@@ -50,6 +52,7 @@ export function makeFighterUniforms(): FighterUniforms {
     uOutlineColor: { value: new THREE.Color('#120c14') },
     uOutlineWidth: { value: 0.0055 },
     uFaceOff: { value: new THREE.Vector2(0, 0) },
+    uOpacity: { value: 1 },
   };
 }
 
@@ -141,7 +144,7 @@ vec3 getGradientIrradiance( vec3 normal, vec3 lightDirection ) {
 export function makeFighterOutline(u: FighterUniforms): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     side: THREE.BackSide,
-    uniforms: { uOutlineColor: u.uOutlineColor, uOutlineWidth: u.uOutlineWidth },
+    uniforms: { uOutlineColor: u.uOutlineColor, uOutlineWidth: u.uOutlineWidth, uOpacity: u.uOpacity },
     vertexShader: /* glsl */`
       #include <common>
       #include <skinning_pars_vertex>
@@ -162,8 +165,9 @@ export function makeFighterOutline(u: FighterUniforms): THREE.ShaderMaterial {
       }`,
     fragmentShader: /* glsl */`
       uniform vec3 uOutlineColor;
+      uniform float uOpacity;
       void main() {
-        gl_FragColor = vec4( uOutlineColor, 1.0 );
+        gl_FragColor = vec4( uOutlineColor, uOpacity );
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,

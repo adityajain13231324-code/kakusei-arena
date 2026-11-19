@@ -31,7 +31,7 @@ Online dev without internet: open two tabs with `?net=local` (add `&lag=40&jitte
 3. **Contracts.** `src/sim/types.ts` is the shared contract: additive changes only (new optional fields), never rename/remove. Keep every exported signature in each module's `index.ts`.
 4. **Sim never imports three.js; renderer never changes game state.** VFX/audio/HUD react only to `state.events` + `state`.
 5. **Models.** Keep file names (`public/characters/<id>/model.glb`, `model_1024.glb`, `tex.png`, `tex_awakened.png`, `manifest.json`, `goro/shoulder_plates.glb`), Mixamo-style bone names, metres, Y-up, +Z forward, A-pose. Build source: `tools/assets/`.
-6. **IP.** Characters, names, logos and designs stay original. No real anime characters or lookalikes, no copyrighted music/art, no real brand names on props.
+6. **IP.** The base roster stays original. Exception: the owner-licensed **Crossover Pack** (gojo, naruto, zoro, luffy, eren — see docs/PLAN_V3.md / docs/CROSSOVER.md) for this private game: code kits, moves and effects are fine; their 3D models are supplied by the owner (until then the grey mannequin is used). No copyrighted music/art, no real brand names on props.
 7. **No runtime network assets** (everything bundled or procedural). Google Fonts link is the only external thing.
 8. **Performance budget:** 60 fps on an Intel Iris Xe laptop and a mid-range phone. ≤150 draw calls, ≤250k tris on screen, no per-frame allocations. Check with F1 debug overlay.
 9. **Small commits**, clear messages, one topic each. Before every push: `typecheck` + all three test suites + `build` pass, and you looked at the game running (screenshot).

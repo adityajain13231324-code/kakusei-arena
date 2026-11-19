@@ -15,16 +15,25 @@
  *    otherwise high on desktop / medium on touch devices. setQuality() changes everything else live.
  *  - While a menu scene is shown, call updateMenu(dt) every frame; render() draws the menu scene when no match
  *    is loaded.
+ *  - Any CharId works: fighters without public/characters/<id>/model.glb render as a grey mannequin
+ *    (public/characters/_mannequin/model.glb) with their palette accent as rim colour. Dropped-in models may use
+ *    Mixamo names (with or without the mixamorig prefix), A- or T-pose, centimetre armatures.
+ *  - Forms: while FighterState.form is set and characters/<id>/form_<form>.glb exists, that model replaces the
+ *    base one (camera pulls back for giant forms). setFormResolver / prewarmForm are optional hooks.
+ *  - Summons (state.summons) draw as translucent tinted copies of the owner's model.
+ *  - Realms: registerRealm(kind, builder) + state.realm.kind (or setRealm) cross-dissolve the stage into a realm
+ *    StageBuild; prewarmRealm builds/compiles it ahead of time.
  */
 import * as THREE from 'three';
 import type { GameState, Capsule, CharId, StageId, MoveDef, FighterState } from '../sim/types';
 import { ALL_CHARS } from '../sim/types';
 import { FighterView, type SocketName } from './fighter/FighterView';
-import { loadCharacter, getLoadedCharacter, disposeCharacterCache, type ModelRes, type CharAsset } from './fighter/assets';
+import { loadCharacter, loadForm, getLoadedCharacter, disposeCharacterCache, type ModelRes, type CharAsset } from './fighter/assets';
 import { charLook, resolvePalette } from './fighter/looks';
 import { FightCamera } from './camera';
 import { DebugBoxes } from './debug';
-import { buildStage, type StageBuild } from './stage';
+import { buildStage, getRealmBuilder, type StageBuild } from './stage';
+export { registerRealm, unregisterRealm, registeredRealms, type RealmBuilder } from './stage';
 import { blankFighter } from './util';
 import type { MoveLookup } from './anim/sampler';
 import { defaultMoveLookup } from './anim/sampler';
@@ -62,6 +71,24 @@ export class GameRenderer {
   private size = { w: 1280, h: 720 };
   private fcam: FightCamera;
   private views: [FighterView | null, FighterView | null] = [null, null];
+  /** alternate-form views per player (form_<name>.glb), built lazily; null entry = no such model */
+  private formViews: [Map<string, FighterView | null>, Map<string, FighterView | null>] = [new Map(), new Map()];
+  /** the view currently drawn per player (base or form) */
+  private active: [FighterView | null, FighterView | null] = [null, null];
+  private formOf: (f: FighterState) => string | null = (f) => {
+    const v = (f as FighterState & { form?: unknown }).form;
+    return typeof v === 'string' && v ? v : null;
+  };
+  /** summoned copies (e.g. shadow clones): pooled ghost views of the owner's model */
+  private clones: Array<{ view: FighterView; st: FighterState; char: CharId }> = [];
+  // realm takeover layer
+  private realmBuilds = new Map<string, StageBuild>();
+  private realmId: string | null = null;
+  private realmShown: StageBuild | null = null;
+  private realmK = 0;
+  private realmManual = false;
+  private baseFog = new THREE.Color();
+  private baseBg = new THREE.Color();
   private stage: StageBuild | null = null;
   private stageId: StageId | null = null;
   private stageHalf = 0;
@@ -106,7 +133,7 @@ export class GameRenderer {
     this.applyQualityToLights();
     this.camera.position.set(0, 1.5, 6);
     this.camera.lookAt(0, 1.1, 0);
-    // warm the cache: every fighter at the current resolution
+    // warm the cache: every fighter id the sim knows (read dynamically; fighters without a model share the mannequin)
     for (const c of ALL_CHARS) loadCharacter(c, this.res()).catch((e) => console.warn('[render] preload failed', c, e));
   }
 
@@ -126,13 +153,15 @@ export class GameRenderer {
   private setStage(id: StageId, halfM: number): void {
     if (this.stage && this.stageId === id && Math.abs(this.stageHalf - halfM) < 1e-3 && this.stageQuality === this.quality) return;
     if (this.stage) { this.stage.dispose(); this.scene.remove(this.stage.group); }
+    this.disposeRealms();
     this.stage = buildStage(id, halfM, this.quality);
     this.stageId = id;
     this.stageHalf = halfM;
     this.stageQuality = this.quality;
     this.scene.add(this.stage.group);
-    this.scene.fog = this.stage.fog;
-    this.scene.background = this.stage.background;
+    // copies: the realm layer blends these in place
+    this.scene.fog = this.stage.fog ? this.stage.fog.clone() : null;
+    this.scene.background = this.stage.background.clone();
     this.sun.color.copy(this.stage.sunColor);
     this.sun.intensity = this.stage.sunIntensity;
     this.hemi.color.copy(this.stage.hemiSky).lerp(this.stage.hemiGround, 0.35);
@@ -142,6 +171,7 @@ export class GameRenderer {
     this.rimLight.intensity = 1.5;
     this.fcam.bound = halfM + (id === 'training' ? 6 : 3.1);
     for (const v of this.views) { v?.setShadowTint(this.stage.shadowTint); v?.setStageRim(this.stageRim); }
+    for (const m of this.formViews) for (const v of m.values()) { v?.setShadowTint(this.stage.shadowTint); v?.setStageRim(this.stageRim); }
     for (const v of this.menuPool.values()) { v.setShadowTint(this.stage.shadowTint); v.setStageRim(this.stageRim); }
   }
 
@@ -157,7 +187,11 @@ export class GameRenderer {
 
   private clearMatch(): void {
     for (const v of this.views) v?.dispose();
+    for (const m of this.formViews) { for (const v of m.values()) v?.dispose(); m.clear(); }
+    for (const c of this.clones) c.view.dispose();
+    this.clones = [];
     this.views = [null, null];
+    this.active = [null, null];
     this.matchKey = null;
     this.matchLoad = null;
     this.matchToken++;
@@ -204,6 +238,7 @@ export class GameRenderer {
   setMoveLookup(fn: ((char: CharId, moveId: string) => MoveDef | undefined) | null): void {
     this.moveLookup = fn ?? defaultMoveLookup;
     for (const v of this.views) if (v) v.lookup = this.moveLookup;
+    for (const m of this.formViews) for (const v of m.values()) if (v) v.lookup = this.moveLookup;
   }
 
   // ------------------------------------------------------------------ per frame
@@ -218,7 +253,7 @@ export class GameRenderer {
       let cheer = 0;
       for (const e of state.events) {
         if ((e.type === 'hit' || e.type === 'counter' || e.type === 'ultimateHit' || e.type === 'throw') && e.target !== undefined) {
-          this.views[e.target]?.onHit(STRENGTH[e.strength ?? 'medium'] ?? 0.4);
+          this.active[e.target]?.onHit(STRENGTH[e.strength ?? 'medium'] ?? 0.4);
         }
         if (e.type === 'ko') cheer = Math.max(cheer, 1);
         else if (e.type === 'ultimateHit') cheer = Math.max(cheer, 0.75);
@@ -227,15 +262,21 @@ export class GameRenderer {
       }
       if (cheer > 0) this.stage?.cheer?.(cheer);
     }
+    let tall = 1;
     for (let i = 0; i < 2; i++) {
-      const v = this.views[i];
       const f = state.fighters[i];
+      const v = this.pickView(i as 0 | 1, f);
       if (v) {
         v.update(f, prev ? prev.fighters[i] : null, alpha, dt, this.time);
         this.fcam.fighterPos[i].copy(v.group.position);
+        if (v.form) tall = Math.max(tall, v.modelHeight / 2.05);
       } else this.fcam.fighterPos[i].set(f.pos.x / 1000, f.pos.y / 1000, f.pos.z / 1000);
     }
+    this.updateSummons(state, dt);
+    // giant forms: pull the fight camera back
+    this.fcam.zoom += (Math.min(2.6, tall) - this.fcam.zoom) * Math.min(1, dt * 3);
     this.fcam.update(prev, state, alpha, dt);
+    this.updateRealm(state, dt);
     // light follows the fight (tight shadow camera)
     if (this.stage) {
       _c.copy(this.fcam.fighterPos[0]).add(this.fcam.fighterPos[1]).multiplyScalar(0.5);
@@ -266,6 +307,158 @@ export class GameRenderer {
     this.rimLight.target.position.copy(center);
     this.rimLight.position.copy(center).addScaledVector(_RIM, 15);
     this.rimLight.target.updateMatrixWorld();
+  }
+
+  // ------------------------------------------------------------------ forms
+  /** base view, or the alternate-form view while the fighter is in that form (once its model is loaded) */
+  private pickView(i: 0 | 1, f: FighterState): FighterView | null {
+    const base = this.views[i];
+    let want: FighterView | null = base;
+    const form = base ? this.formOf(f) : null;
+    if (form && base) {
+      const m = this.formViews[i];
+      if (!m.has(form)) {
+        m.set(form, null);
+        const token = this.matchToken;
+        loadForm(f.char, form, this.res()).then((a) => {
+          if (!a || token !== this.matchToken) return;
+          const v = this.makeView(f.char, a, base.u.uHue.value !== 0);
+          v.group.visible = false;
+          m.set(form, v);
+        }).catch(() => { /* stays null: base model keeps playing */ });
+      }
+      want = m.get(form) ?? base;
+    }
+    const cur = this.active[i];
+    if (cur !== want) {
+      if (cur) cur.group.visible = false;
+      if (want) want.group.visible = true;
+      this.active[i] = want;
+    }
+    return want;
+  }
+
+  /** Optional (additive): how to read a fighter's current form name (default: optional FighterState.form). */
+  setFormResolver(fn: ((f: FighterState) => string | null) | null): void {
+    this.formOf = fn ?? ((f) => { const v = (f as FighterState & { form?: unknown }).form; return typeof v === 'string' && v ? v : null; });
+  }
+
+  /** Optional (additive): load a fighter's form model ahead of time (e.g. during the VS screen). */
+  prewarmForm(char: CharId, form: string): Promise<boolean> {
+    return loadForm(char, form, this.res()).then((a) => !!a);
+  }
+
+  // ------------------------------------------------------------------ summons
+  private updateSummons(state: GameState, dt: number): void {
+    const list = state.summons;
+    const n = list ? list.length : 0;
+    let used = 0;
+    for (let k = 0; k < n; k++) {
+      const sm = list![k];
+      const owner = state.fighters[sm.owner];
+      const base = this.views[sm.owner];
+      if (!base) continue;
+      let slot = -1;
+      for (let j = used; j < this.clones.length; j++) if (this.clones[j].char === owner.char) { slot = j; break; }
+      if (slot < 0) {
+        const asset = getLoadedCharacter(owner.char, this.res());
+        if (!asset) continue;
+        const view = this.makeView(owner.char, asset, base.u.uHue.value !== 0);
+        this.clones.push({ view, st: blankFighter(owner.char), char: owner.char });
+        slot = this.clones.length - 1;
+      }
+      if (slot !== used) { const t = this.clones[used]; this.clones[used] = this.clones[slot]; this.clones[slot] = t; }
+      const c = this.clones[used++];
+      const st = c.st;
+      st.pos.x = sm.pos.x; st.pos.y = sm.pos.y; st.pos.z = sm.pos.z;
+      st.facing.x = sm.facing.x; st.facing.z = sm.facing.z;
+      st.vel.x = 0; st.vel.y = 0; st.vel.z = 0;
+      st.mode = sm.mode === 'attack' ? 'attack' : 'idle';
+      st.moveId = sm.mode === 'attack' ? sm.moveId : null;
+      st.moveFrame = sm.moveFrame; st.modeFrame = sm.modeFrame;
+      st.pose = sm.pose; st.awakened = owner.awakened;
+      const fade = sm.mode === 'appear' ? Math.min(1, sm.modeFrame / 12) : sm.life < 12 ? Math.max(0, sm.life / 12) : 1;
+      c.view.setGhost(0.72 * fade, owner.awakened ? '#ffb347' : '#9fd8ff');
+      c.view.group.visible = fade > 0.01;
+      c.view.update(st, null, 1, dt, this.time);
+    }
+    for (let j = used; j < this.clones.length; j++) this.clones[j].view.group.visible = false;
+  }
+
+  // ------------------------------------------------------------------ realm takeover
+  private realmBuild(id: string): StageBuild | null {
+    let b = this.realmBuilds.get(id) ?? null;
+    if (b) return b;
+    const builder = getRealmBuilder(id);
+    if (!builder) return null;
+    try { b = builder(this.stageHalf || 5, this.quality); } catch (e) { console.warn('[render] realm build failed', id, e); return null; }
+    b.group.visible = false;
+    this.scene.add(b.group);
+    this.realmBuilds.set(id, b);
+    return b;
+  }
+
+  /** Optional (additive): build a registered realm + compile its shaders ahead of time. */
+  prewarmRealm(id: string): void {
+    const b = this.realmBuild(id);
+    if (!b) return;
+    b.group.visible = true;
+    try { this.renderer.compile(this.scene, this.camera); } catch { /* ignore */ }
+    b.group.visible = this.realmShown === b && this.realmK > 0;
+  }
+
+  /**
+   * Optional (additive): show a registered realm over the stage (cross-dissolve), null = back to the stage.
+   * While set manually this overrides state.realm.
+   */
+  setRealm(id: string | null): void {
+    this.realmManual = id !== null;
+    this.realmId = id;
+  }
+
+  private updateRealm(state: GameState, dt: number): void {
+    if (!this.realmManual) {
+      const r = state.realm;
+      this.realmId = r && typeof r.kind === 'string' ? r.kind : null;
+    }
+    const want = this.realmId ? this.realmBuild(this.realmId) : null;
+    if (want && this.realmShown !== want) {
+      if (this.realmShown && this.realmK > 0) { this.realmK = Math.max(0, this.realmK - dt / 0.35); this.applyRealm(); return; }
+      if (this.realmShown) this.realmShown.group.visible = false;
+      this.realmShown = want;
+      this.realmK = 0;
+    }
+    if (!this.realmShown) return;
+    const target = want ? 1 : 0;
+    this.realmK += Math.sign(target - this.realmK) * Math.min(Math.abs(target - this.realmK), dt / 0.6);
+    this.applyRealm();
+    if (this.realmK > 0) this.realmShown.update(this.time, dt);
+    if (this.realmK <= 0 && !want) { this.realmShown.group.visible = false; this.realmShown = null; }
+  }
+
+  private disposeRealms(): void {
+    for (const b of this.realmBuilds.values()) { b.dispose(); this.scene.remove(b.group); }
+    this.realmBuilds.clear();
+    this.realmShown = null; this.realmK = 0;
+  }
+
+  private applyRealm(): void {
+    const r = this.realmShown, st = this.stage;
+    if (!r || !st) return;
+    const k = this.realmK;
+    if (r.setDissolve) { r.group.visible = k > 0; r.setDissolve(k); } else r.group.visible = k >= 0.5;
+    if (st.setDissolve) { st.group.visible = k < 1; st.setDissolve(1 - k); } else st.group.visible = k < 0.5;
+    // environment blend
+    this.baseBg.copy(st.background).lerp(r.background, k);
+    (this.scene.background as THREE.Color | null)?.copy?.(this.baseBg);
+    if (this.scene.fog && st.fog && r.fog) {
+      this.baseFog.copy(st.fog.color).lerp(r.fog.color, k);
+      (this.scene.fog as THREE.Fog).color.copy(this.baseFog);
+    }
+    this.sun.color.copy(st.sunColor).lerp(r.sunColor, k);
+    this.sun.intensity = st.sunIntensity + (r.sunIntensity - st.sunIntensity) * k;
+    this.hemi.intensity = st.hemiIntensity + (r.hemiIntensity - st.hemiIntensity) * k;
+    if (r.rim) this.rimLight.color.copy(this.stageRim).lerp(r.rim, k);
   }
 
   private placeSun(center: THREE.Vector3, extent: number, dir?: THREE.Vector3): void {
@@ -310,6 +503,7 @@ export class GameRenderer {
     this.renderer.setSize(this.size.w, this.size.h, true);
     this.applyQualityToLights();
     for (const v of this.views) v?.setQuality(q);
+    for (const m of this.formViews) for (const v of m.values()) v?.setQuality(q);
     for (const v of this.menuPool.values()) v.setQuality(q);
     if (this.stageId) this.setStage(this.stageId, this.stageHalf);
     if (this.res() !== oldRes) {
@@ -329,7 +523,7 @@ export class GameRenderer {
   addShake(intensity: number, frames: number): void { this.fcam.addShake(intensity, frames); }
 
   getBoneWorld(player: 0 | 1, bone: BoneName, out: THREE.Vector3): THREE.Vector3 {
-    const v = this.views[player];
+    const v = this.active[player] ?? this.views[player];
     if (!v) return out.set(player === 0 ? -1.3 : 1.3, 1.2, 0);
     let s: SocketName = bone;
     if (bone === 'weapon' && !v.visibleWeapon) s = 'handR';
@@ -489,6 +683,7 @@ export class GameRenderer {
     this.clearMatch();
     this.clearMenu();
     if (this.stage) { this.stage.dispose(); this.scene.remove(this.stage.group); this.stage = null; }
+    this.disposeRealms();
     this.debug.dispose();
     disposeCharacterCache();
     this.renderer.dispose();

@@ -18,7 +18,7 @@ import type { CharId, FighterState, PoseName, HitboxDef } from '../../sim/types'
 import { C, NCH, PAIN_POSES } from '../anim/poses';
 import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
 import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
-import { charLook, type CharLook } from './looks';
+import { charLook, resolvePalette, type CharLook } from './looks';
 import { makeFighterUniforms, makeFighterToon, makeFighterOutline, type FighterUniforms } from './toon';
 
 export type SocketName = 'head' | 'chest' | 'hips' | 'handL' | 'handR' | 'footL' | 'footR' | 'weapon';
@@ -86,6 +86,9 @@ export class FighterView {
   private oTorso = new Map<THREE.Bone, THREE.Quaternion>();
   private hips: THREE.Bone | null = null;
   private hipsRest = new THREE.Vector3();
+  /** root-space → hips-parent-local conversion (armatures with rotation / centimetre scale, e.g. Mixamo) */
+  private hipInvRel = new THREE.Quaternion();
+  private hipInvScale = 1;
   private spine: THREE.Bone | null = null; private spine1: THREE.Bone | null = null; private chest: THREE.Bone | null = null;
   private neck: THREE.Bone | null = null; private head: THREE.Bone | null = null;
   private armL: Limb | null = null; private armR: Limb | null = null; private legL: Limb | null = null; private legR: Limb | null = null;
@@ -122,6 +125,10 @@ export class FighterView {
   private faceMat: THREE.MeshToonMaterial | null = null;
   private expr: Expr = 'neutral';
   private assistCache = new Map<string, Assist | null>();
+  /** neutral stand-in body (no model for this fighter yet) */
+  readonly mannequin: boolean = false;
+  /** form name when this view shows an alternate-form model (form_<name>.glb), else null */
+  readonly form: string | null = null;
   private exprHold = 0;
 
   constructor(readonly char: CharId, asset: CharAsset, opts: { alt?: boolean } = {}) {
@@ -145,6 +152,13 @@ export class FighterView {
     u.uMap2.value = asset.awakenTex;
     u.uHasMap2.value = asset.awakenTex ? 1 : 0;
     this.outlineMat = makeFighterOutline(u);
+    this.mannequin = asset.mannequin;
+    this.form = asset.form;
+    if (asset.mannequin) {
+      const pal = resolvePalette(char);
+      u.uRimColor.value.set(pal.accent);
+      u.uShadowTint.value.set('#7c7f92');
+    }
     this.rimBase.set(L.rim); this.rimAwk.set(L.rimAwk);
     this.outBase.set(L.outline); this.outAwk.set(L.outlineAwk || L.outline);
     // ---- bones
@@ -160,18 +174,26 @@ export class FighterView {
     // ---- materials / meshes
     const meshes: THREE.Mesh[] = [];
     this.model.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
-    const matByMap = new Map<THREE.Texture | null, THREE.MeshToonMaterial>();
+    const matByKey = new Map<string, THREE.MeshToonMaterial>();
+    const mannequin = asset.mannequin;
     const toonFor = (src: THREE.Material | THREE.Material[]): THREE.MeshToonMaterial => {
       const s = (Array.isArray(src) ? src[0] : src) as THREE.MeshStandardMaterial;
-      const map = s?.map ?? null;
-      let m = matByMap.get(map);
-      if (!m) { m = makeFighterToon(map, u); matByMap.set(map, m); this.toonMats.push(m); }
+      // mannequin: one flat light-grey material (no textures); dropped-in models keep map + base colour
+      const map = mannequin ? null : s?.map ?? null;
+      const col = mannequin ? MANNEQUIN_GREY : s?.color ?? null;
+      const key = `${map ? map.uuid : '-'}|${col ? col.getHexString() : 'fff'}`;
+      let m = matByKey.get(key);
+      if (!m) {
+        m = makeFighterToon(map, u);
+        if (col) m.color.copy(col);
+        matByKey.set(key, m); this.toonMats.push(m);
+      }
       return m;
     };
     for (const mesh of meshes) {
       const name = `${mesh.name} ${mesh.parent?.name ?? ''}`;
       const isFaceMesh = /face_?expression/i.test(name);
-      if (isFaceMesh && !this.faceMat) {
+      if (isFaceMesh && !this.faceMat && !mannequin) {
         const sm = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
         this.faceMat = makeFighterToon(sm?.map ?? null, u, true);
         this.toonMats.push(this.faceMat);
@@ -279,7 +301,15 @@ export class FighterView {
     if (this.chest === this.spine) this.spine = null;
     this.neck = this.b('Neck', 'neck');
     this.head = this.b('Head', 'head');
-    if (this.hips) this.hipsRest.copy(this.hips.position);
+    if (this.hips) {
+      this.hipsRest.copy(this.hips.position);
+      const par = this.hips.parent!;
+      const pq = par.getWorldQuaternion(new THREE.Quaternion());
+      const rq = this.rootObj.getWorldQuaternion(new THREE.Quaternion());
+      this.hipInvRel.copy(rq.invert().multiply(pq)).invert();
+      const ps = par.getWorldScale(new THREE.Vector3()).x;
+      this.hipInvScale = ps > 1e-6 ? 1 / ps : 1;
+    }
     for (const t of [this.hips, this.spine, this.spine1, this.chest, this.neck, this.head]) if (t) this.oTorso.set(t, restQ(t));
     const limb = (u: string, l: string, e: string, isLeg: boolean): Limb | null => {
       const up = this.b(u), lo = this.b(l), end = this.b(e);
@@ -313,7 +343,9 @@ export class FighterView {
       const lq = restQ(bone).invert();
       if (canonRest) lq.multiply(canonRest);
       o.quaternion.copy(lq);
-      o.position.set(off[0], off[1], off[2]).applyQuaternion(lq);
+      const bs = 1 / Math.max(1e-6, bone.getWorldScale(_sc).x);
+      o.position.set(off[0], off[1], off[2]).multiplyScalar(bs).applyQuaternion(lq);
+      o.scale.setScalar(bs); // sockets are metre-scaled even under centimetre armatures
       bone.add(o);
       this.sockets[name] = o;
     };
@@ -366,11 +398,12 @@ export class FighterView {
       for (let i = 0; i < list.length; i++) {
         if (i + 1 < list.length) childLocal.push(list[i + 1].position.clone());
         else {
-          const prev = i > 0 ? childLocal[i - 1] : new THREE.Vector3(0, 0.12, 0);
-          const len = Math.max(0.06, prev.length() * 0.8);
+          const k = 1 / Math.max(1e-6, list[i].getWorldScale(_sc).x);
+          const prev = i > 0 ? childLocal[i - 1] : new THREE.Vector3(0, 0.12 * k, 0);
+          const len = Math.max(0.06 * k, prev.length() * 0.8);
           childLocal.push(new THREE.Vector3(0, len, 0));
         }
-        segLen.push(childLocal[i].length());
+        segLen.push(childLocal[i].length() * list[i].getWorldScale(_sc).x);
       }
       const np = list.length + 1;
       this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), init: false });
@@ -398,6 +431,26 @@ export class FighterView {
   }
 
   socket(name: SocketName): THREE.Object3D { return this.sockets[name]; }
+
+  /**
+   * Ghost look for summoned copies (e.g. clones): translucent + colour tint. opacity 1 & tint null = normal.
+   * Uses the hit-flash mix for the tint, so flashes still work on top.
+   */
+  setGhost(opacity: number, tint: THREE.ColorRepresentation | null, tintAmount = 0.22): void {
+    const tr = opacity < 0.999;
+    for (let i = 0; i <= this.toonMats.length; i++) {
+      const m: THREE.Material = i < this.toonMats.length ? this.toonMats[i] : this.outlineMat;
+      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      m.opacity = opacity;
+    }
+    this.u.uOpacity.value = opacity;
+    this.ghostTint = tint ? tintAmount : 0;
+    if (tint) this.u.uFlashColor.value.set(tint);
+  }
+  private ghostTint = 0;
+
+  /** model height in metres (unscaled) */
+  get modelHeight(): number { return this.height; }
 
   /** current facial expression (Face_Expressions panel) */
   get expression(): Expr { return this.expr; }
@@ -456,7 +509,7 @@ export class FighterView {
       this.pose[C.weapon] = this.target[C.weapon]; this.pose[C.twoHand] = this.target[C.twoHand];
     }
     let wv = this.pose[C.weapon] > 0.5;
-    if (this.char === 'shiori') wv = !!(f.moveId && /kunai|throw|shuriken/i.test(f.moveId)) || this.info.pose === 'throwProjectile';
+    if (L.weapon === 'kunai') wv = !!(f.moveId && /kunai|throw|shuriken/i.test(f.moveId)) || this.info.pose === 'throwProjectile';
     this.visibleWeapon = wv && !!this.handWeapon;
     this.twoHand = this.visibleWeapon && this.pose[C.twoHand] > 0.5 && L.weapon === 'katana';
     if (this.handWeapon) this.handWeapon.visible = this.handWeaponOutline!.visible = this.visibleWeapon;
@@ -478,7 +531,7 @@ export class FighterView {
     u.uRimWidth.value = 0.62 - 0.1 * awk;
     if (f.counterHitFlash > 0) this.flash = Math.max(this.flash, 0.45);
     this.flash = Math.max(0, this.flash - dt * 5);
-    u.uFlash.value = this.flash;
+    u.uFlash.value = Math.max(this.flash, this.ghostTint);
     if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.copy(awk > 0.5 ? this.outAwk : this.outBase);
     if (this.faceMat) this.pickExpression(f, dt);
   }
@@ -509,7 +562,8 @@ export class FighterView {
     this.rootObj.updateMatrixWorld(true);
     this.rootObj.getWorldQuaternion(_qa); // root world
     // hips
-    this.hips.position.set(this.hipsRest.x + c[C.hipX] * sL, this.hipsRest.y + c[C.hipY] * sL, this.hipsRest.z + c[C.hipZ] * sL);
+    _v1.set(c[C.hipX], c[C.hipY], c[C.hipZ]).multiplyScalar(sL * this.hipInvScale).applyQuaternion(this.hipInvRel);
+    this.hips.position.copy(this.hipsRest).add(_v1);
     _e.set(c[C.hipP] * D2R, c[C.hipYaw] * D2R, -c[C.hipR] * D2R, 'YXZ');
     _qb.copy(_qa).multiply(_q1.setFromEuler(_e)); // canonical hips world
     this.setWorldQ(this.hips, _q2.copy(_qb).multiply(this.oTorso.get(this.hips)!));
@@ -603,40 +657,52 @@ export class FighterView {
     w = Math.min(1, w) * a.w;
     // hitbox far end (minus a bit of the radius so the fist / foot sits inside it), group-local metres
     const fwd = (hb.x + hb.len * 0.8) / 1000;
-    const ws = this.group.scale.x;
     this.rootObj.getWorldQuaternion(_qa);
-    const solveHand = (l: Limb, wI: number, m: number, eI: number, lat: number) => {
-      l.end.getWorldPosition(_v4);
-      _T.set(lat, hb!.y / 1000, fwd).applyMatrix4(_m2.copy(this.group.matrixWorld).multiply(_m.makeScale(1 / ws, 1 / ws, 1 / ws)));
-      _T.lerp(_v4, 1 - w);
-      _pole.set(this.pose[eI], this.pose[eI + 1], this.pose[eI + 2]).applyQuaternion(_qa);
-      this.solveLimb(l, _T, _pole, ws, false);
-      _e.set(this.pose[wI] * D2R, this.pose[wI + 1] * D2R * m, this.pose[wI + 2] * D2R * m, 'XYZ');
-      _q3.copy(_cq2).multiply(_q1.setFromEuler(_e));
-      this.setWorldQ(l.end, _q3.multiply(l.oEnd));
-    };
-    const solveFoot = (l: Limb, kI: number, pI: number) => {
-      l.end.getWorldPosition(_v4);
-      _T.set(0, hb!.y / 1000, fwd).applyMatrix4(_m2.copy(this.group.matrixWorld).multiply(_m.makeScale(1 / ws, 1 / ws, 1 / ws)));
-      _T.lerp(_v4, 1 - w);
-      _pole.set(this.pose[kI], this.pose[kI + 1], this.pose[kI + 2]).applyQuaternion(_qa);
-      this.solveLimb(l, _T, _pole, ws, true);
-      // foot follows the shin (pointed kick)
-      _q3.copy(_cq2).multiply(_q1.setFromAxisAngle(_AX, -70 * D2R * w));
-      _q2.copy(_qa).multiply(_q1.setFromAxisAngle(_AY, this.pose[pI + 1] * D2R)).multiply(_qb.setFromAxisAngle(_AX, this.pose[pI] * D2R));
-      _q3.slerp(_q2, 1 - w);
-      this.setWorldQ(l.end, _q3.multiply(l.oEnd));
-    };
+    this.aw = w; this.afwd = fwd; this.ay = hb.y / 1000;
     switch (a.limb) {
-      case 'handL': if (this.armL) solveHand(this.armL, C.wL, 1, C.eL, 0.02); break;
-      case 'handR': if (this.armR) solveHand(this.armR, C.wR, -1, C.eR, -0.02); break;
+      case 'handL': if (this.armL) this.assistHand(this.armL, C.wL, 1, C.eL, 0.02); break;
+      case 'handR': if (this.armR) this.assistHand(this.armR, C.wR, -1, C.eR, -0.02); break;
       case 'both':
-        if (this.armL) solveHand(this.armL, C.wL, 1, C.eL, 0.12);
-        if (this.armR) solveHand(this.armR, C.wR, -1, C.eR, -0.12);
+        if (this.armL) this.assistHand(this.armL, C.wL, 1, C.eL, 0.12);
+        if (this.armR) this.assistHand(this.armR, C.wR, -1, C.eR, -0.12);
         break;
-      case 'footR': if (this.legR) solveFoot(this.legR, C.kR, C.fRp); break;
-      case 'footL': if (this.legL) solveFoot(this.legL, C.kL, C.fLp); break;
+      case 'footR': if (this.legR) this.assistFoot(this.legR, C.kR, C.fRp); break;
+      case 'footL': if (this.legL) this.assistFoot(this.legL, C.kL, C.fLp); break;
     }
+  }
+
+  private aw = 0; private afwd = 0; private ay = 0;
+
+  /** hitbox point (group-local, unscaled) → world, into _T */
+  private assistTarget(lat: number): void {
+    const ws = this.group.scale.x;
+    _T.set(lat, this.ay, this.afwd).applyMatrix4(_m2.copy(this.group.matrixWorld).multiply(_m.makeScale(1 / ws, 1 / ws, 1 / ws)));
+  }
+
+  private assistHand(l: Limb, wI: number, m: number, eI: number, lat: number): void {
+    const w = this.aw, ws = this.group.scale.x;
+    l.end.getWorldPosition(_v4);
+    this.assistTarget(lat);
+    _T.lerp(_v4, 1 - w);
+    _pole.set(this.pose[eI], this.pose[eI + 1], this.pose[eI + 2]).applyQuaternion(_qa);
+    this.solveLimb(l, _T, _pole, ws, false);
+    _e.set(this.pose[wI] * D2R, this.pose[wI + 1] * D2R * m, this.pose[wI + 2] * D2R * m, 'XYZ');
+    _q3.copy(_cq2).multiply(_q1.setFromEuler(_e));
+    this.setWorldQ(l.end, _q3.multiply(l.oEnd));
+  }
+
+  private assistFoot(l: Limb, kI: number, pI: number): void {
+    const w = this.aw, ws = this.group.scale.x;
+    l.end.getWorldPosition(_v4);
+    this.assistTarget(0);
+    _T.lerp(_v4, 1 - w);
+    _pole.set(this.pose[kI], this.pose[kI + 1], this.pose[kI + 2]).applyQuaternion(_qa);
+    this.solveLimb(l, _T, _pole, ws, true);
+    // foot follows the shin (pointed kick)
+    _q3.copy(_cq2).multiply(_q1.setFromAxisAngle(_AX, -70 * D2R * w));
+    _q2.copy(_qa).multiply(_q1.setFromAxisAngle(_AY, this.pose[pI + 1] * D2R)).multiply(_qb.setFromAxisAngle(_AX, this.pose[pI] * D2R));
+    _q3.slerp(_q2, 1 - w);
+    this.setWorldQ(l.end, _q3.multiply(l.oEnd));
   }
 
   private solveArm(l: Limb, c: Float32Array, hI: number, eI: number, wI: number, m: number, shG: THREE.Vector3, shRef: THREE.Vector3, ws: number, chestM: THREE.Matrix4): void {
@@ -777,6 +843,7 @@ export class FighterView {
 }
 
 const _cq1 = new THREE.Quaternion(), _cq2 = new THREE.Quaternion();
+const MANNEQUIN_GREY = new THREE.Color('#c4c8d2');
 
 type AssistLimb = 'handL' | 'handR' | 'both' | 'footL' | 'footR';
 interface Assist { limb: AssistLimb; w: number; hbs: HitboxDef[] }

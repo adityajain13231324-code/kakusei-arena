@@ -21,6 +21,10 @@ export interface WeaponGeo {
 
 export interface CharAsset {
   id: CharId;
+  /** true = the fighter has no model yet: neutral grey mannequin body (shared template) */
+  mannequin: boolean;
+  /** form name for alternate-form models (form_<name>.glb), null for the base model */
+  form: string | null;
   res: ModelRes;
   scene: THREE.Group; // template (never added to a scene)
   awakenTex: THREE.Texture | null;
@@ -46,11 +50,78 @@ export function loadCharacter(id: CharId, res: ModelRes): Promise<CharAsset> {
   const key = `${id}:${res}`;
   let p = cache.get(key);
   if (!p) {
-    p = loadImpl(id, res).then((a) => { done.set(key, a); return a; });
+    p = loadImpl(id, res).catch((e) => {
+      // no model for this fighter (yet): neutral mannequin so every CharId is playable
+      console.info(`[render] no model for '${id}' (${e instanceof Error ? e.message : e}); using mannequin`);
+      return loadMannequin(id, res);
+    }).then((a) => { done.set(key, a); return a; });
     p.catch(() => { cache.delete(key); });
     cache.set(key, p);
   }
   return p;
+}
+
+let mannequinP: Promise<THREE.Group> | null = null;
+/** shared mannequin template (public/characters/_mannequin/model.glb); per-fighter assets reference it */
+function loadMannequin(id: CharId, res: ModelRes): Promise<CharAsset> {
+  if (!mannequinP) {
+    mannequinP = loadGLB(`${baseUrl()}characters/_mannequin/model.glb`).then((g) => prepareScene(g.scene, true).scene);
+    mannequinP.catch(() => { mannequinP = null; });
+  }
+  return mannequinP.then((scene) => {
+    const box = new THREE.Box3().setFromObject(scene);
+    return { id, res, mannequin: true, form: null, scene, awakenTex: null, plates: null, katana: null, height: Math.max(1, box.max.y) };
+  });
+}
+
+const formCache = new Map<string, Promise<CharAsset | null>>();
+/**
+ * Alternate-form model for a fighter (e.g. a giant transformation): characters/<id>/form_<form>.glb.
+ * Resolves null when the file doesn't exist (the base model stays). Not normalised: forms may be any size.
+ */
+export function loadForm(id: CharId, form: string, res: ModelRes): Promise<CharAsset | null> {
+  const key = `${id}:${form}:${res}`;
+  let p = formCache.get(key);
+  if (!p) {
+    const dir = `${baseUrl()}characters/${id}/`;
+    p = loadGLB(`${dir}form_${form}.glb`).then((g) => {
+      const { scene, height } = prepareScene(g.scene, false);
+      return { id, res, mannequin: false, form, scene, awakenTex: null, plates: null, katana: null, height } as CharAsset;
+    }).catch(() => null);
+    formCache.set(key, p);
+  }
+  return p;
+}
+
+/**
+ * Normalise a dropped-in humanoid: fix winding, outline normals, rescale models authored in centimetres
+ * (or otherwise far from human size) to ~1.8 m and put the feet on the ground.
+ */
+function prepareScene(scene: THREE.Group, normalise: boolean): { scene: THREE.Group; height: number } {
+  scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    fixInsideOut(m.geometry);
+    ensureOutlineNormals(m.geometry);
+    const mat = m.material as THREE.MeshStandardMaterial;
+    if (mat?.map) { mat.map.anisotropy = 4; mat.map.colorSpace = THREE.SRGBColorSpace; }
+  });
+  let box = new THREE.Box3().setFromObject(scene);
+  if (normalise) {
+    const h = box.max.y - box.min.y;
+    if (h > 0 && (h < 1.2 || h > 3.2)) {
+      scene.scale.multiplyScalar(1.8 / h);
+      scene.updateMatrixWorld(true);
+      box = new THREE.Box3().setFromObject(scene);
+    }
+    if (Math.abs(box.min.y) > 0.03) {
+      scene.position.y -= box.min.y;
+      scene.updateMatrixWorld(true);
+      box = new THREE.Box3().setFromObject(scene);
+    }
+  }
+  return { scene, height: Math.max(1, box.max.y) };
 }
 
 export function getLoadedCharacter(id: CharId, res: ModelRes): CharAsset | null {
@@ -89,31 +160,26 @@ async function loadGLB(url: string) {
 async function loadImpl(id: CharId, res: ModelRes): Promise<CharAsset> {
   const dir = `${baseUrl()}characters/${id}/`;
   const sfx = res === 1024 ? '_1024' : '';
+  // model first: a fighter without one falls back to the mannequin without probing its other files
+  const gltf0 = await loadGLB(`${dir}model${sfx}.glb`).catch((e) => (sfx ? loadGLB(`${dir}model.glb`) : Promise.reject(e)));
+  const model = Promise.resolve(gltf0);
+  // manifest (optional): { awakened_parts?: 'file.glb', awakened_texture?: false }
+  const manifest = await fetch(`${dir}manifest.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { awakened_parts?: string; awakened_texture?: boolean; triangles_by_mesh?: Record<string, number> };
+  const partsFile = manifest.awakened_parts ?? (manifest.triangles_by_mesh?.ShoulderPlates ? 'shoulder_plates.glb' : null);
   const [gltf, awk, plates] = await Promise.all([
-    loadGLB(`${dir}model${sfx}.glb`),
-    loadTex(`${dir}tex_awakened${sfx}.png`),
-    id === 'goro' ? loadGLB(`${dir}shoulder_plates.glb`).catch(() => null) : Promise.resolve(null),
+    model,
+    manifest.awakened_texture === false ? Promise.resolve(null) : loadTex(`${dir}tex_awakened${sfx}.png`).then((t) => t ?? (sfx ? loadTex(`${dir}tex_awakened.png`) : null)),
+    // optional awakened attachment on the same rig (e.g. Goro's shoulder plates)
+    partsFile ? loadGLB(`${dir}${partsFile}`).catch(() => null) : Promise.resolve(null),
   ]);
-  const scene = gltf.scene;
-  scene.updateMatrixWorld(true);
+  const { scene, height } = prepareScene(gltf.scene, true);
   let katana: WeaponGeo | null = null;
   scene.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    fixInsideOut(m.geometry);
-    ensureOutlineNormals(m.geometry);
-    if (!katana && /katana|sword|blade/i.test(m.name + ' ' + (m.parent?.name ?? ''))) katana = buildKatana(m);
+    if (!katana && m.isMesh && /katana|sword|blade/i.test(m.name + ' ' + (m.parent?.name ?? ''))) katana = buildKatana(m);
   });
   if (plates) plates.scene.traverse((o: THREE.Object3D) => { const m = o as THREE.Mesh; if (m.isMesh) { fixInsideOut(m.geometry); ensureOutlineNormals(m.geometry); } });
-  const box = new THREE.Box3().setFromObject(scene);
-  // match the embedded map's sampling to the external awakened atlas
-  scene.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    const mat = m.material as THREE.MeshStandardMaterial;
-    if (mat?.map) { mat.map.anisotropy = 4; mat.map.colorSpace = THREE.SRGBColorSpace; }
-  });
-  return { id, res, scene, awakenTex: awk, plates: plates ? plates.scene : null, katana, height: Math.max(1, box.max.y) };
+  return { id, res, mannequin: false, form: null, scene, awakenTex: awk, plates: plates ? plates.scene : null, katana, height };
 }
 
 /** per-view clone (skeleton re-bound, geometry & textures shared) */

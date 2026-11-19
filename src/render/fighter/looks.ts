@@ -7,20 +7,25 @@ import { getChar } from '../../sim';
 
 export interface Palette { primary: string; secondary: string; accent: string; hair: string; skin: string; aura: string }
 
-export const FALLBACK_PALETTES: Record<CharId, Palette> = {
+export const FALLBACK_PALETTES: Partial<Record<CharId, Palette>> = {
   kaito: { primary: '#22232e', secondary: '#f4f1ea', accent: '#d8262c', hair: '#d62a1c', skin: '#f6cfac', aura: '#ff7a1a' },
   shiori: { primary: '#2b2340', secondary: '#7b3fb0', accent: '#c9c6d8', hair: '#17141f', skin: '#f3d3bd', aura: '#a066ff' },
   ren: { primary: '#f3f1ea', secondary: '#1f2b4d', accent: '#d9b450', hair: '#1a2445', skin: '#f3d6bc', aura: '#9fd8ff' },
   goro: { primary: '#7a5232', secondary: '#c8742e', accent: '#8d8a86', hair: '#2a2018', skin: '#dba27c', aura: '#ffb347' },
 };
 
+const NEUTRAL_PALETTE: Palette = { primary: '#5a5d6a', secondary: '#d8dbe4', accent: '#7fd0ff', hair: '#3a3c46', skin: '#d8d4cc', aura: '#9fd8ff' };
+
+/** Palette for any CharId: sim data first (all fields), then the built-in fallback, then neutral. */
 export function resolvePalette(id: CharId): Palette {
-  const fb = FALLBACK_PALETTES[id];
+  const fb = FALLBACK_PALETTES[id] ?? NEUTRAL_PALETTE;
   try {
-    const p = getChar(id)?.palette;
+    const p = getChar(id)?.palette as Partial<Palette> | undefined;
     if (p) {
       const ok = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v.trim());
-      return { ...fb, aura: ok(p.aura) ? p.aura : fb.aura, hair: ok(p.hair) ? p.hair : fb.hair, skin: ok(p.skin) ? p.skin : fb.skin };
+      const out = { ...fb };
+      for (const k of Object.keys(fb) as (keyof Palette)[]) if (ok(p[k])) out[k] = p[k] as string;
+      return out;
     }
   } catch { /* fallback */ }
   return fb;
@@ -50,7 +55,7 @@ export interface CharLook {
   spring: SpringTune;
 }
 
-const LOOKS: Record<CharId, CharLook> = {
+const LOOKS: Partial<Record<CharId, CharLook>> = {
   kaito: {
     id: 'kaito', shadowTint: '#8a6a8e', outline: '#1a0c0c', outlineAwk: '#3a0800', outlineWidth: 1,
     rim: '#ffd9c0', rimAwk: '#ff7a1a', rimStrength: 0.22, rimStrengthAwk: 0.75, glow: '#ff8b28', glowStrength: 0.8,
@@ -73,4 +78,17 @@ const LOOKS: Record<CharId, CharLook> = {
   },
 };
 
-export function charLook(id: CharId): CharLook { return LOOKS[id] ?? LOOKS.kaito; }
+const genericLooks = new Map<CharId, CharLook>();
+/** Render look for any CharId; fighters without a hand-tuned entry get one derived from their palette. */
+export function charLook(id: CharId): CharLook {
+  const hit = LOOKS[id] ?? genericLooks.get(id);
+  if (hit) return hit;
+  const pal = resolvePalette(id);
+  const look: CharLook = {
+    id, shadowTint: '#7a7090', outline: '#14121a', outlineAwk: '#14121a', outlineWidth: 1,
+    rim: pal.accent, rimAwk: pal.aura, rimStrength: 0.35, rimStrengthAwk: 0.9, glow: pal.aura, glowStrength: 0.9,
+    awakenScale: 1, altHue: 2.8, altOutline: '#0a1430', weapon: null, spring: { gravity: 8, drag: 0.09, stiffness: 0.1 },
+  };
+  genericLooks.set(id, look);
+  return look;
+}

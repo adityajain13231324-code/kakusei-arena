@@ -16,6 +16,8 @@ export interface StageBuild {
   rim: THREE.Color | null;
   /** crowd reaction hook (0..1), optional */
   cheer?(intensity: number): void;
+  /** optional custom dissolve (realm takeover): 0 = hidden … 1 = fully visible */
+  setDissolve?(k: number): void;
   dispose(): void;
 }
 
