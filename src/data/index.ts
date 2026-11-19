@@ -4,8 +4,16 @@ import { KAITO } from './chars/kaito';
 import { SHIORI } from './chars/shiori';
 import { REN } from './chars/ren';
 import { GORO } from './chars/goro';
+import { GOJO } from './chars/gojo';
+import { NARUTO } from './chars/naruto';
+import { ZORO } from './chars/zoro';
+import { LUFFY } from './chars/luffy';
+import { EREN } from './chars/eren';
 
-export const CHARS: Record<CharId, CharDef> = { kaito: KAITO, shiori: SHIORI, ren: REN, goro: GORO };
+export const CHARS: Record<CharId, CharDef> = {
+  kaito: KAITO, shiori: SHIORI, ren: REN, goro: GORO,
+  gojo: GOJO, naruto: NARUTO, zoro: ZORO, luffy: LUFFY, eren: EREN,
+};
 
 const moveIndex: Record<string, Record<string, MoveDef>> = {};
 for (const id of Object.keys(CHARS) as CharId[]) {
@@ -25,4 +33,4 @@ export function moveDef(char: CharId, moveId: string): MoveDef | undefined {
   return moveIndex[char]?.[moveId];
 }
 
-export { KAITO, SHIORI, REN, GORO };
+export { KAITO, SHIORI, REN, GORO, GOJO, NARUTO, ZORO, LUFFY, EREN };

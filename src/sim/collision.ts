@@ -4,7 +4,7 @@
  */
 import type { FighterState, GameState, HitboxDef } from './types';
 import type { SF } from './fighter';
-import { isCrouching } from './fighter';
+import { isCrouching, bodyRadius, moveOf } from './fighter';
 import { isqrt, clamp } from '../core/fixed';
 import { HURT_HEIGHT } from './constants';
 import { CHARS } from '../data';
@@ -79,8 +79,8 @@ export function capsuleHit(c1: Cap, c2: Cap): boolean {
  * Crouching lowers everything so highs (y≈1450) whiff, mids (y≈1100-1250) still hit.
  */
 export function hurtCaps(f: SF, out: Cap[]): number {
-  const R = CHARS[f.char].radius;
-  const H = HURT_HEIGHT;
+  const R = bodyRadius(f);
+  const H = f.form === 'titan' ? Math.trunc((HURT_HEIGHT * 5) / 2) : HURT_HEIGHT; // Eren's Titan: x2.5
   const x = f.pos.x, y = f.pos.y, z = f.pos.z;
   let n = 0;
   const put = (c: Cap) => { out[n++] = c; };
@@ -146,9 +146,11 @@ export function hitsFighter(c: Cap, def: SF): boolean {
 export function separate(state: GameState, a: SF, b: SF): void {
   if (a.mode === 'knockdown' || b.mode === 'knockdown' || a.mode === 'vanish' || b.mode === 'vanish') return;
   if (a.mode === 'thrown' || b.mode === 'thrown') return;
+  // dash-through attacks (Oni Giri) pass through the opponent's body
+  if ((a.mode === 'attack' && moveOf(a)?.passThrough) || (b.mode === 'attack' && moveOf(b)?.passThrough)) return;
   // vertical overlap: allow passing under a high jumper / juggle
   if (Math.abs(a.pos.y - b.pos.y) > 1100) return;
-  const ra = CHARS[a.char].radius, rb = CHARS[b.char].radius;
+  const ra = bodyRadius(a), rb = bodyRadius(b);
   const min = ra + rb;
   let dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
   const d2 = dx * dx + dz * dz;

@@ -244,14 +244,16 @@ export function charTables(id: CharId): CharTables {
     if (m.internal || !m.input) continue;
     const p = parseInput(m.input);
     if (m.kind === 'normal') {
-      if (p.chainPrefix) out.chain[m.input] = m.id;
+      if (p.chainPrefix) out.chain[(m.needForm ? m.needForm + ':' : '') + m.input] = m.id;
       else out.normals.push(m);
     } else if (m.kind === 'special') out.specials.push(m);
     else if (m.kind === 'ki') out.kis.push(m);
   }
   // awakened-only versions first, then by motion priority (stable)
+  // form-specific moves first (they replace base moves), then awakened-only, then motion priority
   const sorter = (a: MoveDef, b: MoveDef) =>
-    (a.requires === 'awakened' ? 0 : 1) - (b.requires === 'awakened' ? 0 : 1) || motionRank(a) - motionRank(b);
+    (a.needForm ? 0 : 1) - (b.needForm ? 0 : 1) || (a.requires === 'awakened' ? 0 : 1) - (b.requires === 'awakened' ? 0 : 1) || motionRank(a) - motionRank(b);
+  out.normals.sort((a, b) => (a.needForm ? 0 : 1) - (b.needForm ? 0 : 1));
   out.specials.sort(sorter);
   out.kis.sort(sorter);
   tables[id] = out;

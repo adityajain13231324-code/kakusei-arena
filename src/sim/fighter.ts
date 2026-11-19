@@ -1,6 +1,6 @@
 /** Fighter helpers shared by every sim module. */
 import type { FighterMode, FighterSimData, FighterState, GameState, MoveDef, SimEvent, Vec3 } from './types';
-import { moveDef } from '../data';
+import { moveDef, CHARS } from '../data';
 import { norm2 } from '../core/fixed';
 
 export type SF = FighterState & { sim: FighterSimData };
@@ -83,4 +83,23 @@ export function isCrouching(f: SF): boolean {
 export function comboScale(hitsBefore: number): number {
   const s = 1000 - 100 * hitsBefore;
   return s < 300 ? 300 : s;
+}
+
+// ---------------------------------------------------------------- crossover helpers (forms)
+/** body radius incl. form scaling (Eren's Titan = x2.5) */
+export function bodyRadius(f: FighterState): number {
+  const r = CHARS[f.char].radius;
+  return f.form === 'titan' ? Math.trunc((r * 5) / 2) : r;
+}
+
+/** movement speed percent for the current form (walk / dash) */
+export function speedPct(f: FighterState): number {
+  switch (f.form) {
+    case 'kurama': return 125;
+    case 'gear2': return 115;
+    case 'gear4': case 'gear5': return 120;
+    case 'sage': return 105;
+    case 'titan': return 75;
+    default: return 100;
+  }
 }

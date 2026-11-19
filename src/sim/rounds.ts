@@ -4,6 +4,7 @@
  */
 import type { GameState } from './types';
 import { F, emit, setMode, chest, vec } from './fighter';
+import { baseForm } from './crossover';
 import { INTRO_FRAMES, KO_FRAMES, ROUND_END_FRAMES, ROUND_FRAMES, SLOWMO_KO, START_DIST } from './constants';
 
 /** place fighters and reset per-round state (ki carries over, awakening is once per match) */
@@ -26,8 +27,15 @@ export function resetRound(state: GameState): void {
     s.pushX = s.pushZ = s.knockX = s.knockZ = 0;
     s.bounce = s.bounceUsed = s.splatUsed = false;
     s.turnLock = 0; s.landLag = 0; s.partner = -1; s.regen = 0; s.crumple = false; s.queued = null;
+    // crossover: forms / passives reset every round (realmUsed stays: once per match)
+    f.form = baseForm(f.char);
+    f.infinity = f.char === 'gojo' ? 1 : 0;
+    s.realmFreeze = 0; s.autoGuard = 0; s.sixEyes = 0; s.echoMove = ''; s.echoT = 0; s.formTimer = 0; s.bounceExtra = 0; s.infinityCd = 0;
   }
   state.projectiles = [];
+  state.summons = [];
+  state.realm = null;
+  state.clash.kind = 'beam';
   state.clash.active = false; state.clash.frame = 0; state.clash.balance = 0; state.clash.mash = [0, 0]; state.clash.winner = -1;
   state.ult = null;
   state.camera.normal = { x: 0, z: 1000 };
@@ -68,7 +76,7 @@ export function roundsPost(state: GameState): void {
   const a = F(state, 0), b = F(state, 1);
   if (r.phase === 'fight') {
     if (!state.training) {
-      const frozen = !!state.ult || state.clash.active || a.mode === 'awaken' || b.mode === 'awaken';
+      const frozen = !!state.ult || state.clash.active || a.mode === 'awaken' || b.mode === 'awaken' || state.realm?.phase === 'cine';
       if (!frozen && r.timer > 0) r.timer--;
       if (!state.ult) {
         const ka = a.hp <= 0, kb = b.hp <= 0;

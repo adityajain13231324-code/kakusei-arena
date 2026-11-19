@@ -83,7 +83,7 @@ function masher(player: 0 | 1, seed: number): Brain {
 const pct = (n: number, d: number): string => (d ? ((100 * n) / d).toFixed(0) : '-').padStart(3) + '%';
 
 // ---------------------------------------------------------------- (1) matches end, CPUs hit/block/special for all 16 pairs
-console.log('\n== (1) all 16 character pairs x 4 difficulties (mirror difficulty), matches must end');
+console.log(`\n== (1) all ${ALL_CHARS.length * ALL_CHARS.length} character pairs x 4 difficulties (mirror difficulty), matches must end`);
 {
   const agg = { hits: 0, blocks: 0, specials: 0, ults: 0, throws: 0, matches: 0, ended: 0, frames: 0, juggles: 0, vanish: 0, awaken: 0, breaks: 0, kiCharge: 0, clash: 0 };
   for (const d of DIFFS) {
@@ -120,7 +120,7 @@ function duel(hi: Difficulty, lo: Difficulty, n: number): { winHi: number; hpHi:
   let w = 0;
   let k = 0;
   for (let i = 0; i < n; i++) {
-    const a = ALL_CHARS[i % 4], b = ALL_CHARS[(i >> 2) % 4];
+    const a = ALL_CHARS[i % ALL_CHARS.length], b = ALL_CHARS[Math.floor(i / ALL_CHARS.length + i * 7) % ALL_CHARS.length];
     const flip = i % 2 === 1; // swap sides to remove side bias
     const hiP: 0 | 1 = flip ? 1 : 0;
     const seed = 500 + i;
@@ -153,7 +153,7 @@ console.log(`\n== (3) first-time player (button masher) vs CPU, ${N} matches eac
   for (const d of DIFFS) {
     let cpuWins = 0;
     for (let i = 0; i < N; i++) {
-      const a = ALL_CHARS[i % 4], b = ALL_CHARS[(i >> 2) % 4];
+      const a = ALL_CHARS[i % ALL_CHARS.length], b = ALL_CHARS[Math.floor(i / ALL_CHARS.length + i * 7) % ALL_CHARS.length];
       const flip = i % 2 === 1;
       const bs: [Brain, Brain] = flip ? [masher(0, 77 + i), cpuBrain(1, d)] : [cpuBrain(0, d), masher(1, 77 + i)];
       const { stats } = playMatch(a, b, bs[0], bs[1], 900 + i);

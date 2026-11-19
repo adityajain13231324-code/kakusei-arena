@@ -37,6 +37,41 @@ export const BNB: Record<CharId, Bnb[]> = {
     { name: 'Ultimate ender', notation: '3H, L, H, 236H+S', steps: [['3H', 0], ['L', -1], ['H', -1], ['236H+S', -1]], ki: 300 },
     { name: 'Wall splat', notation: 'H, H (wallbounce splat), 66 H, 4K (ground stomp)', steps: [['H', 0], ['H', 0], ['dash~H', -1], ['4K', -1]], wall: true },
   ],
+  gojo: [
+    { name: 'Jab string confirm', notation: 'L, L, H xx 623S (Red)', steps: [['L', 0], ['L', 0], ['H', 0], ['623S', 0]] },
+    { name: 'Blue pull', notation: '236S (Blue drags in), 3H, H xx 623S', steps: [['236S', 0], ['3H', -1], ['H', -1], ['623S', 0]] },
+    { name: 'Launcher', notation: '3H, L, H, H,H', steps: [['3H', 0], ['L', -1], ['H', -1], ['H', 0]] },
+    { name: 'Ultimate ender', notation: '3H, H, 236H+S (Hollow Purple)', steps: [['3H', 0], ['H', -1], ['236H+S', -1]], ki: 300 },
+    { name: 'Wall splat', notation: '3H, H xx 623S (Red splat), 66 H, H,H', steps: [['3H', 0], ['H', -1], ['623S', 0], ['dash~H', -1], ['H', 0]], wall: true },
+  ],
+  naruto: [
+    { name: 'Jab string confirm', notation: 'L, L, K xx 236S (Rasengan)', steps: [['L', 0], ['L', 0], ['K', 0], ['236S', 0]] },
+    { name: 'Rasengan starter', notation: '236S (launch), L, H, H,H xx 236S', steps: [['236S', 0], ['L', -1], ['H', -1], ['H', 0], ['236S', 0]] },
+    { name: 'Launcher', notation: '3H, H, H,H xx 236S', steps: [['3H', 0], ['H', -1], ['H', 0], ['236S', 0]] },
+    { name: 'Ultimate ender', notation: '3H, H, 236H+S', steps: [['3H', 0], ['H', -1], ['236H+S', -1]], ki: 300 },
+    { name: 'Wall splat', notation: '3H, H, H,H (splat), 66 K, H', steps: [['3H', 0], ['H', -1], ['H', 0], ['dash~K', -1], ['H', -1]], wall: true },
+  ],
+  zoro: [
+    { name: 'Jab string confirm', notation: 'L, L, H xx 236S (Oni Giri)', steps: [['L', 0], ['L', 0], ['H', 0], ['236S', 0]] },
+    { name: 'Launcher (Santoryu)', notation: '3H, H, H,H xx 236S', steps: [['3H', 0], ['H', -1], ['H', 0], ['236S', 0]] },
+    { name: 'Launcher (long)', notation: '3H, L, H, H,H', steps: [['3H', 0], ['L', -1], ['H', -1], ['H', 0]] },
+    { name: 'Ultimate ender', notation: '3H, H, 236H+S', steps: [['3H', 0], ['H', -1], ['236H+S', -1]], ki: 300 },
+    { name: 'Wall splat', notation: '3H, H, H,H (splat), 66 H, H,H', steps: [['3H', 0], ['H', -1], ['H', 0], ['dash~H', -1], ['H', 0]], wall: true },
+  ],
+  luffy: [
+    { name: 'Jab string confirm', notation: 'L, L, K xx 41236S (Rocket)', steps: [['L', 0], ['L', 0], ['K', 0], ['41236S', 0]] },
+    { name: 'Launcher', notation: '3H, H, H,H xx 41236S', steps: [['3H', 0], ['H', -1], ['H', 0], ['41236S', 0]] },
+    { name: 'Launcher (long)', notation: '3H, L, H, H,H', steps: [['3H', 0], ['L', -1], ['H', -1], ['H', 0]] },
+    { name: 'Ultimate ender', notation: '3H, H, 236H+S (King Kong Gun)', steps: [['3H', 0], ['H', -1], ['236H+S', -1]], ki: 300 },
+    { name: 'Wall splat', notation: '3H, H xx 41236S (Rocket splat), 66 H, H,H', steps: [['3H', 0], ['H', -1], ['41236S', 0], ['dash~H', -1], ['H', 0]], wall: true },
+  ],
+  eren: [
+    { name: 'Jab string confirm', notation: 'L, L, H xx 236S (Grapple Dash)', steps: [['L', 0], ['L', 0], ['H', 0], ['236S', 0]] },
+    { name: 'Launcher', notation: '3H, H, H,H xx 236S', steps: [['3H', 0], ['H', -1], ['H', 0], ['236S', 0]] },
+    { name: 'Launcher (long)', notation: '3H, L, H, H,H', steps: [['3H', 0], ['L', -1], ['H', -1], ['H', 0]] },
+    { name: 'Ultimate ender', notation: '3H, H, 236H+S', steps: [['3H', 0], ['H', -1], ['236H+S', -1]], ki: 300 },
+    { name: 'Wall splat', notation: '3H, H, H,H (splat), 66 H, H,H', steps: [['3H', 0], ['H', -1], ['H', 0], ['dash~H', -1], ['H', 0]], wall: true },
+  ],
 };
 
 /** training setup for a BnB: P1 at 800 mm from P2 (wall combos: P2 ~0.7 m from the wall) */
@@ -47,6 +82,7 @@ export function bnbSetup(c: CharId, vs: CharId, b: Bnb): GameState {
   if (b.wall) { st.arenaHalfSize = 2600; x0 = 800; }
   st.fighters[0].pos = { x: x0, y: 0, z: 0 }; st.fighters[1].pos = { x: x0 + 800, y: 0, z: 0 };
   st.fighters[0].ki = b.ki ?? 0;
+  st.fighters[1].infinity = 0; // Gojo's Infinity already spent (combo tests start from a clean hit)
   step(st, [0, 0]);
   return st;
 }

@@ -30,6 +30,16 @@ export function stateMirrorDiff(a: GameState, b: GameState): string {
   const d1 = fighterDiff(a.fighters[1], b.fighters[0]);
   if (d1) return `P2|P1': ${d1}`;
   if (a.projectiles.length !== b.projectiles.length) return `projectiles ${a.projectiles.length} vs ${b.projectiles.length}`;
+  // crossover: forms, shadow clones, realms
+  if ((a.fighters[0].form ?? '') !== (b.fighters[1].form ?? '') || (a.fighters[1].form ?? '') !== (b.fighters[0].form ?? '')) return 'form';
+  const sa = a.summons ?? [], sb = b.summons ?? [];
+  if (sa.length !== sb.length) return `summons ${sa.length} vs ${sb.length}`;
+  for (let k = 0; k < sa.length; k++) {
+    const x = sa[k], y = sb[k];
+    if (x.owner !== 1 - y.owner || x.pos.x !== -y.pos.x || x.pos.z !== y.pos.z || x.mode !== y.mode) return `summon ${k}: ${x.pos.x},${x.pos.z} ${x.mode} vs ${y.pos.x},${y.pos.z} ${y.mode}`;
+  }
+  const ra = a.realm, rb = b.realm;
+  if (!!ra !== !!rb || (ra && rb && (ra.owner !== 1 - rb.owner || ra.frame !== rb.frame || ra.phase !== rb.phase))) return 'realm';
   const wa = a.round.winner, wb = b.round.winner;
   const sw = (w: number) => (w === 0 ? 1 : w === 1 ? 0 : w);
   if (wa !== sw(wb)) return `round winner ${wa} vs ${wb}`;

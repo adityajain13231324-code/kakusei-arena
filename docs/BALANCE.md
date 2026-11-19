@@ -178,6 +178,19 @@ Every cell is within 42–58% (target 40–60%). Average fight time per round: *
 Before this pass, at hard: Goro won 90–100% against Kaito and Shiori, Shiori lost every
 matchup, and juggles barely worked (launcher recovery outlasted the opponent's airtime).
 
+
+### Crossover Pack (Gojo, Naruto, Zoro, Luffy, Eren)
+Kits, BnB combos, Soul Realm rules and the new contract fields are in **docs/CROSSOVER.md**.
+Win rate vs the original four (CPU hard vs hard, 100 matches per cell, sides alternate; target 40-60% on average):
+
+| Fighter | HP | vs kaito | vs shiori | vs ren | vs goro | **avg** |
+|---|---|---|---|---|---|---|
+| gojo | 980 | 61% | 44% | 36% | 70% | **53%** |
+| naruto | 920 | 44% | 64% | 48% | 65% | **55%** |
+| zoro | 940 | 57% | 51% | 49% | 76% | **58%** |
+| luffy | 1000 | 56% | 52% | 43% | 63% | **53%** |
+| eren | 970 | 25% | 36% | 85% | 67% | **53%** |
+
 ## 6. Caveats / follow-ups
 - Balance is measured CPU-vs-CPU. The CPU leans on specials (Blaze Knuckle, Crow Dive, Moon Step,
   Avalanche) and rarely uses strings or juggles, so human balance will differ. Re-run

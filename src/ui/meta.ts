@@ -28,6 +28,32 @@ export const META: Record<CharId, CharMeta> = {
     tags: ['Grappler', 'Earth'], stars: 3, color: '#ffb02e', kanji: '岩',
     blurb: 'Command grabs, stone armor and huge damage. Slow, but one read ends the round.',
   },
+  // ---- Crossover Pack (licensed characters; private build)
+  gojo: {
+    id: 'gojo', name: 'SATORU GOJO', given: 'GOJO', family: 'SATORU', title: 'The Strongest',
+    tags: ['Zoner', 'Control', 'Void'], stars: 4, color: '#5aa8ff', kanji: '無',
+    blurb: 'Infinity slows every projectile near him and stops the first hit each round. Blue drags foes in, Red blasts them into the wall, Blink puts him behind you.',
+  },
+  naruto: {
+    id: 'naruto', name: 'NARUTO UZUMAKI', given: 'NARUTO', family: 'UZUMAKI', title: 'The Hyperactive Ninja',
+    tags: ['Rushdown', 'Pressure', 'Wind'], stars: 3, color: '#ff8a1f', kanji: '螺',
+    blurb: 'Shadow clones flank the opponent and copy his next attack. Rasengan launches, Clone Rush grabs. Low on health in Sage Mode? Nine-Tails Chakra Mode.',
+  },
+  zoro: {
+    id: 'zoro', name: 'RORONOA ZORO', given: 'ZORO', family: 'RORONOA', title: 'The Pirate Hunter',
+    tags: ['Footsies', 'Stances', 'Blade'], stars: 4, color: '#3fbf5f', kanji: '斬',
+    blurb: 'Swap between one, two and three swords for different strings. Oni Giri cuts straight through, Lion\'s Song counters. Asura makes every slash land twice.',
+  },
+  luffy: {
+    id: 'luffy', name: 'MONKEY D. LUFFY', given: 'LUFFY', family: 'MONKEY D.', title: 'The Rubber Captain',
+    tags: ['Long reach', 'Brawler', 'Rubber'], stars: 2, color: '#e8322e', kanji: '護',
+    blurb: 'Rubber limbs give him the longest normals in the game. Gear Second speeds him up, Gear Fourth hits like a cannon, Gear Fifth turns the fight into a cartoon.',
+  },
+  eren: {
+    id: 'eren', name: 'EREN YEAGER', given: 'EREN', family: 'YEAGER', title: 'The Attack Titan',
+    tags: ['Mobility', 'Transformation', 'Lightning'], stars: 5, color: '#8fb35a', kanji: '巨',
+    blurb: 'ODM gear grapple dashes and a delayed Thunder Spear. Awaken to become the Attack Titan for 10 seconds: huge, armored and slow.',
+  },
 };
 
 // ---------------------------------------------------------------- ultimates (one-line pitch per fighter)
@@ -36,6 +62,11 @@ export const ULT_DESC: Record<CharId, string> = {
   shiori: 'Vanishes into a moonless void and carves twelve shadow slashes before anyone can blink.',
   ren: 'One sheathed breath, a thousand petals. A single draw cuts through everything in front of him.',
   goro: 'Grabs the opponent, leaps into the sky and returns as a falling mountain. Please clap.',
+  gojo: 'Merges Blue and Red into Hollow Purple: an imaginary mass that erases everything in its path. Awakened with 3 bars: Domain Expansion, Infinite Void.',
+  naruto: 'Calls a crowd of shadow clones for a Rasengan barrage. Awakened with 3 bars: the Tailed Beast Bomb levels the arena.',
+  zoro: 'Nine swords, three heads, one demon: Asura Ichibugin. Awakened with 3 bars: King of Hell, where even blocked slashes cut.',
+  luffy: 'Gear Fourth\'s King Kong Gun: a fist the size of a house. Awakened with 3 bars: Gear Fifth, the most ridiculous power in the world.',
+  eren: 'Hardened Titan smash that cracks the arena floor. Awakened with 3 bars: the Paths, where an army of Titans marches on the opponent.',
 };
 export function ultName(id: CharId): string {
   try {

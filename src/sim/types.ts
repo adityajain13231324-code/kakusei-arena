@@ -46,12 +46,19 @@ export type InputBits = number;
 export type ControlScheme = 'pro' | 'easy';
 
 // ---------------------------------------------------------------- ids
-export type CharId = 'kaito' | 'shiori' | 'ren' | 'goro';
-export const ALL_CHARS: CharId[] = ['kaito', 'shiori', 'ren', 'goro'];
+export type CharId = 'kaito' | 'shiori' | 'ren' | 'goro'
+  // Crossover Pack (licensed by the owner for this private game; kits in src/data/chars/, see docs/CROSSOVER.md)
+  | 'gojo' | 'naruto' | 'zoro' | 'luffy' | 'eren';
+/** fighters that are fully implemented and selectable (the select grid lists exactly these, in this order) */
+export const ALL_CHARS: CharId[] = ['kaito', 'shiori', 'ren', 'goro', 'gojo', 'naruto', 'zoro', 'luffy', 'eren'];
+/** the Crossover Pack ids (subset of ALL_CHARS once each kit is done) */
+export const CROSSOVER_CHARS: CharId[] = ['gojo', 'naruto', 'zoro', 'luffy', 'eren'];
 export type StageId = 'rooftop' | 'shrine' | 'training';
 export const ALL_STAGES: StageId[] = ['rooftop', 'shrine', 'training'];
 
-export type Element = 'none' | 'fire' | 'shadow' | 'blade' | 'earth' | 'ki';
+export type Element = 'none' | 'fire' | 'shadow' | 'blade' | 'earth' | 'ki'
+  // crossover elements (additive): Gojo void / cursed energy, Naruto wind chakra, Eren lightning, Luffy rubber
+  | 'void' | 'wind' | 'lightning' | 'rubber';
 export type Height = 'high' | 'mid' | 'low' | 'throw' | 'unblockable';
 export type Tracking = 'none' | 'left' | 'right' | 'full';
 export type Strength = 'light' | 'medium' | 'heavy' | 'super';
@@ -105,6 +112,9 @@ export interface ProjectileDef {
   hits: number; // how many hits before vanishing
   beam?: boolean; // beams can CLASH with beams
   count?: number; spread?: number; // fan of projectiles, spread in 1/1000 of lateral per forward
+  /** (optional) delayed blast: harmless while flying; with `fuse` frames of life left it stops and becomes a blast of radius `blastR` */
+  fuse?: number;
+  blastR?: number;
 }
 
 export interface MoveDef {
@@ -180,6 +190,22 @@ export interface MoveDef {
   onHitAdv?: number;
   /** (optional) can hit an opponent lying in knockdown (ground hit / stomp), once per knockdown */
   otg?: boolean;
+
+  // ---- crossover pack sim extensions (all optional, see docs/CROSSOVER.md) ----
+  /** Soul Realm move: at moveFrame === startup the realm cinematic starts (state.realm) */
+  realm?: { kind: string; duration: number };
+  /** counter stance: a melee strike of one of `heights` landing on 1-based move frames from..to is parried and `move` starts */
+  counter?: { from: number; to: number; heights: Height[]; move: string };
+  /** move only selectable when fighter.form === needForm ('' = base form only) */
+  needForm?: string;
+  /** body collision off while this move runs (dash-through attacks) */
+  passThrough?: boolean;
+  /** Naruto: spawn shadow clones at moveFrame `frame` (up to the max) */
+  summon?: { frame: number; count: number };
+  /** move requires this many active shadow clones (Clone Rush) */
+  needClones?: number;
+  /** stance swap: starting this move cycles fighter.form through this list (Zoro's 1/2/3-sword styles) */
+  cycleForms?: string[];
 }
 
 export interface CharDef {
@@ -201,6 +227,10 @@ export interface CharDef {
   awakenedUltimateId?: string;
   /** Easy scheme: special the L auto-combo cancels into at the end of the string */
   autoComboEnder?: string;
+  /** (optional) Soul Realm move id: replaces the awakened ultimate when awakened with 300 Ki (once per match) */
+  realmId?: string;
+  /** (optional) element used for awakening / realm effects */
+  element?: Element;
 }
 
 // ---------------------------------------------------------------- runtime state
@@ -249,6 +279,14 @@ export interface FighterState {
   lastInputs: number[];
   /** internal sim bookkeeping (always present at runtime). Other modules should treat it as opaque. */
   sim?: FighterSimData;
+  /**
+   * (optional, crossover) visual/mechanical form for the renderer to swap models / looks:
+   * '' base, 'six_eyes' (Gojo awakened, blindfold off), 'sage' / 'kurama' (Naruto), 'gear2' / 'gear4' / 'gear5' (Luffy),
+   * 'titan' (Eren, form_titan.glb), 'santoryu' / 'nitoryu' / 'ittoryu' (Zoro sword count), 'asura' (Zoro awakened).
+   */
+  form?: string;
+  /** (optional, crossover) Gojo Infinity charges left this round (0/1) — HUD shimmer indicator */
+  infinity?: number;
 }
 
 /** Internal per-fighter sim data (plain JSON). Not part of the render contract. */
@@ -302,6 +340,22 @@ export interface FighterSimData {
   guardIdle?: number;
   /** (optional, sim) already took a ground hit during this knockdown */
   otgUsed?: boolean;
+  /** (optional, crossover) Soul Realm already used this match */
+  realmUsed?: boolean;
+  /** (optional, crossover) frames this fighter is frozen by an opponent's realm (no inputs, cannot guard) */
+  realmFreeze?: number;
+  /** (optional, crossover) Six Eyes: auto-guard frames left after an opponent teleport / charges left this awakening */
+  autoGuard?: number;
+  sixEyes?: number;
+  /** (optional, crossover) Asura echo: second slash of `echoMove` lands when echoT reaches 0 */
+  echoMove?: string;
+  echoT?: number;
+  /** (optional, crossover) frames left in a timed form (Eren titan) */
+  formTimer?: number;
+  /** (optional, crossover) extra ground bounces left in this juggle (Gear Fifth) */
+  bounceExtra?: number;
+  /** (optional, crossover) training: frames until Gojo's Infinity recharges */
+  infinityCd?: number;
 }
 
 export interface TrainingOptions {
@@ -340,6 +394,50 @@ export interface ProjectileState {
   moveId: string;
   /** frames until this projectile may hit again (multi-hit beams) */
   cooldown?: number;
+  /** (optional, crossover) speed percent this frame (Gojo Infinity slows enemy projectiles near him to 30) */
+  slow?: number;
+  /** (optional) delayed blast: frames of life at which it detonates, blast radius */
+  fuse?: number;
+  blastR?: number;
+}
+
+/**
+ * (crossover) Soul Realm in progress. phase 'cine' = 90-frame cinematic (everything frozen, the
+ * opponent may answer with its own realm -> Realm Clash), then 'active' = the rule twist runs for `duration` frames.
+ */
+export interface RealmState {
+  owner: 0 | 1;
+  kind: string; // 'infinite_void' | 'tailed_beast_bomb' | 'king_of_hell' | 'gear_fifth' | 'paths'
+  phase: 'cine' | 'active';
+  frame: number; // frames since this phase began
+  duration: number; // active-phase length
+  cine: number; // cinematic length (90)
+  moveId: string;
+  /** damage the owner dealt during the realm and its cap (0 = no cap) — Infinite Void keeps its total <= 35% HP */
+  dealt: number;
+  cap: number;
+}
+
+/** (crossover) Naruto's shadow clones: sim entities that copy his next attack from a flanking angle */
+export interface SummonState {
+  id: number;
+  owner: 0 | 1;
+  kind: 'clone';
+  pos: Vec3;
+  facing: { x: number; z: number };
+  /** -1 / +1 flank side (screen-mirrored) */
+  slot: number;
+  mode: 'appear' | 'idle' | 'attack';
+  modeFrame: number;
+  /** move it is copying (owner's move id) and its frame */
+  moveId: string | null;
+  moveFrame: number;
+  /** queued copy: move id + frames until it starts */
+  queued: string | null;
+  delay: number;
+  hitMask: number;
+  life: number;
+  pose: PoseName;
 }
 
 export interface ClashState {
@@ -353,6 +451,8 @@ export interface ClashState {
   moves?: [string, string];
   /** -1 none yet, 0 / 1 winner, 2 draw (set on the clashEnd frame) */
   winner?: -1 | 0 | 1 | 2;
+  /** (optional, crossover) 'beam' (default) or 'realm' (Realm Clash: winner's realm opens) */
+  kind?: 'beam' | 'realm';
 }
 
 export type RoundPhase = 'intro' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd';
@@ -364,7 +464,9 @@ export interface SimEvent {
     | 'projectile' | 'projectileHit' | 'projectileDestroy'
     | 'kiCharge' | 'kiFull' | 'vanish' | 'awaken' | 'ultimateStart' | 'ultimateHit'
     | 'clashStart' | 'clashEnd' | 'sidestep' | 'dash' | 'jump' | 'guardCrush'
-    | 'moveStart' | 'roundStart' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd';
+    | 'moveStart' | 'roundStart' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd'
+    // crossover pack (additive, see docs/CROSSOVER.md)
+    | 'realmStart' | 'realmEnd' | 'realmClash' | 'infinityBlock' | 'formChange' | 'summon' | 'summonDispel';
   frame: number;
   player: 0 | 1; // who caused it
   target?: 0 | 1;
@@ -387,7 +489,7 @@ export interface CameraHint {
   normal: { x: number; z: number };
   distance: number; // separation between fighters (mm)
   /** cinematic override */
-  cinematic: null | { kind: 'ultimate' | 'awaken' | 'throw' | 'ko' | 'clash' | 'intro'; player: 0 | 1; frame: number };
+  cinematic: null | { kind: 'ultimate' | 'awaken' | 'throw' | 'ko' | 'clash' | 'intro' | 'realm'; player: 0 | 1; frame: number };
 }
 
 export interface GameState {
@@ -418,6 +520,11 @@ export interface GameState {
   frameAdv?: { player: 0 | 1; value: number; moveId: string; frame: number } | null;
   /** internal: frame-advantage tracker */
   advTrack?: { att: number; moveId: string; aFree: number; dFree: number } | null;
+  /** (optional, crossover) active Soul Realm (null when none) */
+  realm?: RealmState | null;
+  /** (optional, crossover) summoned entities (Naruto shadow clones) */
+  summons?: SummonState[];
+  nextSummonId?: number;
 }
 
 export interface MatchConfig {

@@ -682,5 +682,248 @@ section('(j) move data rules: punishable launchers / lows, accurate onBlock / on
   }
 }
 
+// ---------------------------------------------------------------- (k) crossover pack + soul realm
+section('(k) crossover pack: Infinity, Blue, Blink, counters, Soul Realm (+ clash), shadow clones, forms');
+{
+  const R = Btn.Right, D = Btn.Down, L = Btn.Left;
+  const m236 = (b: number) => [D, D | R, R | b];
+  const m214 = (b: number) => [D, D | L, L | b];
+  const m41236 = (b: number) => [L, D | L, D, D | R, R | b];
+  // Infinity: the first hit each round is auto-guarded, the second lands
+  {
+    const st = training('kaito', 'gojo', { trainingOpts: { hpRegen: false } }); place(st, 800);
+    const hp0 = F(st, 1).hp;
+    const ev = run(st, 60, (f) => (f === 0 || f === 30 ? Btn.L : 0));
+    check('Infinity auto-guards the first hit (infinityBlock, no damage)', ev.some((e) => e.type === 'infinityBlock' && e.tag === 'infinity') && F(st, 1).infinity === 0);
+    check('Infinity: the second hit lands', ev.filter((e) => e.type === 'hit' && e.player === 0).length === 1 && F(st, 1).hp < hp0);
+  }
+  // Infinity slows enemy projectiles within 1.2 m
+  {
+    const st = training('kaito', 'gojo'); place(st, 3500);
+    run(st, 3, seq(D, D | R, R | Btn.S));
+    let slowSeen = false, fastSeen = false;
+    for (let f = 0; f < 90; f++) { step(st, [0, 0]); for (const p of st.projectiles) { if (p.slow === 30) slowSeen = true; if (p.slow === 100) fastSeen = true; } }
+    check('Infinity: enemy fireball slows to 30% near Gojo', slowSeen && fastSeen);
+  }
+  // Blue drags the opponent toward Gojo and is a combo starter
+  {
+    const st = training('gojo', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 2000);
+    const ev = run(st, 120, seq(...m236(Btn.S)));
+    const hit = ev.findIndex((e) => e.type === 'hit' && e.moveId === 'gojo_blue');
+    check('Blue hits at range and pulls the opponent in', hit >= 0 && Math.abs(F(st, 1).pos.x - F(st, 0).pos.x) < 1500, `${F(st, 1).pos.x - F(st, 0).pos.x}`);
+  }
+  // Blink: teleport behind for 50 Ki
+  {
+    const st = training('gojo', 'kaito'); place(st, 1500); F(st, 0).ki = 100;
+    run(st, 30, seq(...m214(Btn.S)));
+    check('Blink teleports behind the opponent and costs 50 Ki', F(st, 0).pos.x > F(st, 1).pos.x && F(st, 0).ki === 50, `x ${F(st, 0).pos.x} ki ${F(st, 0).ki}`);
+    const st2 = training('gojo', 'kaito'); place(st2, 1500); F(st2, 0).ki = 20;
+    const ev2 = run(st2, 30, seq(...m214(Btn.S)));
+    check('Blink needs 50 Ki', !ev2.some((e) => e.moveId === 'gojo_blink'));
+  }
+  // Six Eyes counter parries a mid and answers with Red
+  {
+    const st = training('gojo', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 900); F(st, 0).infinity = 0;
+    const ev = run(st, 80, seq(...m41236(Btn.S)), seq(0, 0, 0, 0, Btn.H));
+    check('Six Eyes Counter: parry + Red: Point Blank hits', ev.some((e) => e.type === 'parry' && e.tag === 'counter') && ev.some((e) => e.type === 'hit' && e.moveId === 'gojo_counter_red'));
+  }
+  // Soul Realm: Infinite Void (awakened + 300 Ki): cinematic, freeze, damage cap, once per match
+  {
+    const st = training('gojo', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1200);
+    const g = F(st, 0), k = F(st, 1);
+    g.awakened = true; g.awakenUsed = true; g.awakenTimer = 2000; g.ki = 300;
+    const ev = run(st, 40, seq(...m236(Btn.H | Btn.S)));
+    check('realm: awakened 236H+S with 300 Ki opens the realm cinematic', ev.some((e) => e.type === 'realmStart' && e.tag === 'infinite_void') && st.realm?.phase === 'cine' && st.camera.cinematic?.kind === 'realm' && g.ki === 0);
+    run(st, 90);
+    check('realm: after 90 frames the rule twist is active, opponent frozen', st.realm?.phase === 'active' && (k.sim?.realmFreeze ?? 0) > 0);
+    const hp0 = k.hp;
+    // the frozen opponent cannot block or act: mash attacks
+    const ev2 = run(st, 400, (f) => [Btn.L, 0, 0, Btn.H, 0, 0, D | R | Btn.H, 0, 0, Btn.K, 0, 0][f % 12], (f) => (f % 2 ? L : Btn.L));
+    const dealt = hp0 - k.hp;
+    check('realm: frozen opponent takes hits', dealt > 0 && !ev2.some((e) => e.type === 'block' && e.player === 0 && ev2.indexOf(e) < 20));
+    check(`realm: Infinite Void damage capped at ${Math.trunc(k.maxHp * 35 / 100)} (35%)`, dealt <= Math.trunc((k.maxHp * 35) / 100), `${dealt}`);
+    check('realm: realmEnd emitted, state cleared', ev2.some((e) => e.type === 'realmEnd') && !st.realm);
+    g.ki = 300; g.awakened = true;
+    const ev3 = run(st, 40, seq(...m236(Btn.H | Btn.S)));
+    check('realm: once per match (second time = awakened ultimate)', !ev3.some((e) => e.type === 'realmStart') && ev3.some((e) => e.moveId === 'gojo_ult_aw'));
+  }
+  // Realm Clash: the opponent answers inside the cinematic window -> mash, the winner's realm opens
+  {
+    const st = training('gojo', 'naruto', { trainingOpts: { hpRegen: false } }); place(st, 1600);
+    for (const f of [F(st, 0), F(st, 1)]) { f.awakened = true; f.awakenUsed = true; f.awakenTimer = 3000; f.ki = 300; }
+    const ev = run(st, 300, (f) => (f < 3 ? m236(Btn.H | Btn.S)[f] : f > 60 ? [Btn.L, Btn.H][f & 1] : 0),
+      (f) => (f >= 40 && f < 43 ? [D, D | L, L | Btn.H | Btn.S][f - 40] : 0));
+    const end = ev.find((e) => e.type === 'clashEnd' && e.tag === 'realm');
+    check('Realm Clash starts when both open a realm', ev.some((e) => e.type === 'realmClash'));
+    check('Realm Clash: the masher wins and their realm opens', !!end && end.player === 0 && ev.filter((e) => e.type === 'realmStart' && e.player === 0).length === 2);
+  }
+  // Six Eyes reads a teleport: auto-guard after an enemy Vanish
+  {
+    const st = training('kaito', 'gojo', { trainingOpts: { hpRegen: false } }); place(st, 1200);
+    const g = F(st, 1); g.awakened = true; g.awakenUsed = true; g.awakenTimer = 2000; g.sim!.sixEyes = 1; g.infinity = 0; F(st, 0).ki = 100;
+    const ev = run(st, 60, seq(Btn.H | Btn.K, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Btn.L));
+    check('Six Eyes: reads the vanish and auto-guards the follow-up', ev.some((e) => e.tag === 'sixEyesRead') && ev.some((e) => e.type === 'infinityBlock' && e.tag === 'sixEyes'));
+  }
+  // Shadow clones: spawn 2, copy the next attack from the flanks, dispel after
+  {
+    const st = training('naruto', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 900);
+    const ev = run(st, 40, seq(...m214(Btn.S)));
+    check('Shadow Clone Jutsu spawns 2 clones', (st.summons ?? []).length === 2 && ev.filter((e) => e.type === 'summon').length === 2);
+    const ev2 = run(st, 70, seq(Btn.H));
+    check('clones copy the next attack (clone hits)', ev2.filter((e) => e.type === 'hit' && e.player === 0 && e.tag === 'clone').length >= 1, `${ev2.filter((e) => e.tag === 'clone').length}`);
+    check('clones vanish after their copy', (st.summons ?? []).length === 0);
+    // an enemy hit dispels a clone
+    const st2 = training('naruto', 'kaito'); place(st2, 1000);
+    run(st2, 40, seq(...m214(Btn.S)));
+    const ev3: SimEvent[] = [];
+    for (let f = 0; f < 30; f++) {
+      if (f === 9) { const c = st2.summons![0]; c.pos.x = F(st2, 1).pos.x - 550; c.pos.z = 0; }
+      step(st2, [0, f === 0 ? Btn.L : 0]); ev3.push(...st2.events);
+    }
+    check('enemy attacks dispel clones', ev3.some((e) => e.type === 'summonDispel' && e.tag === 'hit') && (st2.summons ?? []).length === 1);
+    // Clone Rush needs a clone and grabs
+    const st3 = training('naruto', 'kaito', { trainingOpts: { hpRegen: false } }); place(st3, 1200);
+    const ev4 = run(st3, 40, seq(...m41236(Btn.S)));
+    check('Clone Rush needs a clone', !ev4.some((e) => e.moveId === 'naruto_clone_rush'));
+    const st4 = training('naruto', 'kaito', { trainingOpts: { hpRegen: false } }); place(st4, 1200);
+    run(st4, 40, seq(...m214(Btn.S)));
+    const ev5 = run(st4, 80, seq(...m41236(Btn.S)));
+    check('Clone Rush grabs (and spends the clones)', ev5.some((e) => e.type === 'throw' && e.moveId === 'naruto_clone_rush') && (st4.summons ?? []).length === 0);
+  }
+  // Nine-Tails Chakra Mode: awakened below 20% HP -> form 'kurama', Kurama Rasengan replaces Rasengan
+  {
+    const st = training('naruto', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1000);
+    const n = F(st, 0); n.hp = 60;
+    const ev = run(st, 70, seq(Btn.L | Btn.H | Btn.K));
+    check('Sage Mode on awakening, Nine-Tails at low HP (formChange)', ev.some((e) => e.type === 'formChange' && e.tag === 'sage') && n.form === 'kurama');
+    const ev2 = run(st, 40, seq(...m236(Btn.S)));
+    check('Kurama Rasengan replaces Rasengan in Nine-Tails mode', ev2.some((e) => e.type === 'moveStart' && e.moveId === 'naruto_kurama_rasengan'));
+  }
+  // Tailed Beast Bomb realm: the blast hits on activation and clones appear
+  {
+    const st = training('naruto', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1500);
+    const n = F(st, 0); n.awakened = true; n.awakenUsed = true; n.awakenTimer = 2000; n.ki = 300;
+    const hp0 = F(st, 1).hp;
+    const ev = run(st, 140, seq(...m236(Btn.H | Btn.S)));
+    check('Tailed Beast Bomb: blast damage + clones', ev.some((e) => e.type === 'hit' && e.moveId === 'naruto_tbb_blast') && F(st, 1).hp < hp0 - 150 && (st.summons ?? []).length === 2);
+  }
+  // mirrored crossover scenario: clones + realm are side-symmetric
+  {
+    const mk = () => { const a = training('naruto', 'gojo'), b = training('gojo', 'naruto'); return [a, b]; };
+    const [s1, s2] = mk();
+    run(s1, 1); run(s2, 1);
+    F(s1, 0).pos = { x: -500, y: 0, z: 0 }; F(s1, 1).pos = { x: 500, y: 0, z: 0 };
+    F(s2, 1).pos = { x: 500, y: 0, z: 0 }; F(s2, 0).pos = { x: -500, y: 0, z: 0 };
+    for (const [st, ni, gi] of [[s1, 0, 1], [s2, 1, 0]] as Array<[GameState, number, number]>) {
+      const g = F(st, gi); g.awakened = true; g.awakenUsed = true; g.awakenTimer = 3000; g.ki = 300;
+      F(st, ni).ki = 300;
+    }
+    const nIn = (f: number) => [D, D | L, L | Btn.S, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Btn.H, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Btn.L][f] ?? (f % 9 === 0 ? Btn.L : 0);
+    const gIn = (f: number) => (f >= 50 && f < 53 ? [D, D | L, L | Btn.H | Btn.S][f - 50] : f % 13 === 0 ? Btn.K : 0);
+    let diff = '';
+    for (let f = 0; f < 400 && !diff; f++) {
+      const a = nIn(f), b = mirrorInput(gIn(f));
+      step(s1, [a, b]);
+      step(s2, [mirrorInput(b), mirrorInput(a)]);
+      diff = stateMirrorDiff(s1, s2);
+      if (diff) diff = `frame ${f}: ${diff}`;
+    }
+    check('clones + Infinite Void are side-symmetric', !diff, diff);
+  }
+}
+
+// ---------------------------------------------------------------- (l) crossover: Zoro, Luffy, Eren
+section('(l) crossover: sword styles, Oni Giri, Asura echo, King of Hell, Gear forms / Fifth, Titan Shift, Thunder Spear, Paths');
+{
+  const R = Btn.Right, D = Btn.Down, L = Btn.Left;
+  const m236 = (b: number) => [D, D | R, R | b];
+  const m214 = (b: number) => [D, D | L, L | b];
+  const m41236 = (b: number) => [L, D | L, D, D | R, R | b];
+  const awaken = (f: ReturnType<typeof F>, ki = 0) => { f.awakened = true; f.awakenUsed = true; f.awakenTimer = 3000; f.ki = ki; };
+  // Zoro style swap cycles the form; H changes with the style
+  {
+    const st = training('zoro', 'kaito'); place(st, 900);
+    check('Zoro starts in Santoryu', F(st, 0).form === 'santoryu');
+    const ev = run(st, 30, seq(Btn.S));
+    check('5S swaps to Ittoryu (formChange)', F(st, 0).form === 'ittoryu' && ev.some((e) => e.type === 'formChange' && e.tag === 'ittoryu'));
+    const ev2 = run(st, 40, seq(Btn.H));
+    check('Ittoryu H = Shishi Sonson', ev2.some((e) => e.type === 'moveStart' && e.moveId === 'zoro_1_h'));
+    run(st, 30, seq(Btn.S));
+    const ev3 = run(st, 80, (f) => (f % 14 === 0 ? Btn.H : 0));
+    const ids = ev3.filter((e) => e.type === 'moveStart').map((e) => e.moveId);
+    check('Nitoryu H,H,H string', ids.slice(0, 3).join() === 'zoro_2_h,zoro_2_hh,zoro_2_hhh', ids.join());
+  }
+  // Oni Giri passes through the opponent
+  {
+    const st = training('zoro', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1000);
+    const ev = run(st, 50, seq(...m236(Btn.S)));
+    check('Oni Giri hits and ends behind the opponent', ev.some((e) => e.type === 'hit' && e.moveId === 'zoro_oni_giri') && F(st, 0).pos.x > F(st, 1).pos.x, `${F(st, 0).pos.x} vs ${F(st, 1).pos.x}`);
+  }
+  // Asura: every slash hits twice (echo)
+  {
+    const st = training('zoro', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 900); awaken(F(st, 0));
+    const ev = run(st, 40, seq(Btn.L));
+    check('Asura echo: a second slash lands (tag echo)', ev.some((e) => e.type === 'hit' && e.tag === 'echo' && e.moveId === 'zoro_jab'));
+  }
+  // King of Hell: blocked slashes still cut
+  {
+    const st = training('zoro', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1400); awaken(F(st, 0), 300);
+    run(st, 140, seq(...m236(Btn.H | Btn.S)));
+    check('King of Hell realm active', st.realm?.kind === 'king_of_hell' && st.realm.phase === 'active');
+    place(st, 900);
+    const hp0 = F(st, 1).hp;
+    const ev = run(st, 40, seq(Btn.H), Btn.Guard);
+    check('King of Hell: blocked H deals 40% damage', ev.some((e) => e.type === 'block') && hp0 - F(st, 1).hp >= 38, `${hp0 - F(st, 1).hp}`);
+  }
+  // Luffy: Gear Second on awakening, Gear Fourth at low HP, Kong Gun replaces Pistol
+  {
+    const st = training('luffy', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1200);
+    F(st, 0).hp = 300;
+    run(st, 70, seq(Btn.L | Btn.H | Btn.K));
+    check('Gear Second on awakening (form gear2)', F(st, 0).form === 'gear2');
+    F(st, 0).hp = 150; run(st, 2);
+    check('Gear Fourth below 20% HP', F(st, 0).form === 'gear4');
+    const ev = run(st, 40, seq(...m214(Btn.S)));
+    check('Kong Gun replaces Pistol in Gear Fourth', ev.some((e) => e.type === 'moveStart' && e.moveId === 'luffy_kong_gun'));
+  }
+  // Gear Fifth: juggles bounce off the floor
+  {
+    const st = training('luffy', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1200); awaken(F(st, 0), 300);
+    run(st, 140, seq(...m236(Btn.H | Btn.S)));
+    check('Gear Fifth realm active (form gear5)', st.realm?.kind === 'gear_fifth' && F(st, 0).form === 'gear5');
+    place(st, 850);
+    const ev = run(st, 260, seq(D | R | Btn.H));
+    check('Gear Fifth: launched opponent bounces off the floor', ev.some((e) => e.type === 'groundBounce' && e.tag === 'gear5'));
+  }
+  // Eren: Titan Shift on awakening (form, bigger body, throw immunity, timer)
+  {
+    const st = training('eren', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 1500);
+    F(st, 0).hp = 300;
+    const ev = run(st, 70, seq(Btn.L | Btn.H | Btn.K));
+    check('Titan Shift: form titan on awakening', F(st, 0).form === 'titan' && ev.some((e) => e.type === 'formChange' && e.tag === 'titan'));
+    const ev2 = run(st, 40, seq(Btn.H));
+    check('Titan H = Titan Hammer Fist', ev2.some((e) => e.type === 'moveStart' && e.moveId === 'eren_t_hammer'));
+    place(st, 900);
+    const ev3 = run(st, 60, 0, seq(Btn.L | Btn.K));
+    check('Titan cannot be thrown', !ev3.some((e) => e.type === 'throw'));
+    run(st, 620);
+    check('Titan form ends after 600 frames', F(st, 0).form === '');
+  }
+  // Thunder Spear: harmless in flight, detonates later
+  {
+    const st = training('eren', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 2000);
+    const ev = run(st, 90, seq(...m41236(Btn.S)));
+    check('Thunder Spear detonates (projectile tag detonate) and hits', ev.some((e) => e.type === 'projectile' && e.tag === 'detonate') && ev.some((e) => e.type === 'hit' && e.moveId === 'eren_thunder_spear'));
+  }
+  // Paths: periodic stomp shockwaves; crouch-guard blocks them
+  {
+    const st = training('eren', 'kaito', { trainingOpts: { hpRegen: false } }); place(st, 2500); awaken(F(st, 0), 300);
+    run(st, 3, seq(...m236(Btn.H | Btn.S)));
+    const ev = run(st, 300, 0, (f) => (f > 150 ? D | Btn.Guard : 0));
+    const stomps = ev.filter((e) => e.moveId === 'eren_paths_stomp');
+    check('Paths: stomps hit standing, blocked crouching', stomps.some((e) => e.type === 'hit') && stomps.some((e) => e.type === 'block'), stomps.map((e) => e.type).join());
+  }
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) throw new Error(`${failures} test(s) failed`);

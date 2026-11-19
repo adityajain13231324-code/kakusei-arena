@@ -9,7 +9,7 @@
  * (3) BnB combo table (damage vs each opponent).
  * Prints markdown tables used in docs/BALANCE.md.
  */
-import { ALL_CHARS, type CharId } from '../src/sim/index';
+import { ALL_CHARS, CROSSOVER_CHARS, type CharId } from '../src/sim/index';
 import { mirrorRate, pairRate } from './lib/harness';
 import { BNB, bnbSetup } from './lib/bnb';
 import { playCombo } from './lib/finder';
@@ -41,25 +41,33 @@ check(`pooled P1 rate within 45-55% (n=${nAll})`, p1All / nAll >= 0.45 && p1All 
 console.log(`\n== (2) win-rate matrix, hard vs hard, ${NC} matches per cell (row fighter's win rate)`);
 const rate: Record<string, number> = {};
 const rounds: number[] = [];
-for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) {
+const NCH = ALL_CHARS.length;
+for (let i = 0; i < NCH; i++) for (let j = i + 1; j < NCH; j++) {
   const a = ALL_CHARS[i], b = ALL_CHARS[j];
   const r = pairRate(a, b, 'hard', NC, 21);
   rate[`${a}|${b}`] = r.rate; rate[`${b}|${a}`] = 1 - r.rate;
   rounds.push(...r.rounds);
 }
-console.log(`| vs | ${ALL_CHARS.join(' | ')} | avg |\n|---|---|---|---|---|---|`);
+console.log(`| vs | ${ALL_CHARS.join(' | ')} | avg |\n|---|${ALL_CHARS.map(() => '---|').join('')}---|`);
 for (const a of ALL_CHARS) {
   let s = 0;
   const cells = ALL_CHARS.map((b) => { if (a === b) return '—'; s += rate[`${a}|${b}`]; return pct(rate[`${a}|${b}`]); });
-  console.log(`| **${a}** | ${cells.join(' | ')} | ${pct(s / 3)} |`);
+  console.log(`| **${a}** | ${cells.join(' | ')} | ${pct(s / (NCH - 1))} |`);
 }
 const avgRound = rounds.reduce((x, y) => x + y, 0) / rounds.length / 60;
 const timeouts = rounds.filter((r) => r >= 60 * 60 - 1).length;
 console.log(`\nrounds: ${rounds.length}, average ${avgRound.toFixed(1)} s, timeouts ${timeouts}`);
 for (const k of Object.keys(rate)) { const [a, b] = k.split('|'); if (a < b) check(`${a} vs ${b} within 35-65%`, rate[k] >= 0.35 && rate[k] <= 0.65, pct(rate[k])); }
+// Crossover Pack target: each crossover fighter 40-60% on average vs the original four
+for (const c of CROSSOVER_CHARS) {
+  if (ALL_CHARS.indexOf(c) < 0) continue;
+  const orig = ALL_CHARS.filter((x) => CROSSOVER_CHARS.indexOf(x) < 0);
+  const avg = orig.reduce((acc, o) => acc + rate[`${c}|${o}`], 0) / orig.length;
+  check(`${c}: average vs the original four within 40-60%`, avg >= 0.4 && avg <= 0.6, pct(avg));
+}
 check('average round length 25-45 s (hard vs hard)', avgRound >= 25 && avgRound <= 45, `${avgRound.toFixed(1)} s`);
 
-console.log('\n== (3) BnB combos (damage vs kaito / shiori / ren / goro)');
+console.log(`\n== (3) BnB combos (damage vs ${ALL_CHARS.join(' / ')})`);
 console.log('| Fighter | Combo | Inputs | Hits | Damage |\n|---|---|---|---|---|');
 for (const c of ALL_CHARS) for (const b of BNB[c]) {
   const d = ALL_CHARS.map((vs) => playCombo(bnbSetup(c, vs, b), b.steps));

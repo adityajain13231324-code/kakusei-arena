@@ -4,6 +4,7 @@ import { CHARS } from '../data';
 import { ARENA_HALF, ARENA_HALF_TRAINING, ROUND_FRAMES, GUARD_MAX } from './constants';
 import { resetRound } from './rounds';
 import { updateCamera } from './camera';
+import { baseForm } from './crossover';
 
 function createSim(): FighterSimData {
   return {
@@ -18,6 +19,7 @@ function createSim(): FighterSimData {
     turnLock: 0, landLag: 0, partner: -1, breakable: true, throwMove: '',
     regen: 0, armorUsed: false, heatUsed: 0, kiFullSent: false,
     hitPose: 'hitMid', crumple: false, airAttackUsed: false, enderUsed: false, guard: GUARD_MAX, guardIdle: 0, otgUsed: false,
+    realmUsed: false, realmFreeze: 0, autoGuard: 0, sixEyes: 0, echoMove: '', echoT: 0, formTimer: 0, bounceExtra: 0, infinityCd: 0,
   };
 }
 
@@ -37,6 +39,8 @@ function createFighter(char: CharId, i: number): FighterState {
     side: i === 0 ? -1 : 1,
     lastInputs: [],
     sim: createSim(),
+    form: baseForm(char),
+    infinity: char === 'gojo' ? 1 : 0,
   };
 }
 
@@ -67,6 +71,9 @@ export function createMatch(cfg: MatchConfig): GameState {
     },
     frameAdv: null,
     advTrack: null,
+    realm: null,
+    summons: [],
+    nextSummonId: 1,
   };
   resetRound(st);
   updateCamera(st);

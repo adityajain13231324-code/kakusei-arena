@@ -4,7 +4,8 @@
  * jumps, juggle gravity, knockback, ground bounce, wall splat, landing.
  */
 import type { GameState } from './types';
-import { F, emit, setMode, ensureMode, moveOf, chest, vec, faceToward, type SF } from './fighter';
+import { F, emit, setMode, ensureMode, moveOf, chest, vec, faceToward, speedPct, bodyRadius, type SF } from './fighter';
+import { startRealm, spawnClones, frozenByRealm, realmActive } from './crossover';
 import {
   R_UP, R_DOWN, R_FWD, R_BACK, DIR_MASK, B_G, B_S, B_L, B_H, B_K,
   EV_UP, EV_UP_DOUBLE, EV_DOWN_TAP, EV_FWD, EV_BACK, EV_FWD_DOUBLE, EV_BACK_DOUBLE,
@@ -80,16 +81,19 @@ function neutralMovement(state: GameState, i: number): void {
     }
     return;
   }
+  const sp = speedPct(f);
   if (rel & R_FWD) {
     ensureMode(f, 'walk');
-    f.vel.x = Math.trunc((f.facing.x * c.walkSpeed) / 1000);
-    f.vel.z = Math.trunc((f.facing.z * c.walkSpeed) / 1000);
+    const w = Math.trunc((c.walkSpeed * sp) / 100);
+    f.vel.x = Math.trunc((f.facing.x * w) / 1000);
+    f.vel.z = Math.trunc((f.facing.z * w) / 1000);
     return;
   }
   if (rel & R_BACK) {
     ensureMode(f, 'walk');
-    f.vel.x = -Math.trunc((f.facing.x * c.backWalkSpeed) / 1000);
-    f.vel.z = -Math.trunc((f.facing.z * c.backWalkSpeed) / 1000);
+    const w = Math.trunc((c.backWalkSpeed * sp) / 100);
+    f.vel.x = -Math.trunc((f.facing.x * w) / 1000);
+    f.vel.z = -Math.trunc((f.facing.z * w) / 1000);
     return;
   }
   // training dummy crouch option
@@ -100,6 +104,11 @@ function neutralMovement(state: GameState, i: number): void {
 /** input-driven decisions for one fighter (only called for non-frozen fighters while inputs are live) */
 export function think(state: GameState, i: number): void {
   const f = F(state, i), s = f.sim;
+  // frozen inside the opponent's Soul Realm (Infinite Void): no inputs at all
+  if (frozenByRealm(f)) {
+    if (f.mode === 'walk' || f.mode === 'sidewalk' || f.mode === 'guard' || f.mode === 'crouch' || f.mode === 'kicharge') setMode(f, 'idle');
+    return;
+  }
   switch (f.mode) {
     case 'idle': case 'walk': case 'crouch': case 'guard': case 'sidewalk': case 'kicharge':
       if (s.landLag === 0 && tryActions(state, i, 'free')) return;
@@ -176,9 +185,19 @@ function land(state: GameState, i: number, lag: number): void {
  */
 function juggleGravity(f: SF): number {
   const w = 100 + Math.trunc((CHARS[f.char].weight - 100) / 2);
-  const gm = (JUGGLE_G2_BASE + Math.min(JUGGLE_G2_MAX_EXTRA, f.comboHits)) * 5 * w;
+  let gm = (JUGGLE_G2_BASE + Math.min(JUGGLE_G2_MAX_EXTRA, f.comboHits)) * 5 * w;
+  if (gear5(f)) gm = Math.trunc((gm * 2) / 3); // Gear Fifth: cartoon physics, juggles float
   const t = f.modeFrame;
   return Math.trunc((gm * (t + 1)) / 1000) - Math.trunc((gm * t) / 1000);
+}
+
+/** fighter f is being juggled inside the opponent's Gear Fifth realm */
+let gearState: GameState | null = null;
+function gear5(f: SF): boolean {
+  const st = gearState;
+  if (!st || !st.realm) return false;
+  const oi = st.fighters[0] === f ? 1 : 0;
+  return realmActive(st, 'gear_fifth', oi);
 }
 
 /**
@@ -191,6 +210,7 @@ export const snap = [
   { x: 0, y: 0, z: 0, fx: -1000, fz: 0 },
 ];
 export function snapshot(state: GameState): void {
+  gearState = state;
   for (let i = 0; i < 2; i++) {
     const f = F(state, i), p = snap[i];
     p.x = f.pos.x; p.y = f.pos.y; p.z = f.pos.z; p.fx = f.facing.x; p.fz = f.facing.z;
@@ -216,7 +236,7 @@ export function physics(state: GameState, i: number): void {
       circle(f, o, Math.trunc((c.sidestepSpeed * SIDEWALK_PCT) / 100));
       break;
     case 'dash': {
-      const v = Math.trunc((c.dashSpeed * (DASH_FRAMES - f.modeFrame)) / DASH_FRAMES);
+      const v = Math.trunc((Math.trunc((c.dashSpeed * speedPct(f)) / 100) * (DASH_FRAMES - f.modeFrame)) / DASH_FRAMES);
       f.vel.x = Math.trunc((f.facing.x * v) / 1000); f.vel.z = Math.trunc((f.facing.z * v) / 1000);
       break;
     }
@@ -250,6 +270,8 @@ export function physics(state: GameState, i: number): void {
       if (f.airborne) f.vel.y -= GRAVITY;
       if (m.teleport && f.moveFrame === m.teleport.frame && !f.stance) teleport(state, i, m.teleport.to, undefined, o);
       if (m.projectile && f.moveFrame + 1 === m.projectile.spawnFrame && !f.stance) spawnProjectiles(state, i, m);
+      if (m.realm && f.moveFrame === m.startup) startRealm(state, i, m);
+      if (m.summon && f.moveFrame === m.summon.frame) spawnClones(state, i, m.summon.count);
       break;
     }
     case 'juggle':
@@ -297,7 +319,13 @@ export function integrate(state: GameState, i: number): void {
     f.pos.y = 0;
     if (f.airborne) {
       if (f.mode === 'juggle') {
-        if (s.bounce && !s.bounceUsed) {
+        if (gear5(f) && (s.bounceExtra ?? 0) < 2 && f.comboHits < 9) {
+          // Gear Fifth: the floor is rubber too
+          s.bounceExtra = (s.bounceExtra ?? 0) + 1;
+          f.vel.y = 40;
+          f.pos.y = 1;
+          emit(state, { type: 'groundBounce', player: (1 - i) as 0 | 1, target: i as 0 | 1, pos: vec(f.pos.x, 0, f.pos.z), charId: o.char, tag: 'gear5' });
+        } else if (s.bounce && !s.bounceUsed) {
           s.bounce = false; s.bounceUsed = true;
           f.vel.y = 46;
           s.knockX = Math.trunc(s.knockX / 2); s.knockZ = Math.trunc(s.knockZ / 2);
@@ -325,7 +353,7 @@ export function integrate(state: GameState, i: number): void {
 /** walls: clamp, transfer pushback to the attacker, wall splat */
 export function walls(state: GameState, i: number): void {
   const f = F(state, i), o = F(state, 1 - i), s = f.sim;
-  const lim = state.arenaHalfSize - CHARS[f.char].radius;
+  const lim = state.arenaHalfSize - bodyRadius(f);
   let hitWall = false;
   let wallDot = 0;
   if (f.pos.x > lim) { f.pos.x = lim; hitWall = true; wallDot = s.knockX; if (s.pushX > 0) { o.sim.pushX -= s.pushX; s.pushX = 0; } }

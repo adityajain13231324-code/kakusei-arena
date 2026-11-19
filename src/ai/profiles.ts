@@ -74,4 +74,15 @@ export const PERSONALITY: Record<CharId, Personality> = {
   shiori: { spacing: 0.65, rush: 1.25, zoning: 0.15, trick: 0.35, likes: { jab: 0.5, lowjab: 0.7, knee: 0.5, kunai: 0.2 } },
   ren: { spacing: 1.0, rush: 0.8, zoning: 0.35, trick: 0.4, likes: { slash: 0.6, thrust: 0.6, crescent: 0.4, lowcut: 0.3 } },
   goro: { spacing: 0.6, rush: 0.95, zoning: 0.2, trick: 0.3, likes: { palm: 0.5, shoulder: 0.8, hug: 0.9, hammer: 0.3 } },
+  // Crossover Pack personalities
+  /** Gojo: keeps mid range, Blue -> combo, Blink mix-ups, Domain the moment it is available */
+  gojo: { spacing: 1.6, rush: 0.9, zoning: 0.55, trick: 0.4, likes: { palm: 0.5, step: 0.5, kick: 0.3, launcher: 0.3 } },
+  /** Naruto: relentless, clones up then pressures; Rasengan as the go-to ender */
+  naruto: { spacing: 0.7, rush: 1.3, zoning: 0.15, trick: 0.45, likes: { jab: 0.5, elbow: 0.6, punch: 0.4, rasengan: 0.6 } },
+  /** Zoro: sword footsies at max range, swaps styles, counters */
+  zoro: { spacing: 0.95, rush: 0.95, zoning: 0.2, trick: 0.35, likes: { slash: 0.5, oni: 0.6, thrust: 0.4 } },
+  /** Luffy: long pokes from far away, Rocket in, Gatling up close */
+  luffy: { spacing: 0.9, rush: 1.1, zoning: 0.1, trick: 0.2, likes: { pistol: 0.7, whip: 0.5, gatling: 0.5 } },
+  /** Eren: grapples in and out, Thunder Spears at range, goes Titan when it can */
+  eren: { spacing: 0.85, rush: 1.05, zoning: 0.3, trick: 0.4, likes: { slash: 0.5, spin: 0.4, titan: 0.6 } },
 };

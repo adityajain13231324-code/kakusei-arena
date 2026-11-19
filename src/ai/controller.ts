@@ -100,7 +100,11 @@ export class CpuController {
   setDifficulty(d: Difficulty): void { this.difficulty = d; this.prof = PROFILES[d]; }
   reset(): void { this.mem = freshMem(); }
 
+  /** last state seen by think() (read-only; for clone counts in canUse) */
+  private lastState: GameState | null = null;
+
   think(state: GameState): InputBits {
+    this.lastState = state;
     const mem = this.mem;
     if (state.frame <= mem.last || state.round.phaseFrame === 0 && state.round.phase !== 'fight') {
       if (state.frame < mem.last || state.frame === 0) this.mem = freshMem();
@@ -180,11 +184,19 @@ export class CpuController {
       if (state.frame >= mem.awakeAt && rng.chance(P.ult + 0.05)) { mem.awakeAt = -1; return Btn.L | Btn.H | Btn.K; }
     }
 
-    // ---- juggle / combo conversion
-    if (opp.mode === 'juggle' || opp.mode === 'wallsplat') {
+    // ---- Soul Realm: awakened + 300 Ki opens the realm (sure-hit, invulnerable startup)
+    if (this.realmReady(state, me) && opp.mode !== 'knockdown' && !opp.invuln && rng.chance(0.25 + 0.6 * P.ult)) {
+      const f = this.frames(state, me, this.ultOf(me, cat));
+      mem.plan = f.slice(1);
+      return f[0];
+    }
+
+    // ---- juggle / combo conversion (also: opponent stuck in a long hitstun, e.g. after Gojo's Blue or a guard crush)
+    if (opp.mode === 'juggle' || opp.mode === 'wallsplat' || (opp.mode === 'hitstun' && opp.stun >= 14 && opp.hitstop === 0 && state.frame - mem.juggleTick > 3)) {
+      if (opp.mode === 'hitstun') mem.juggleTick = state.frame;
       const r = this.juggle(state, me, opp, cat, rng);
       if (r !== null) return r;
-      return this.faceNeutral(me);
+      if (opp.mode !== 'hitstun') return this.faceNeutral(me);
     }
 
     // ---- threats
@@ -245,14 +257,31 @@ export class CpuController {
     return moveFrames(mi, this.scheme(state), me.lastInputs);
   }
 
-  private canUse(me: FighterState, mi: MoveInfo): boolean {
+  private canUse(me: FighterState, mi: MoveInfo, state?: GameState): boolean {
     if (mi.m.requires === 'awakened' && !me.awakened) return false;
+    if (mi.m.internal) return false;
+    if (mi.m.needForm !== undefined && (me.form ?? '') !== mi.m.needForm) return false;
+    if (mi.kind === 'special' && mi.kiCost && me.ki < mi.kiCost) return false;
+    if (mi.m.needClones) {
+      let n = 0;
+      for (const s of (state ?? this.lastState)?.summons ?? []) if (s.owner === this.player) n++;
+      if (n < mi.m.needClones) return false;
+    }
     if (mi.kind === 'ki' && me.ki < mi.kiCost) return false;
     if (mi.kind === 'ultimate' && me.ki < (me.awakened ? 200 : 300)) return false;
     return true;
   }
 
-  private ultOf(me: FighterState, cat: CharCatalog): MoveInfo { return me.awakened && cat.ultAw ? cat.ultAw : cat.ult; }
+  private ultOf(me: FighterState, cat: CharCatalog): MoveInfo {
+    if (me.awakened && cat.ultAw && (cat.ultAw.m.needForm === undefined || cat.ultAw.m.needForm === (me.form ?? ''))) return cat.ultAw;
+    return cat.ult;
+  }
+
+  /** this fighter can open its Soul Realm right now (awakened + 300 Ki, unused) */
+  private realmReady(state: GameState, me: FighterState): boolean {
+    const def = getChar(me.char);
+    return !!def.realmId && me.awakened && me.ki >= 300 && !me.sim?.realmUsed && !me.airborne && !state.realm && !state.clash.active;
+  }
 
   /** simulate `frames` for me (opponent neutral) and return damage dealt and whether it was only blocked */
   private lookahead(state: GameState, frames: number[], horizon: number, oppInputs?: number): number {
@@ -504,6 +533,14 @@ export class CpuController {
       mem.plan = [0, 0];
       return R_UP;
     }
+    // counter stances (Gojo Six Eyes counter / Zoro Lion's Song / Eren hardened fist) vs a readable high or mid
+    if (th.kind === 'melee' && th.mi && !th.low && th.frames >= 4 && th.frames <= 16) {
+      const ctr = cat.specials.find((s) => !!s.m.counter && this.canUse(me, s, state));
+      if (ctr && rng.chance(PERSONALITY[me.char].trick * 0.5 * P.answer)) {
+        const f = this.frames(state, me, ctr);
+        if (f.length <= th.frames - 2) { mem.plan = f.slice(1); return f[0]; }
+      }
+    }
     // stuff a slow move with a jab
     if (th.kind === 'melee' && th.frames >= cat.fastest.startup + 3 && rng.chance(P.sidestep * 0.6) && dist <= cat.fastest.reach) {
       const f = this.frames(state, me, cat.fastest);
@@ -624,6 +661,28 @@ export class CpuController {
     if (me.char === 'shiori' && dist < 1500 && rng.chance(pers.trick * 0.25 * (0.3 + P.aggression))) {
       const sw = cat.byId.shiori_smoke_swap;
       if (sw && this.canUse(me, sw)) { const f = this.frames(state, me, sw); mem.plan = f.slice(1); return f[0]; }
+    }
+    if (me.char === 'gojo' && dist < 1600 && rng.chance(pers.trick * 0.12 * (0.3 + P.aggression))) {
+      const bl = cat.byId.gojo_blink;
+      if (bl && this.canUse(me, bl, state)) { const f = this.frames(state, me, bl); mem.plan = f.slice(1); return f[0]; }
+    }
+    // Zoro: swap sword style now and then (Ittoryu for the iai launcher, Nitoryu up close)
+    if (me.char === 'zoro' && opp.mode !== 'attack' && rng.chance(pers.trick * 0.08)) {
+      const sw = cat.byId.zoro_style;
+      if (sw) { const f = this.frames(state, me, sw); mem.plan = f.slice(1); return f[0]; }
+    }
+    if (me.char === 'naruto') {
+      let clones = 0;
+      for (const s of state.summons ?? []) if (s.owner === this.player) clones++;
+      // clones first, then pressure (clones copy the next attack); Clone Rush once they are out
+      if (clones === 0 && dist > 1100 && opp.mode !== 'attack' && rng.chance(pers.trick * (0.4 + P.aggression))) {
+        const cj = cat.byId.naruto_clone_jutsu;
+        if (cj) { const f = this.frames(state, me, cj); mem.plan = f.slice(1); return f[0]; }
+      }
+      if (clones > 0 && dist < 1500 && rng.chance(pers.trick * 0.25 * (0.3 + P.aggression))) {
+        const cr = cat.byId.naruto_clone_rush;
+        if (cr && this.canUse(me, cr, state)) { const f = this.frames(state, me, cr); mem.plan = f.slice(1); return f[0]; }
+      }
     }
     if (dist < 1700 && me.ki >= 100 && rng.chance(P.vanish * 0.05)) return Btn.H | Btn.K;
 

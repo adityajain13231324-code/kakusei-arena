@@ -12,6 +12,7 @@ import { STAGGER_EXTRA, COUNTER_HITSTOP, GUARD_MAX, GUARD_CRUSH_STUN, KD_MIN, KD
 import { addKi, startUltCine } from './meters';
 import { moveDef, CHARS } from '../data';
 import { chance } from '../core/rng';
+import { autoGuard, capDamage, frozenByRealm, queueEcho, realmActive, hitClones } from './crossover';
 
 /** per-step scratch: fighters that got stunned this step skip the end-of-step stun decrement */
 export const stunnedThisStep = [false, false];
@@ -50,6 +51,7 @@ function canBlock(state: GameState, di: number, from: Vec3, move: MoveDef, crouc
   const d = F(state, di);
   if (move.height === 'unblockable' || move.height === 'throw') return false;
   if (d.airborne) return false;
+  if (frozenByRealm(d)) return false; // frozen inside an opponent's Soul Realm
   const m = d.mode;
   const modeOk = m === 'idle' || m === 'walk' || m === 'crouch' || m === 'guard' || m === 'blockstun' || m === 'sidewalk'
     || (m === 'backdash' && d.modeFrame >= BACKDASH_ACT - 2) || (m === 'sidestep' && d.modeFrame >= 12);
@@ -137,6 +139,38 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     return 'none';
   }
 
+  // counter stances (Gojo Six Eyes counter, Zoro Lion's Song, Eren hardened fist): melee strikes of the listed heights
+  if (!proj && d.mode === 'attack') {
+    const dm = moveOf(d);
+    if (dm?.counter) {
+      const fr = d.moveFrame + 1;
+      if (fr >= dm.counter.from && fr <= dm.counter.to && dm.counter.heights.indexOf(move.height) >= 0) {
+        emit(state, { type: 'parry', player: di as 0 | 1, target: ai as 0 | 1, pos: { ...point }, moveId: move.id, tag: 'counter', charId: d.char });
+        setMode(a, 'hitstun');
+        a.stun = 30;
+        a.sim.hitPose = 'stagger';
+        stunnedThisStep[ai] = true;
+        a.hitstop = 10; d.hitstop = 10;
+        startMoveHook(state, di, dm.counter.move);
+        return 'none';
+      }
+    }
+  }
+
+  // Gojo: Infinity (first hit each round) / Six Eyes auto-guard -> guarded, no chip, no guard drain
+  const ag = autoGuard(state, ai, move, point, !!proj);
+  if (ag) {
+    setMode(d, 'blockstun');
+    d.stun = move.blockstun;
+    stunnedThisStep[di] = true;
+    push(d, dirx, dirz, Math.abs(pb));
+    d.hitstop = Math.max(d.hitstop, hs);
+    if (!proj) { a.hitstop = Math.max(a.hitstop, hs); a.sim.contact = 2; }
+    emit(state, { type: 'infinityBlock', player: di as 0 | 1, target: ai as 0 | 1, pos: { ...point }, moveId: move.id, strength: move.strength, element: 'void', charId: d.char, tag: ag });
+    if (!proj) state.advTrack = { att: ai, moveId: move.id, aFree: -1, dFree: -1 };
+    return 'block';
+  }
+
   const blocked = canBlock(state, di, from, move, crouch);
   if (blocked && drainGuard(d, move, !!proj)) {
     // GUARD CRUSH: the guard meter ran out -> stagger (comboable), meter refills
@@ -156,8 +190,11 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     setMode(d, 'blockstun');
     d.stun = move.blockstun;
     stunnedThisStep[di] = true;
-    if (move.chip && !state.training) d.hp = Math.max(1, d.hp - move.chip);
-    else if (move.chip) d.hp = Math.max(1, d.hp - move.chip);
+    let chip = move.chip ?? 0;
+    // Zoro's King of Hell realm: blocked slashes still cut (40% damage) and wear the guard down twice as fast
+    if (realmActive(state, 'king_of_hell', ai)) { chip = Math.max(chip, Math.trunc((move.damage * 40) / 100)); drainGuard(d, move, !!proj); }
+    if (chip) d.hp = Math.max(1, d.hp - capDamage(state, ai, chip));
+    queueEcho(state, ai, move, !!proj);
     push(d, dirx, dirz, Math.trunc((pb * 12) / 10));
     d.hitstop = Math.max(d.hitstop, hs - 2);
     if (!proj) { a.hitstop = Math.max(a.hitstop, hs - 2); a.sim.contact = 2; }
@@ -173,6 +210,7 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     let dmg = Math.trunc((move.damage * comboScale(d.comboHits)) / 1000);
     if (a.awakened) dmg = Math.trunc((dmg * 11) / 10);
     dmg = Math.max(1, Math.trunc((dmg * 7) / 10));
+    dmg = capDamage(state, ai, dmg);
     d.hp -= dmg;
     if (state.training && d.hp < 1) d.hp = 1;
     d.comboHits++;
@@ -208,7 +246,7 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     const fr = d.moveFrame + 1;
     if (fr >= dm.armor[0] && fr <= dm.armor[1]) {
       d.sim.armorUsed = true;
-      const dmg = Math.max(1, Math.trunc((move.damage * (a.awakened ? 11 : 10)) / 10));
+      const dmg = capDamage(state, ai, Math.max(1, Math.trunc((move.damage * (a.awakened ? 11 : 10)) / 10)));
       d.hp -= dmg;
       if (state.training && d.hp < 1) d.hp = 1;
       d.hitstop = Math.max(d.hitstop, hs);
@@ -227,7 +265,9 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
   if (a.awakened) dmg = Math.trunc((dmg * 11) / 10);
   if (a.sim.easyMove && (move.kind === 'special' || move.kind === 'ki')) dmg = Math.trunc((dmg * 9) / 10);
   if (!proj && a.sim.heatUsed > 0) dmg = Math.trunc((dmg * (100 + 15 * a.sim.heatUsed)) / 100);
+  if (d.form === 'titan') dmg = Math.trunc((dmg * 3) / 4); // Titan hide
   if (dmg < 1) dmg = 1;
+  dmg = capDamage(state, ai, dmg);
   d.hp -= dmg;
   if (state.training && d.hp < 1) d.hp = 1;
   d.comboHits++;
@@ -246,6 +286,7 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
 
   addKi(state, ai, move.kiGain ?? 0);
   addKi(state, di, Math.trunc(dmg / 12));
+  queueEcho(state, ai, move, !!proj);
   if (move.heat === 'gain' && a.char === 'kaito' && a.heatStacks < 3) {
     a.heatStacks++;
     emit(state, { ...evBase, type: 'hit', pos: chest(a), damage: 0, tag: 'heat' });
@@ -341,6 +382,8 @@ export function tryThrow(state: GameState, ai: number, move: MoveDef, point: Vec
   if (m === 'hitstun' || m === 'blockstun' || m === 'juggle' || m === 'knockdown' || m === 'wallsplat' || m === 'thrown' || d.invuln) return;
   // normal throws are high: they whiff on crouchers. Command throws (special) grab anyone grounded.
   if (move.kind === 'throw' && isCrouching(d)) return;
+  // a 4 m Titan cannot be picked up by a normal throw
+  if (move.kind === 'throw' && d.form === 'titan') return;
   a.sim.hitMask = -1;
   // simultaneous throws: automatic break
   const dm = d.mode === 'attack' ? moveOf(d) : undefined;
@@ -397,6 +440,7 @@ export function updateThrown(state: GameState, di: number, view?: { x: number; z
     let dmg = tm ? tm.damage : 100;
     if (a.awakened) dmg = Math.trunc((dmg * 11) / 10);
     if (d.comboHits === 0) d.redHp = d.hp;
+    dmg = capDamage(state, ai, dmg);
     d.hp -= dmg;
     if (state.training && d.hp < 1) d.hp = 1;
     d.comboHits++;
@@ -414,7 +458,7 @@ export function updateThrown(state: GameState, di: number, view?: { x: number; z
 interface Pending { ai: number; move: MoveDef; k: number; x: number; y: number; z: number }
 const pending: Pending[] = [];
 
-function strikeable(d: SF): boolean {
+export function strikeable(d: SF): boolean {
   if (d.invuln) return false;
   if (d.sim.enderUsed && d.mode === 'juggle') return false;
   const m = d.mode;
@@ -435,8 +479,15 @@ export function detectStrikes(state: GameState, frozen: boolean[]): void {
     const m = moveOf(a);
     if (!m || m.internal && m.hitboxes.length === 0) continue;
     const d = F(state, 1 - ai);
-    if (!(d.mode === 'knockdown' ? otgable(d, m) : strikeable(d))) continue;
     const fr = a.moveFrame + 1;
+    // enemy shadow clones in the way are dispelled by any active hitbox
+    if (state.summons && state.summons.length) {
+      for (let k = 0; k < m.hitboxes.length; k++) {
+        const hb = m.hitboxes[k];
+        if (fr >= hb.from && fr <= hb.to && m.height !== 'throw') hitClones(state, ai, hitCap(a, hb));
+      }
+    }
+    if (!(d.mode === 'knockdown' ? otgable(d, m) : strikeable(d))) continue;
     for (let k = 0; k < m.hitboxes.length; k++) {
       const hb = m.hitboxes[k];
       if (fr < hb.from || fr > hb.to) continue;

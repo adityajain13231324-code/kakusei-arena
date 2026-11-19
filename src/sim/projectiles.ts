@@ -10,6 +10,7 @@ import { moveDef } from '../data';
 import { isqrt, norm2 } from '../core/fixed';
 import { B_L, B_H, B_K, B_S, EV_UP, EV_DOWN, EV_FWD, EV_BACK } from './input';
 import { CLASH_FRAMES, CLASH_PUSH } from './constants';
+import { projectileSlow, projectileHitsClone, endRealmClash, capDamage } from './crossover';
 
 export function spawnProjectiles(state: GameState, i: number, m: MoveDef): void {
   const f = F(state, i);
@@ -36,7 +37,9 @@ export function spawnProjectiles(state: GameState, i: number, m: MoveDef): void 
       beam: !!pd.beam,
       moveId: m.id,
       cooldown: 0,
+      slow: 100,
     };
+    if (pd.fuse) { p.fuse = pd.fuse; p.blastR = pd.blastR ?? pd.r * 4; }
     state.projectiles.push(p);
     emit(state, { type: 'projectile', player: i as 0 | 1, pos: { ...p.pos }, moveId: m.id, element: p.element, charId: f.char, tag: p.kind });
   }
@@ -50,7 +53,9 @@ function destroy(state: GameState, idx: number, reason: string): void {
 
 function projCap(p: ProjectileState): Cap {
   // swept sphere over the last frame so fast projectiles can't tunnel
-  return cap(p.pos.x - p.vel.x, p.pos.y, p.pos.z - p.vel.z, p.pos.x, p.pos.y, p.pos.z, p.r);
+  const k = p.slow ?? 100;
+  const vx = Math.trunc((p.vel.x * k) / 100), vz = Math.trunc((p.vel.z * k) / 100);
+  return cap(p.pos.x - vx, p.pos.y, p.pos.z - vz, p.pos.x, p.pos.y, p.pos.z, p.r);
 }
 
 function projInvulnerable(state: GameState, i: number): boolean {
@@ -74,8 +79,18 @@ export function updateProjectiles(state: GameState, hitsLive: boolean): void {
   const lim = state.arenaHalfSize;
   for (let i = ps.length - 1; i >= 0; i--) {
     const p = ps[i];
-    p.pos.x += p.vel.x; p.pos.y += p.vel.y; p.pos.z += p.vel.z;
+    // Gojo's Infinity: enemy projectiles crawl at 30% speed within 1.2 m of him
+    const k = projectileSlow(state, p);
+    p.slow = k;
+    if (k === 100) { p.pos.x += p.vel.x; p.pos.y += p.vel.y; p.pos.z += p.vel.z; }
+    else { p.pos.x += Math.trunc((p.vel.x * k) / 100); p.pos.y += Math.trunc((p.vel.y * k) / 100); p.pos.z += Math.trunc((p.vel.z * k) / 100); }
     p.life--;
+    // delayed blast (Thunder Spear): stops and detonates with `fuse` frames of life left
+    if (p.fuse && p.life === p.fuse) {
+      p.vel.x = p.vel.y = p.vel.z = 0;
+      p.r = p.blastR ?? p.r;
+      emit(state, { type: 'projectile', player: p.owner, pos: { ...p.pos }, moveId: p.moveId, element: p.element, tag: 'detonate' });
+    }
     if (p.cooldown && p.cooldown > 0) p.cooldown--;
     if (p.life <= 0) { destroy(state, i, 'expire'); continue; }
     if (Math.abs(p.pos.x) > lim || Math.abs(p.pos.z) > lim) { destroy(state, i, 'wall'); continue; }
@@ -120,6 +135,12 @@ export function updateProjectiles(state: GameState, hitsLive: boolean): void {
   for (let i = ps.length - 1; i >= 0; i--) {
     const p = ps[i];
     if (p.cooldown && p.cooldown > 0) continue;
+    if (p.fuse && p.life > p.fuse) continue; // still flying: harmless until it detonates
+    // enemy shadow clones in the path are dispelled
+    if (state.summons && state.summons.length && projectileHitsClone(state, p, projCap(p))) {
+      p.hitsLeft--;
+      if (p.hitsLeft <= 0) { destroy(state, i, 'spent'); continue; }
+    }
     const ti = 1 - p.owner;
     if (projInvulnerable(state, ti)) continue;
     const d = F(state, ti);
@@ -146,6 +167,7 @@ function startClash(state: GameState, a: ProjectileState, b: ProjectileState): v
   const p0 = a.owner === 0 ? a : b, p1 = a.owner === 0 ? b : a;
   const c = state.clash;
   c.active = true;
+  c.kind = 'beam';
   c.frame = 0;
   c.duration = CLASH_FRAMES;
   c.balance = 0;
@@ -197,6 +219,7 @@ export function updateClash(state: GameState): void {
   c.active = false;
   state.camera.cinematic = null;
   for (let i = 0; i < 2; i++) { const f = F(state, i); f.invuln = false; setMode(f, 'idle'); }
+  if (c.kind === 'realm') { c.kind = 'beam'; endRealmClash(state, winner); return; }
   if (winner === 2) {
     for (let i = 0; i < 2; i++) {
       const f = F(state, i);
@@ -210,6 +233,7 @@ export function updateClash(state: GameState): void {
   const wm = moveDef(w.char, c.moves ? c.moves[winner] : '');
   let dmg = wm ? Math.trunc((wm.damage * (wm.projectile?.hits ?? 1) * 6) / 10) : 100;
   if (w.awakened) dmg = Math.trunc((dmg * 11) / 10);
+  dmg = capDamage(state, winner, dmg);
   if (l.comboHits === 0) l.redHp = l.hp;
   l.hp -= dmg;
   if (state.training && l.hp < 1) l.hp = 1;

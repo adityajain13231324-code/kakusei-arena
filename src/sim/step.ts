@@ -22,6 +22,8 @@ import { updateMeters, updateUltCine } from './meters';
 import { roundsPre, roundsPost, inputsLive } from './rounds';
 import { updateCamera, updateFacing } from './camera';
 import { updatePoses } from './pose';
+import { updateRealmCine, updateRealmActive, updateSummons, updateCrossover } from './crossover';
+import { wantsUltIdx } from './commands';
 import {
   SIDESTEP_FRAMES, DASH_FRAMES, BACKDASH_FRAMES, VANISH_FRAMES, VANISH_INVULN, AWAKEN_FRAMES,
   WAKE_FRAMES, WAKE_INVULN, KD_LIE, SPLAT_FRAMES, PREJUMP,
@@ -67,6 +69,7 @@ function resetCombo(f: SF): void {
   f.sim.splatUsed = false;
   f.sim.crumple = false;
   f.sim.enderUsed = false;
+  f.sim.bounceExtra = 0;
 }
 
 function advance(state: GameState, i: number): void {
@@ -158,6 +161,11 @@ export function step(state: GameState, inputs: [InputBits, InputBits]): void {
     finish(state);
     return;
   }
+  if (state.realm && state.realm.phase === 'cine') {
+    updateRealmCine(state, wantsUltIdx);
+    finish(state);
+    return;
+  }
 
   stunnedThisStep[0] = stunnedThisStep[1] = false;
   for (let i = 0; i < 2; i++) {
@@ -178,9 +186,11 @@ export function step(state: GameState, inputs: [InputBits, InputBits]): void {
   const hitsLive = live || state.training;
   updateProjectiles(state, hitsLive);
   if (state.clash.active) { finish(state); return; }
+  updateSummons(state, hitsLive);
   if (hitsLive) detectStrikes(state, frozen);
+  if (live) updateCrossover(state, frozen);
   for (let i = 0; i < 2; i++) if (!frozen[i]) advance(state, i);
-  if (live) updateMeters(state);
+  if (live) { updateMeters(state); updateRealmActive(state); }
   trackAdvantage(state);
   finish(state);
 }

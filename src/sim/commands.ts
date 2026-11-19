@@ -13,6 +13,7 @@ import { CHARS, moveDef } from '../data';
 import { canAwaken, startAwaken, startVanish, spendKi, ultCost } from './meters';
 import { VANISH_COST, BUFFER } from './constants';
 import { hooks } from './hit';
+import { canRealm, cloneCount, onMoveStart, consumeClones, REALM_COST } from './crossover';
 
 const LHK = [B_L, B_H, B_K];
 const TOK = ['L', 'H', 'K'];
@@ -35,7 +36,8 @@ export function startMove(state: GameState, i: number, m: MoveDef, easy = false)
   s.partner = -1;
   s.turnLock = 0; // attacking turns you around ("vanish read")
   faceToward(f, o.pos);
-  if (m.kind === 'ki' && m.kiCost) spendKi(f, m.kiCost);
+  if ((m.kind === 'ki' || m.kind === 'special') && m.kiCost) spendKi(f, m.kiCost);
+  if (m.needClones) consumeClones(state, i, 'rush');
   if (m.heat === 'consume' && f.heatStacks > 0) {
     s.heatUsed = f.heatStacks;
     f.heatStacks = 0;
@@ -46,6 +48,7 @@ export function startMove(state: GameState, i: number, m: MoveDef, easy = false)
     type: 'moveStart', player: i as 0 | 1, pos: chest(f), moveId: m.id, strength: m.strength, element: m.element, charId: f.char,
     tag: s.heatUsed > 0 ? 'heat' : m.kind,
   });
+  onMoveStart(state, i, m);
   if (m.kind === 'ultimate' && !m.internal) {
     state.camera.cinematic = { kind: 'ultimate', player: i as 0 | 1, frame: 0 };
     emit(state, { type: 'ultimateStart', player: i as 0 | 1, pos: chest(f), moveId: m.id, element: m.element, charId: f.char, strength: 'super' });
@@ -60,21 +63,44 @@ hooks.startMoveById = (state, i, id) => {
 function startUlt(state: GameState, i: number): boolean {
   const f = F(state, i);
   if (f.airborne) return false;
+  const def = CHARS[f.char];
+  // Soul Realm: awakened + 300 Ki turns the awakened ultimate into the fighter's realm (once per match)
+  if (canRealm(state, i)) {
+    const rm = moveDef(f.char, def.realmId!);
+    if (rm) {
+      spendKi(f, REALM_COST);
+      f.sim.realmUsed = true;
+      startMove(state, i, rm, state.schemes[i] === 'easy');
+      return true;
+    }
+  }
   const cost = ultCost(f);
   if (f.ki < cost) return false;
-  const def = CHARS[f.char];
-  const id = f.awakened && def.awakenedUltimateId ? def.awakenedUltimateId : def.ultimateId;
-  const m = moveDef(f.char, id);
-  if (!m) return false;
+  let id = f.awakened && def.awakenedUltimateId ? def.awakenedUltimateId : def.ultimateId;
+  let m = moveDef(f.char, id);
+  if (m && m.needForm !== undefined && (f.form ?? '') !== m.needForm) { id = def.ultimateId; m = moveDef(f.char, id); }
+  if (!m || (m.needForm !== undefined && (f.form ?? '') !== m.needForm)) return false;
   spendKi(f, cost);
   startMove(state, i, m, state.schemes[i] === 'easy');
   return true;
 }
 
-function reqOk(f: SF, m: MoveDef): boolean {
+function reqOk(f: SF, m: MoveDef, state?: GameState, i = 0): boolean {
+  if (m.needForm !== undefined && (f.form ?? '') !== m.needForm) return false;
+  if (m.kind === 'special' && m.kiCost && f.ki < m.kiCost) return false;
+  if (m.needClones && (!state || cloneCount(state, i) < m.needClones)) return false;
   if (m.requires === 'awakened') return f.awakened;
   if (m.requires === 'stance') return false;
   return true;
+}
+
+/** chain-table key prefix for form-specific strings (Zoro sword styles, Eren titan) */
+export function formKey(m: MoveDef): string {
+  return m.needForm ? m.needForm + ':' : '';
+}
+
+export function wantsUltIdx(state: GameState, i: number): boolean {
+  return wantsUlt(state, F(state, i), i);
 }
 
 function wantsUlt(state: GameState, f: SF, i: number): boolean {
@@ -88,8 +114,14 @@ function pickKi(state: GameState, f: SF, i: number): MoveDef | null {
   const easy = state.schemes[i] === 'easy';
   const cur = digitOf(f.sim.rel);
   const extra = Math.min(f.sim.press[B_S], f.sim.press[B_K], BUFFER);
+  // Easy: direction-specific inputs (2S+K) win over the plain S+K catch-all
+  if (easy) for (const m of charTables(f.char).kis) {
+    if (!reqOk(f, m, state, i) || f.ki < (m.kiCost ?? 0)) continue;
+    const d = parseInput(m.easyInput ?? '').dir;
+    if (d !== 0 && dirMatches(d, cur)) return m;
+  }
   for (const m of charTables(f.char).kis) {
-    if (!reqOk(f, m) || f.ki < (m.kiCost ?? 0)) continue;
+    if (!reqOk(f, m, state, i) || f.ki < (m.kiCost ?? 0)) continue;
     if (easy) { if (dirMatches(parseInput(m.easyInput ?? '').dir, cur)) return m; }
     else {
       const p = parseInput(m.input);
@@ -106,7 +138,7 @@ function pickSpecial(state: GameState, f: SF, i: number): MoveDef | null {
   const extra = Math.min(f.sim.press[B_S], BUFFER);
   // Pro: motion specials first (by priority), then direction specials like Ren's 4S
   for (const m of charTables(f.char).specials) {
-    if (!reqOk(f, m)) continue;
+    if (!reqOk(f, m, state, i)) continue;
     const p = parseInput(m.input);
     if (easy) {
       const e = parseInput(m.easyInput ?? m.input);
@@ -252,9 +284,10 @@ export function attackThink(state: GameState, i: number): void {
     const tables = charTables(f.char);
     for (const b of LHK) {
       if (!fresh(f, b)) continue;
-      let next = tables.chain[`${m.input},${TOK[b]}`];
+      const fk = formKey(m);
+      let next = tables.chain[`${fk}${m.input},${TOK[b]}`];
       // Easy auto-combo: mashing L walks the string, then cancels into the ender special
-      if (!next && easy && b === B_L) next = tables.chain[`${m.input},H`] ?? tables.chain[`${m.input},K`];
+      if (!next && easy && b === B_L) next = tables.chain[`${fk}${m.input},H`] ?? tables.chain[`${fk}${m.input},K`];
       if (!next && easy && b === B_L && s.contact > 0 && fr >= win[0] && (m.cancelInto ?? []).indexOf('special') >= 0) {
         const ender = CHARS[f.char].autoComboEnder;
         const em = ender ? moveDef(f.char, ender) : undefined;

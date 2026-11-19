@@ -11,11 +11,13 @@ import {
 } from './constants';
 import { clamp } from '../core/fixed';
 import { toJuggle } from './hit';
+import { onAwaken, onTeleportedBehind, capDamage } from './crossover';
 
 export function addKi(state: GameState, i: number, amount: number): void {
   const f = F(state, i);
   if (amount <= 0) return;
-  if (f.awakened) amount = Math.trunc((amount * 3) / 2);
+  // awakening: +50% Ki gain (Gojo's Six Eyes: +100%)
+  if (f.awakened) amount = f.char === 'gojo' ? amount * 2 : Math.trunc((amount * 3) / 2);
   const before = f.ki;
   f.ki = clamp(f.ki + amount, 0, KI_MAX);
   if (f.ki >= KI_MAX && before < KI_MAX && !f.sim.kiFullSent) {
@@ -50,6 +52,7 @@ export function startAwaken(state: GameState, i: number): void {
   o.hitstop = Math.max(o.hitstop, AWAKEN_FRAMES);
   state.camera.cinematic = { kind: 'awaken', player: i as 0 | 1, frame: 0 };
   emit(state, { type: 'awaken', player: i as 0 | 1, pos: chest(f), charId: f.char, element: elementOf(f) });
+  onAwaken(state, i);
 }
 
 export function startVanish(state: GameState, i: number): void {
@@ -76,7 +79,7 @@ export function teleport(state: GameState, i: number, to: 'behind' | 'front', di
   f.pos.x = nx; f.pos.z = nz;
   if (f.pos.y > 0 && f.mode === 'vanish') f.pos.y = 0;
   faceToward(f, { x: v.x, y: v.y, z: v.z });
-  if (to === 'behind') o.sim.turnLock = TURN_LOCK;
+  if (to === 'behind' && !onTeleportedBehind(state, 1 - i)) o.sim.turnLock = TURN_LOCK;
   emit(state, { type: 'vanish', player: i as 0 | 1, pos: chest(f), charId: f.char, tag: 'arrive' });
 }
 
@@ -88,6 +91,8 @@ export function updateVanish(state: GameState, i: number, view?: PosView): void 
 function elementOf(f: SF) {
   const m = moveOf(f);
   if (m?.element && m.element !== 'none') return m.element;
+  const e = CHARS[f.char].element;
+  if (e) return e;
   return f.char === 'kaito' ? 'fire' : f.char === 'shiori' ? 'shadow' : f.char === 'ren' ? 'blade' : 'earth';
 }
 
@@ -181,8 +186,9 @@ export function updateUltCine(state: GameState): void {
   }
   if (u.hitIndex < hits.length && a.moveFrame === hits[u.hitIndex]) {
     const last = u.hitIndex === hits.length - 1;
-    const dmg = last ? u.damage - u.dealt : Math.trunc(u.damage / hits.length);
+    let dmg = last ? u.damage - u.dealt : Math.trunc(u.damage / hits.length);
     u.dealt += dmg;
+    dmg = capDamage(state, u.player, dmg);
     u.hitIndex++;
     d.hp -= dmg;
     if (state.training && d.hp < 1) d.hp = 1;
