@@ -45,7 +45,8 @@ async function check(file,character) {
   if(j.materials.length>3)throw Error('Material budget exceeded');
   if(j.animations?.length)throw Error('Unexpected animation');
   if(character) {
-    for(const name of required)if(!j.nodes.some(n=>n.name===name))throw Error('Missing bone '+name);
+    const names=character==='fox'?['Hips','Spine','Spine1','Head','Tail_01','Tail_02','Tail_03',...['FrontLeft','FrontRight','HindLeft','HindRight'].flatMap(s=>['UpLeg','Leg','Foot'].map(n=>s+n))]:required;
+    for(const name of names)if(!j.nodes.some(n=>n.name===name))throw Error('Missing bone '+name);
     if(j.images.length!==1)throw Error('Expected one atlas');
   }
   const images=(j.images||[]).map(img=>{
@@ -57,7 +58,8 @@ async function check(file,character) {
   });
   return {file:path.relative(root,file).replaceAll('\\','/'),triangles,vertices,blended_vertices:blended,materials:j.materials.length,images,errors:result.issues.numErrors,warnings:result.issues.numWarnings,messages:result.issues.messages};
 }
-(async()=>{
+module.exports={check,parse,values};
+if(require.main===module)(async()=>{
   const results=[];
   for(const name of ['kaito','shiori','ren','goro']) {
     for(const file of ['model.glb','model_1024.glb',...(name==='goro'?['shoulder_plates.glb']:[])]) results.push(await check(path.join(root,'public/characters',name,file),true));

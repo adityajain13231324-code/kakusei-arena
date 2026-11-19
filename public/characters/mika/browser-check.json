@@ -1,0 +1,20 @@
+{
+  "errors": [],
+  "calls": 4,
+  "triangles": 42400,
+  "checks": [
+    "front",
+    "side",
+    "back",
+    "three",
+    "awakened",
+    "punch",
+    "kick",
+    "crouch",
+    "face_neutral",
+    "face_shout",
+    "face_pain",
+    "face_determined",
+    "face_awakened"
+  ]
+}
