@@ -269,7 +269,10 @@ class TrainingPanel {
 
   begin(s: MatchSession): void {
     this.session = s; this.seq = -1; this.hv = -1;
-    this.root.classList.toggle('closed', window.innerWidth < 700 && false);
+    // on touch screens the open panel sits under the action buttons: start collapsed (the TRAINING tab re-opens it)
+    let coarse = false;
+    try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch { /* ignore */ }
+    this.root.classList.toggle('closed', coarse && window.innerWidth < 1100);
     this.refreshLabels();
   }
   cycle(d: -1 | 1): void {
@@ -290,6 +293,8 @@ class TrainingPanel {
 
   update(s: MatchSession): void {
     if (s.mode !== 'training') return;
+    // F2 / pause-menu toggles change the session directly: keep the panel buttons in sync
+    if (this.hbtn.classList.contains('on') !== s.showHitboxes || this.kbtn.classList.contains('on') !== s.infiniteKi || this.dummyVal.textContent !== DUMMY_LABEL[s.dummy]) this.refreshLabels();
     const f = s.frame;
     if (f.seq !== this.seq) {
       this.seq = f.seq;

@@ -9,7 +9,7 @@ export function dummyInput(state: GameState, player: 0 | 1, mode: DummyMode): In
   switch (mode) {
     case 'stand': return 0;
     case 'crouch': return Btn.Down;
-    case 'jump': return state.frame % 100 < 4 ? Btn.Up : 0;
+    case 'jump': { const t = state.frame % 100; return t < 3 || (t >= 6 && t < 12) ? Btn.Up : 0; } // double-tap Up = neutral jump
     case 'guardAll': return back | Btn.Guard;
     case 'randomGuard': {
       // blocks in 30-frame blocks chosen by a hash of the frame bucket; crouch-guards lows by reading the attacker

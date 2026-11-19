@@ -18,10 +18,13 @@ export class PauseScreen extends BaseScreen {
     this.opaque = false;
     this.el.classList.add('pause');
     this.list = h('div', { class: 'menu-list pause-list' });
-    this.el.append(h('div', { class: 'pause-card' }, h('h2', { class: 'pause-title' }, h('span', null, 'PAUSED'), ' 一時停止'), this.list));
+    this.note = h('div', { class: 'pause-note' }, 'ONLINE: THE MATCH KEEPS RUNNING. YOU STAND STILL UNTIL YOU RESUME.');
+    this.el.append(h('div', { class: 'pause-card' }, h('h2', { class: 'pause-title' }, h('span', null, 'PAUSED'), ' 一時停止'), this.list, this.note));
   }
+  private note: HTMLElement;
   enter(): void {
     const s = this.app.session;
+    this.note.style.display = s?.mode === 'online' ? '' : 'none';
     const training = s?.mode === 'training';
     this.rows = [{ label: () => 'RESUME', act: () => this.app.resume() }];
     if (s && training) {
@@ -85,7 +88,8 @@ export class MoveListScreen extends BaseScreen {
     this.tabs = h('div', { class: 'ml-tabs' });
     this.body = h('div', { class: 'ml-table' });
     this.scroller = h('div', { class: 'ml-scroll' }, this.body);
-    this.el.append(h('div', { class: 'ml-card' }, h('h2', { class: 'scr-head' }, h('span', null, 'MOVE LIST'), ' 技表'), this.tabs, this.scroller,
+    const back = h('button', { class: 'cx-pill scr-back', type: 'button', onclick: () => { sfx('back'); app.ui.pop(); } }, '◀ BACK');
+    this.el.append(h('div', { class: 'ml-card' }, h('h2', { class: 'scr-head' }, h('span', null, 'MOVE LIST'), ' 技表'), back, this.tabs, this.scroller,
       h('div', { class: 'hint' }, '← → switch fighter    ↑ ↓ scroll    ESC / B back    *on-block / on-hit are estimates')));
   }
   enter(p: { ids: CharId[]; schemes: ControlScheme[]; tab?: number }): void {

@@ -30,7 +30,8 @@ export class HowToScreen extends BaseScreen {
     this.tabsEl = h('div', { class: 'ht-tabs' });
     this.body = h('div', { class: 'ht-body' });
     TABS.forEach((t, i) => this.tabsEl.appendChild(h('button', { class: 'ht-tab', type: 'button', onclick: () => { this.tab = i; sfx('move'); this.render(); } }, t)));
-    this.el.append(h('h2', { class: 'scr-head' }, h('span', null, 'HOW TO PLAY'), ' 遣い方'), this.tabsEl, this.body,
+    const back = h('button', { class: 'cx-pill scr-back', type: 'button', onclick: () => { sfx('back'); app.ui.pop(); } }, '◀ BACK');
+    this.el.append(h('h2', { class: 'scr-head' }, h('span', null, 'HOW TO PLAY'), ' 遣い方'), back, this.tabsEl, this.body,
       h('div', { class: 'hint' }, '← → change tab    ↑ ↓ scroll    ESC / B back'));
   }
   enter(p?: { tab?: number }): void {

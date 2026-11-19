@@ -86,7 +86,7 @@ with sync_playwright() as p:
 
     # picks: host Ren, guest Goro, host stage shrine
     host.locator('.on-card-c').nth(2).click(); guest.locator('.on-card-c').nth(3).click()
-    host.get_by_text('SAKURA SHRINE').click()
+    host.locator('.on-stage', has_text='SAKURA SHRINE').click()
     host.wait_for_timeout(300)
     check('opponent picks are visible', wait_for(host, "() => window.__app.online.them.char === 'goro'", 5) and wait_for(guest, "() => window.__app.online.them.char === 'ren' && window.__app.online.stage === 'shrine'", 5))
     guest.locator('.on-btn.ready').click(); host.locator('.on-btn.ready').click()

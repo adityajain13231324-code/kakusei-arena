@@ -55,12 +55,14 @@ export class App implements AppApi {
   private fpsAvg = 60; private workAvg = 0; private debugT = 0;
 
   constructor(private canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
+    let noWebGl = false;
     try {
       this.renderer = new GameRenderer(canvas);
       this.vfx = new VfxSystem(this.renderer);
     } catch (e) {
       console.warn('[app] renderer unavailable', e);
       this.renderer = null; this.vfx = null;
+      noWebGl = true;
     }
     setPortraitSource((id, size) => this.renderer?.snapshotCharacter(id, size) ?? '');
     setSfx((s) => this.audio.ui(s));
@@ -108,11 +110,12 @@ export class App implements AppApi {
     // block page scroll/zoom/context menu on touch
     for (const ev of ['gesturestart', 'gesturechange', 'dblclick'] as const) document.addEventListener(ev, (e) => e.preventDefault());
     document.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('touchmove', (e) => { if ((e.target as HTMLElement).closest('.ml-scroll, .ht-body')) return; e.preventDefault(); }, { passive: false });
+    document.addEventListener('touchmove', (e) => { if ((e.target as HTMLElement).closest('.ml-scroll, .ht-body, .set-card')) return; e.preventDefault(); }, { passive: false });
 
     this.applySettings();
     this.resize();
     this.ui.go('title');
+    if (noWebGl) this.toast('3D graphics are not available in this browser (WebGL is off). Enable hardware acceleration to see the fighters.');
     this.checkJoinHash();
     window.addEventListener('hashchange', () => this.checkJoinHash());
     requestAnimationFrame(this.loop);
@@ -151,6 +154,7 @@ export class App implements AppApi {
     this.safe('vfx.setQuality', () => this.vfx?.setQuality(q));
     this.safe('audio.setAnnouncer', () => (this.audio as unknown as { setAnnouncer?: (on: boolean) => void }).setAnnouncer?.(s.announcer));
     this.safe('vfx.setReduceFlashing', () => this.vfx?.setReduceFlashing(s.reduceFlashing));
+    this.ui.root.classList.toggle('reduce-flash', s.reduceFlashing); // stops looping UI pulses/flicker (css)
     this.input.setBindings(0, s.keys.p1);
     this.input.setBindings(1, s.keys.p2);
     this.resize();
@@ -162,6 +166,8 @@ export class App implements AppApi {
     const dpr = Math.min(window.devicePixelRatio || 1, cap);
     const w = window.innerWidth, hgt = window.innerHeight;
     this.safe('renderer.resize', () => this.renderer?.resize(w, hgt, dpr));
+    // phone held upright: the "rotate your device" overlay covers the game, so don't let a match run behind it
+    if (hgt > w && this.input.touchCapable && w <= 900) this.autoPause();
   }
   private updateTouch(): void {
     const t = this.settings.data.touch;
@@ -415,6 +421,8 @@ export class App implements AppApi {
     const w0 = performance.now();
     this.input.poll();
     this.ui.update(dt);
+    const topNow = this.ui.top();
+    if (topNow !== this.lastTop) { this.lastTop = topNow; this.updateTouch(); } // touch pad follows whichever screen is on top
     const s = this.session;
     const r = this.renderer;
     if (s) {
@@ -448,4 +456,5 @@ export class App implements AppApi {
     }
   };
   private debugT2 = 0;
+  private lastTop: string | null = null;
 }

@@ -94,7 +94,7 @@ export class InputManager {
       cb(e.code === 'Escape' ? '' : e.code);
       return;
     }
-    const pre = e.code.startsWith('Arrow') || e.code === 'Space' || e.code.startsWith('Numpad') || e.code === 'Tab' || e.code === 'Backspace' || e.code === 'Quote' || e.code === 'Slash';
+    const pre = e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Enter' || e.code.startsWith('Numpad') || e.code === 'Tab' || e.code === 'Backspace' || e.code === 'Quote' || e.code === 'Slash';
     if (pre) e.preventDefault();
     if (!e.repeat) this.fireAny();
     if (!this.held.has(e.code)) {
@@ -160,8 +160,8 @@ export class InputManager {
       // edges
       const edge = (i: number) => { const n = btn(i); const was = memo!.held[i] === true; memo!.held[i] = n; return n && !was; };
       let any = false;
-      for (let i = 0; i < 12; i++) if (edge(i) && i !== 8 && i !== 9) any = true;
-      const startEdge = edge(9), selEdge = edge(8);
+      const startEdge = edge(9), selEdge = edge(8); // read these before the loop (edge() latches the state)
+      for (let i = 0; i < 12; i++) if (i !== 8 && i !== 9 && edge(i)) any = true;
       if (startEdge) any = true;
       if (any) this.fireAny();
       const s: 0 | 1 = slot === 1 ? 1 : 0;

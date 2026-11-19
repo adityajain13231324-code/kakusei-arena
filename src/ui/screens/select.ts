@@ -228,7 +228,6 @@ export class CharSelectScreen extends BaseScreen {
       return;
     }
     this.setCursor(this.active, i);
-    if (i === RANDOM) this.roll(this.active);
     this.commit();
   }
   /** single-player pick confirmed (click/enter on a card) */
@@ -314,7 +313,6 @@ export class CharSelectScreen extends BaseScreen {
     const el = items[Math.min(this.zi[this.zone], items.length - 1)];
     if (!el) return;
     if (this.zone === 'grid') {
-      if (this.cursor[this.active] === RANDOM) this.roll(this.active);
       this.commit();
       return;
     }
@@ -338,7 +336,7 @@ export class CharSelectScreen extends BaseScreen {
       case 'left': this.setCursor(p, (this.cursor[p] + RANDOM) % (RANDOM + 1)); sfx('move'); break;
       case 'right': this.setCursor(p, (this.cursor[p] + 1) % (RANDOM + 1)); sfx('move'); break;
       case 'up': this.setScheme(p, this.schemes[p] === 'pro' ? 'easy' : 'pro'); return;
-      case 'confirm': this.setActive(p, true); if (this.cursor[p] === RANDOM) this.roll(p); this.lock(p); return;
+      case 'confirm': this.setActive(p, true); this.lock(p); return;
       default: return;
     }
     this.active = p; this.tabs.forEach((t, i) => t.classList.toggle('on', i === p));

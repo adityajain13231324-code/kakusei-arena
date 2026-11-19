@@ -84,6 +84,21 @@ export class Nav {
       el.classList.toggle('focus', i === this.index);
       el.classList.toggle('disabled', this.disabled.has(i));
     });
+    this.reveal();
+  }
+
+  /** keep the focused row visible inside a scrolling list card (settings, key bindings) */
+  private reveal(): void {
+    const el = this.items[this.index];
+    const sc = el?.closest('.set-card') as HTMLElement | null;
+    if (!el || !sc || sc.clientHeight <= 0) return;
+    const prev = el.previousElementSibling as HTMLElement | null;
+    const top = prev && prev.classList.contains('set-sec') ? prev : el;
+    const c = sc.getBoundingClientRect();
+    const t = top.getBoundingClientRect(), b = el.getBoundingClientRect();
+    const pad = 6;
+    if (t.top < c.top + pad) sc.scrollTop += t.top - c.top - pad;
+    else if (b.bottom > c.bottom - pad) sc.scrollTop += b.bottom - c.bottom + pad;
   }
 
   private step(dx: number, dy: number): void {
