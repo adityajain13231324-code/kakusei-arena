@@ -4,18 +4,19 @@
  */
 import type { GameState, MoveDef, ProjectileState } from './types';
 import { F, emit, setMode, vec, chest, moveOf } from './fighter';
-import { cap, capsuleHit, contact, hurtCaps, type Cap } from './collision';
+import { cap, capsuleHit, contact, hurtCaps, lateralSign, type Cap } from './collision';
 import { resolveStrike, toJuggle, stunnedThisStep } from './hit';
 import { moveDef } from '../data';
 import { isqrt, norm2 } from '../core/fixed';
-import { B_L, B_H, B_K, B_S } from './input';
+import { B_L, B_H, B_K, B_S, EV_UP, EV_DOWN, EV_FWD, EV_BACK } from './input';
 import { CLASH_FRAMES, CLASH_PUSH } from './constants';
 
 export function spawnProjectiles(state: GameState, i: number, m: MoveDef): void {
   const f = F(state, i);
   const pd = m.projectile!;
   const count = pd.count ?? 1;
-  const rx = -f.facing.z, rz = f.facing.x;
+  const ls = lateralSign(f); // mirror the fan order between screen sides
+  const rx = -f.facing.z * ls, rz = f.facing.x * ls;
   const bx = f.pos.x + Math.trunc((f.facing.x * pd.x) / 1000);
   const bz = f.pos.z + Math.trunc((f.facing.z * pd.x) / 1000);
   for (let k = 0; k < count; k++) {
@@ -55,6 +56,7 @@ function projCap(p: ProjectileState): Cap {
 function projInvulnerable(state: GameState, i: number): boolean {
   const f = F(state, i);
   if (f.invuln) return true;
+  if (f.sim.enderUsed && f.mode === 'juggle') return true;
   const m = f.mode;
   if (m === 'knockdown' || m === 'thrown' || m === 'vanish' || m === 'awaken' || m === 'intro' || m === 'clash' || m === 'win' || m === 'lose') return true;
   if (m === 'attack') {
@@ -96,7 +98,7 @@ export function updateProjectiles(state: GameState, hitsLive: boolean): void {
           if (!state.clash.active && hitsLive) { startClash(state, a, b); return; }
           continue;
         }
-        const mid = vec((a.pos.x + b.pos.x) >> 1, (a.pos.y + b.pos.y) >> 1, (a.pos.z + b.pos.z) >> 1);
+        const mid = vec(Math.trunc((a.pos.x + b.pos.x) / 2), Math.trunc((a.pos.y + b.pos.y) / 2), Math.trunc((a.pos.z + b.pos.z) / 2));
         if (a.beam !== b.beam) {
           const weak = a.beam ? j : i;
           dead[weak] = true;
@@ -148,7 +150,7 @@ function startClash(state: GameState, a: ProjectileState, b: ProjectileState): v
   c.duration = CLASH_FRAMES;
   c.balance = 0;
   c.mash = [0, 0];
-  c.point = vec((a.pos.x + b.pos.x) >> 1, (a.pos.y + b.pos.y) >> 1, (a.pos.z + b.pos.z) >> 1);
+  c.point = vec(Math.trunc((a.pos.x + b.pos.x) / 2), Math.trunc((a.pos.y + b.pos.y) / 2), Math.trunc((a.pos.z + b.pos.z) / 2));
   c.moves = [p0.moveId, p1.moveId];
   c.winner = -1;
   state.projectiles = state.projectiles.filter((p) => p !== a && p !== b);
@@ -167,6 +169,8 @@ function freshPresses(state: GameState, i: number): number {
   const s = F(state, i).sim;
   let n = 0;
   for (const b of [B_L, B_H, B_K, B_S]) if (s.press[b] === 0) n++;
+  // rotating the stick counts too: every new cardinal direction press is one mash input
+  if (s.dirEv & (EV_UP | EV_DOWN | EV_FWD | EV_BACK)) n++;
   return n;
 }
 
@@ -182,8 +186,8 @@ export function updateClash(state: GameState): void {
   if (state.camera.cinematic) state.camera.cinematic.frame = c.frame;
   // the meeting point slides toward the losing fighter
   const f0 = F(state, 0), f1 = F(state, 1);
-  const mx = (f0.pos.x + f1.pos.x) >> 1, mz = (f0.pos.z + f1.pos.z) >> 1;
-  const hx = (f1.pos.x - f0.pos.x) >> 1, hz = (f1.pos.z - f0.pos.z) >> 1;
+  const mx = Math.trunc((f0.pos.x + f1.pos.x) / 2), mz = Math.trunc((f0.pos.z + f1.pos.z) / 2);
+  const hx = Math.trunc((f1.pos.x - f0.pos.x) / 2), hz = Math.trunc((f1.pos.z - f0.pos.z) / 2);
   c.point.x = mx + Math.trunc((hx * c.balance * 8) / 10000);
   c.point.z = mz + Math.trunc((hz * c.balance * 8) / 10000);
   if (c.frame < c.duration && Math.abs(c.balance) < 1000) return;

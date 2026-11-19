@@ -9,7 +9,8 @@
     "test": "tsx tests/run.ts",
     "preview": "vite preview --host",
     "test:net": "tsx tests/net.ts",
-    "test:ai": "tsx tests/ai.ts"
+    "test:ai": "tsx tests/ai.ts",
+    "test:balance": "tsx tests/balance.ts"
   },
   "license": "ISC",
   "dependencies": {

@@ -109,10 +109,21 @@ export function hurtCaps(f: SF, out: Cap[]): number {
   return n;
 }
 
+/**
+ * Lateral chirality: +1 for the fighter on the LEFT of the screen, -1 on the right. Local "+z /
+ * right" is multiplied by this so lateral hitbox offsets and left/right tracking mirror between
+ * the two sides (local +z always points toward the camera side for the left player and its
+ * mirror image for the right player). Without it the same move would track differently on P2.
+ */
+export function lateralSign(f: FighterState): number {
+  return f.side === 1 ? -1 : 1;
+}
+
 /** attacker-local hitbox -> world capsule */
 export function hitCap(f: FighterState, hb: HitboxDef): Cap {
   const fx = f.facing.x, fz = f.facing.z;
-  const rx = -fz, rz = fx; // local +z (right)
+  const k = lateralSign(f);
+  const rx = -fz * k, rz = fx * k; // local +z (right, screen-mirrored)
   const lz = hb.z ?? 0;
   const ax = f.pos.x + Math.trunc((fx * hb.x + rx * lz) / 1000);
   const az = f.pos.z + Math.trunc((fz * hb.x + rz * lz) / 1000);
@@ -142,18 +153,29 @@ export function separate(state: GameState, a: SF, b: SF): void {
   let dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
   const d2 = dx * dx + dz * dz;
   if (d2 >= min * min) return;
-  let d = isqrt(d2);
-  if (d === 0) { dx = a.facing.x; dz = a.facing.z; d = 1000; }
-  const overlap = min - (d === 1000 && d2 === 0 ? 0 : d);
-  const px = Math.trunc((dx * overlap) / d), pz = Math.trunc((dz * overlap) / d);
+  const d = isqrt(d2);
+  if (d === 0) {
+    // exactly on top of each other (rare): push apart along the fighter axis of the camera so
+    // the result does not depend on which player is "a"
+    const n = state.camera.normal;
+    dx = n.z; dz = -n.x; // screen-right; a goes left, b right (by screen side)
+    if (a.side === 1) { dx = -dx; dz = -dz; }
+    const h = (min + 1) >> 1;
+    a.pos.x -= Math.trunc((dx * h) / 1000); a.pos.z -= Math.trunc((dz * h) / 1000);
+    b.pos.x += Math.trunc((dx * h) / 1000); b.pos.z += Math.trunc((dz * h) / 1000);
+    return;
+  }
+  const overlap = min - d;
   const lim = state.arenaHalfSize;
   const aWall = Math.abs(a.pos.x) >= lim - ra - 1 || Math.abs(a.pos.z) >= lim - ra - 1;
   const bWall = Math.abs(b.pos.x) >= lim - rb - 1 || Math.abs(b.pos.z) >= lim - rb - 1;
-  if (aWall && !bWall) { b.pos.x += px; b.pos.z += pz; }
-  else if (bWall && !aWall) { a.pos.x -= px; a.pos.z -= pz; }
+  if (aWall && !bWall) { b.pos.x += Math.trunc((dx * overlap) / d); b.pos.z += Math.trunc((dz * overlap) / d); }
+  else if (bWall && !aWall) { a.pos.x -= Math.trunc((dx * overlap) / d); a.pos.z -= Math.trunc((dz * overlap) / d); }
   else {
-    const hx = Math.trunc(px / 2), hz = Math.trunc(pz / 2);
+    // both move by the same (rounded-up) half: symmetric for P1 / P2
+    const h = (overlap + 1) >> 1;
+    const hx = Math.trunc((dx * h) / d), hz = Math.trunc((dz * h) / d);
     a.pos.x -= hx; a.pos.z -= hz;
-    b.pos.x += px - hx; b.pos.z += pz - hz;
+    b.pos.x += hx; b.pos.z += hz;
   }
 }

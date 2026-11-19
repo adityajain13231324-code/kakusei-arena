@@ -33,9 +33,10 @@ export function updateFacing(state: GameState): void {
 export function updateCamera(state: GameState): void {
   const a = F(state, 0), b = F(state, 1);
   const cam = state.camera;
-  cam.center.x = (a.pos.x + b.pos.x) >> 1;
-  cam.center.y = (a.pos.y + b.pos.y) >> 1;
-  cam.center.z = (a.pos.z + b.pos.z) >> 1;
+  // Math.trunc (not >> 1, which floors) keeps the midpoint mirror-symmetric
+  cam.center.x = Math.trunc((a.pos.x + b.pos.x) / 2);
+  cam.center.y = Math.trunc((a.pos.y + b.pos.y) / 2);
+  cam.center.z = Math.trunc((a.pos.z + b.pos.z) / 2);
   const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
   cam.distance = isqrt(dx * dx + dz * dz);
   if (cam.distance > 50) {
@@ -46,7 +47,8 @@ export function updateCamera(state: GameState): void {
   }
   // screen sides
   const rx = cam.normal.z, rz = -cam.normal.x;
-  const sa = (a.pos.x - cam.center.x) * rx + (a.pos.z - cam.center.z) * rz;
+  // side from the fighter axis itself (no rounded midpoint) so both players are treated alike
+  const sa = (a.pos.x - b.pos.x) * rx + (a.pos.z - b.pos.z) * rz;
   if (sa < 0) { a.side = -1; b.side = 1; }
   else if (sa > 0) { a.side = 1; b.side = -1; }
 }

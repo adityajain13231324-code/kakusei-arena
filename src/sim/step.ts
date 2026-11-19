@@ -5,7 +5,8 @@
  *   3. special global states: beam clash / ultimate cinematic run INSTEAD of 4-9
  *   4. hitstop: frozen fighters skip think/physics/advance
  *   5. think (inputs -> actions/movement) for live, non-frozen fighters
- *   6. physics, walls, body separation, facing
+ *   6. physics in two phases (velocities from a snapshot, then integration, so P1/P2 order
+ *      never matters), walls, body separation, facing
  *   7. invulnerability flags, projectiles, strike/throw detection + resolution
  *   8. advance timers (moveFrame, modeFrame, stun) and end timed modes
  *   9. meters, poses, rounds post-phase (timer / KO), camera
@@ -13,7 +14,7 @@
 import type { GameState, InputBits } from './types';
 import { F, setMode, moveOf, totalFrames, isFreeMode, type SF } from './fighter';
 import { updateInput, R_UP, R_DOWN } from './input';
-import { think, physics, walls } from './movement';
+import { think, physics, integrate, walls, snapshot } from './movement';
 import { separate } from './collision';
 import { detectStrikes, checkWhiff, stunnedThisStep, toJuggle } from './hit';
 import { updateProjectiles, updateClash } from './projectiles';
@@ -65,6 +66,7 @@ function resetCombo(f: SF): void {
   f.sim.bounceUsed = false;
   f.sim.splatUsed = false;
   f.sim.crumple = false;
+  f.sim.enderUsed = false;
 }
 
 function advance(state: GameState, i: number): void {
@@ -114,7 +116,11 @@ function advance(state: GameState, i: number): void {
       if (f.modeFrame >= AWAKEN_FRAMES) { setMode(f, 'idle'); if (state.camera.cinematic?.kind === 'awaken') state.camera.cinematic = null; }
       break;
     case 'knockdown': if (f.modeFrame >= KD_LIE) setMode(f, 'wakeup'); break;
-    case 'wakeup': if (f.modeFrame >= WAKE_FRAMES) { resetCombo(f); setMode(f, 'idle'); } break;
+    case 'wakeup':
+      // getting up starts fresh: a hit after the wake-up invulnerability is a NEW combo
+      if (f.comboHits > 0) resetCombo(f);
+      if (f.modeFrame >= WAKE_FRAMES) { resetCombo(f); setMode(f, 'idle'); }
+      break;
     case 'wallsplat': if (f.modeFrame >= SPLAT_FRAMES) toJuggle(state, i, F(state, 1 - i), 0, 0); break;
     case 'idle': case 'walk': case 'crouch': case 'guard': case 'sidewalk': case 'kicharge': case 'jump':
       if (f.comboHits > 0 && f.mode !== 'jump') resetCombo(f);
@@ -159,7 +165,11 @@ export function step(state: GameState, inputs: [InputBits, InputBits]): void {
     if (f.hitstop > 0) { f.hitstop--; frozen[i] = true; } else frozen[i] = false;
   }
   if (live) for (let i = 0; i < 2; i++) if (!frozen[i]) think(state, i);
+  // two-phase physics so neither player is processed "first": velocities (reading the other
+  // fighter through a snapshot), then integration for both
+  snapshot(state);
   for (let i = 0; i < 2; i++) if (!frozen[i]) physics(state, i);
+  for (let i = 0; i < 2; i++) if (!frozen[i]) integrate(state, i);
   separate(state, F(state, 0), F(state, 1));
   walls(state, 0);
   walls(state, 1);

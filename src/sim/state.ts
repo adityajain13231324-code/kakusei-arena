@@ -1,7 +1,7 @@
 /** Match creation: every field is initialised here so object shapes (and hashes) are stable. */
 import type { CharId, FighterSimData, FighterState, GameState, MatchConfig } from './types';
 import { CHARS } from '../data';
-import { ARENA_HALF, ARENA_HALF_TRAINING, ROUND_FRAMES } from './constants';
+import { ARENA_HALF, ARENA_HALF_TRAINING, ROUND_FRAMES, GUARD_MAX } from './constants';
 import { resetRound } from './rounds';
 import { updateCamera } from './camera';
 
@@ -17,7 +17,7 @@ function createSim(): FighterSimData {
     ssX: 0, ssZ: 0, ssLateral: 0, jumpX: 0, jumpZ: 0,
     turnLock: 0, landLag: 0, partner: -1, breakable: true, throwMove: '',
     regen: 0, armorUsed: false, heatUsed: 0, kiFullSent: false,
-    hitPose: 'hitMid', crumple: false, airAttackUsed: false,
+    hitPose: 'hitMid', crumple: false, airAttackUsed: false, enderUsed: false, guard: GUARD_MAX, guardIdle: 0, otgUsed: false,
   };
 }
 

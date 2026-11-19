@@ -14,6 +14,7 @@
 import type {
   MoveDef, PoseName, HitboxDef, Height, Strength, OnHitEffect, Element, Tracking, ProjectileDef,
 } from '../sim/types';
+import { STAGGER_EXTRA } from '../sim/constants';
 
 export interface Box { x: number; y: number; len: number; r: number; z?: number; from?: number; to?: number }
 
@@ -112,7 +113,7 @@ export function mv(sp: MoveSpec): MoveDef {
   if (list.length > 0 && sp.h !== 'throw') {
     m.onBlock = blockstun - remaining;
     const eff = sp.onHit ?? 'normal';
-    if (eff === 'normal' || eff === 'stagger') m.onHitAdv = hitstun - remaining + (eff === 'stagger' ? 10 : 0);
+    if (eff === 'normal' || eff === 'stagger') m.onHitAdv = hitstun - remaining + (eff === 'stagger' ? STAGGER_EXTRA : 0);
   }
   if (sp.requires) m.requires = sp.requires;
   if (sp.chip !== undefined) m.chip = sp.chip;

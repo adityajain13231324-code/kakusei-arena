@@ -22,6 +22,13 @@ screen side every frame. Notation: numpad, relative to facing (6 = forward, 4 = 
 
 SOCD: Left+Right = neutral, Up+Down = Up.
 
+**Side symmetry.** P1 and P2 are processed identically: physics runs in two phases (velocities
+for both fighters reading a start-of-phase snapshot of the other, then integration for both),
+body push splits the overlap evenly, strikes resolve before throws, and lateral things
+(`tracking: 'left'|'right'`, hitbox `z`, projectile fan order) are **screen-mirrored** — for the
+fighter on the right of the screen "right" means its own left. Mirrored inputs from mirrored
+positions give a mirror-image state every frame (`npm test` section g).
+
 **Screen sides & camera.** `state.camera.normal` is perpendicular to the fighter axis. Of the two
 possible normals, the sim always picks the one closest to last frame's, so the camera never
 jumps to the other side. Screen-right = (normal.z, −normal.x). A fighter's `side` (−1 left,
@@ -82,33 +89,55 @@ first 3 frames of a normal upgrades the normal (jab → throw / vanish / ki / ul
 - **Guard.** You block when free (idle/walk/crouch/guard/sidewalk, backdash ≥ frame 10, sidestep ≥
   frame 12), the attack comes from in front, and you hold 4 / Guard (or are already in
   blockstun). Hold 2 to crouch-guard. You cannot guard in the air or from behind.
-- **Hitstop.** Both fighters freeze on contact: light 8, medium 10, heavy 12, super 14 frames
-  (block −2, counter +2). Projectiles freeze only the defender.
+- **Hitstop.** Both fighters freeze on contact: light 7, medium 9, heavy 11, super 14 frames
+  (block −2, counter hit / guard crush +3). Projectiles freeze only the defender. Ultimate
+  cinematics freeze 14 frames on the connect and on the final hit, 3 frames on the others
+  (`state.ult.freeze`; both fighters' `hitstop` mirrors it for camera shake).
 - **Pushback.** Spread over a few frames. A defender pinned on a wall passes the remaining push
   to the attacker.
 - **Counter hit.** A hit during the opponent's startup frames, during Ki Charge, or from behind:
-  +20% damage, the move's `onCounterHit` effect, +4 hitstun, `counter` event (tag `backHit` from behind).
+  +20% damage, the move's `onCounterHit` effect, +4 hitstun, +3 hitstop, `counter` event (tag `backHit` from behind).
 - **Trades.** Both fighters' hitboxes are found first and resolved after, so simultaneous hits trade.
+  Strikes resolve before throws: a strike landing on a thrower on the same frame beats the throw.
 - **Sidestep vs tracking.** During sidestep frames 2–14, once the sidestepper has moved ≥ 120 mm
   sideways, **linear** strikes (`tracking: 'none'`) miss. `'left'` / `'right'` catch sidesteps
   toward the attacker's left / right. `'full'` always catches. Projectiles use geometry only.
-- **Launch & juggle.** Launchers pop the defender into `juggle`. Juggle gravity = (4 + hits/2,
-  max +6) × weight/100. Each juggle hit gives a small pop (46 − 3×hits, min 20 mm/f).
-  **Damage scaling** per hit in a combo: 100, 90, 80, 70 … minimum 30%.
-- **Ground bounce.** `groundbounce` moves bounce a grounded or juggled opponent off the floor
-  once per combo.
+- **Launch & juggle.** Launchers pop the defender into `juggle` at `launchVel` mm/f. Juggle
+  gravity = (3 + combo hits, max +9) × 0.5 mm/f² × (100 + (weight − 100)/2)/100, spread exactly
+  over frames — floaty (2 mm/f²) right after the launch, heavier every hit. Each juggle hit gives
+  a small pop (38 − 2×hits, min 16 mm/f) and carries 4 mm/f. A launcher used mid-juggle only
+  gives a slightly bigger pop (no relaunch loops). From the 9th hit of a combo juggle hits stop
+  popping (`JUGGLE_HIT_CAP`) so every juggle ends. **Damage scaling** per hit in a combo:
+  100, 90, 80, 70 … minimum 30%.
+- **Ender rule.** A special or Ki move that hits a juggled opponent ends the juggle: it sends
+  them into a knockdown arc and they cannot be hit again until they land (`sim.enderUsed`).
+  Exceptions: `groundbounce` (once per combo) and `wallbounce` moves, which extend. Ultimates
+  always work as enders (cinematic).
+- **Ground bounce.** `groundbounce` moves bounce a juggled opponent off the floor once per
+  combo; a standing opponent only bounces on a counter hit (otherwise a plain knockdown).
+- **Stagger** (`onHit: 'stagger'`): +20 frames of hitstun over the move's own (a combo starter).
+  Only from a fresh hit — inside a combo a stagger move is a normal hit (no stagger loops).
 - **Wall splat.** A juggled fighter knocked into a wall at ≥ 8 mm/f sticks to it for 45 frames
   and stays hittable. Once per combo. `wallbounce` moves knock hard so they splat near walls.
-- **Knockdown.** Landing from a juggle = knockdown (invulnerable while lying, 40 frames, early wake
-  from 14). Wake-up is 22 frames, invulnerable for the first 12.
+- **Knockdown.** Landing from a juggle = knockdown (40 frames, early wake from 14). Wake-up is
+  22 frames, invulnerable for the first 12. A hit after getting up starts a new combo.
+- **Ground hits (OTG).** A lying opponent can only be hit by moves with `otg: true`, from
+  knockdown frame 6, once per knockdown: Kaito 2K, Shiori 2K, Ren 2L, Goro 4K (Quake Stomp).
+  70% damage (combo-scaled), the opponent stays down (knockdown clock reset to frame 14, so an
+  early wake-up is possible right away). `hit` event tag `otg`. Early wake-up avoids it.
+- **Guard Crush.** Hidden guard meter (`sim.guard`, 0–1000). Every blocked hit drains
+  40 + 2×damage (projectiles and ultimates half). It refills 6/frame after 60 frames without
+  blocking. When a block would empty it: **guard crush** — the defender staggers in hitstun for
+  44 frames (enough for a launcher), the meter refills, `guardCrush` event (player = attacker).
 - **Throws.** L+K: 10f startup, short range, whiffs on crouchers, airborne opponents, and
-  opponents in hit- or blockstun. Break with a fresh **L or K** on thrown frames 1–18 →
+  opponents in hit- or blockstun. Break with a fresh **L or K** on thrown frames 1–15 →
   `throwBreak`, both fighters reset. Damage lands on thrown frame 24. Throws from behind, and
   command throws (Goro's Mountain Hug), are **unbreakable**. Command throws also grab crouchers.
   If both fighters throw on the same frame, the throws break automatically.
-- **Armor** (`armor: [a,b]`, Goro's Stone Skin): absorbs one hit during those frames. The armored
-  fighter takes the damage but gets no stun (`hit` event tag `armor`).
-- **Invulnerability:** `invuln` frames, knockdown, early wake-up, vanish frames 0–9, awakening,
+- **Armor** (`armor: [a,b]`, Goro's Stone Skin): absorbs one high or mid hit during those frames.
+  The armored fighter takes the damage but gets no stun (`hit` event tag `armor`). **Lows**,
+  throws and unblockables go through armor.
+- **Invulnerability:** `invuln` frames, knockdown (except ground hits), early wake-up, vanish frames 0–9, awakening,
   throws in progress, ultimate cinematics. `projInvuln` = immune only to projectiles.
 
 ## Meters & anime systems
@@ -131,8 +160,8 @@ first 3 frames of a normal upgrades the normal (jab → throw / vanish / ki / ul
   launched at the end. The timer pauses during the cinematic. KO is checked after the cinematic.
   Blocked or whiffed, the ultimate has ~50 frames of recovery and is punishable.
 - **Beam Clash:** two beam projectiles (`ProjectileDef.beam`) from different players meeting →
-  `state.clash.active`, both fighters in `clash` for 180 frames. Every fresh L/H/K/S press adds
-  to `mash` and moves `balance` by ±30. At ±1000 or time-out the winner's beam hits for 60% of
+  `state.clash.active`, both fighters in `clash` for 180 frames. Every fresh L/H/K/S press — and
+  every new cardinal stick direction (rotating the stick) — adds to `mash` and moves `balance` by ±30. At ±1000 or time-out the winner's beam hits for 60% of
   its full damage and launches the loser. A balance of exactly 0 is a draw (both pushed back).
   Events `clashStart` and `clashEnd` (`player` = winner, tag `win` / `draw`). Beams: Kaito
   *Phoenix Cannon*, Ren *Moonlight Severance*, Goro *Titan Roar* (all 236S+K / Easy S+K).
@@ -149,9 +178,9 @@ first 3 frames of a normal upgrades the normal (jab → throw / vanish / ki / ul
   Releasing S, or reaching 150 frames, fires **Quick Draw** (6f). A high strike that hits Ren in
   stance is auto-countered: `parry` event, the attacker staggers, and Ren does *Falling Petal*.
   Down or Guard drops the stance.
-- **Goro — Stone Skin & Mountain Hug:** most heavies have 1-hit armor. Mountain Hug (623S / Easy
-  2S) is an unbreakable command throw that also grabs crouchers. Tectonic Suplex is a grab
-  ultimate (unblockable).
+- **Goro — Stone Skin & Mountain Hug:** H, 3H, 6H, Avalanche Charge and his Ki moves have 1-hit
+  armor (highs/mids only). Mountain Hug (623S / Easy 2S, 22f) is an unbreakable command throw
+  that also grabs crouchers. Tectonic Suplex is a grab ultimate (unblockable).
 
 ## Rounds
 
@@ -172,7 +201,8 @@ returns hurt, hit, throw and projectile capsules.
 Every event has `frame`, `player` and a world `pos` (mm). Hit-type events use the contact point on
 the defender's hurtbox. Main events: `moveStart` (tag = move kind or `heat`), `whiff` (end of
 active frames, at the hitbox tip), `hit` (`damage`, `combo`, tag `juggle` / `armor` / `throw` /
-`beam` / `ultimate` / `heat`), `block`, `counter`, `parry`, `launch`, `groundBounce`, `wallSplat`,
+`beam` / `ultimate` / `heat` / `otg`), `block`, `guardCrush` (player = attacker, target = the
+crushed defender, pos = defender chest), `counter`, `parry`, `launch`, `groundBounce`, `wallSplat`,
 `land` (tag `body` for a fallen fighter, `tech` for early wake), `knockdown`, `projectile` (tag =
 kind), `projectileHit`, `projectileDestroy` (tag `expire` / `wall` / `spent` / `cancel` /
 `overpowered`), `throw`, `throwBreak`, `kiCharge`, `kiFull`, `vanish`, `awaken`,

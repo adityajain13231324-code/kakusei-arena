@@ -6,9 +6,9 @@ import type { GameState, MoveDef, OnHitEffect, ProjectileState, Vec3 } from './t
 import {
   F, emit, setMode, moveOf, isCrouching, comboScale, chest, vec, totalFrames, type SF,
 } from './fighter';
-import { hitCap, hitsFighter, contact } from './collision';
+import { hitCap, hitsFighter, contact, lateralSign } from './collision';
 import { B_G, B_K, B_L, R_BACK, R_DOWN } from './input';
-import { HITSTOP, PUSHBACK, SIDESTEP_EVADE_FROM, SIDESTEP_EVADE_TO, SIDESTEP_EVADE_DIST, THROW_BREAK, THROW_LAND, THROW_DIST, BACKDASH_ACT } from './constants';
+import { STAGGER_EXTRA, COUNTER_HITSTOP, GUARD_MAX, GUARD_CRUSH_STUN, KD_MIN, KD_OTG_FROM, JUGGLE_KNOCK, JUGGLE_POP, JUGGLE_POP_DECAY, JUGGLE_POP_MIN, JUGGLE_HIT_CAP, HITSTOP, PUSHBACK, SIDESTEP_EVADE_FROM, SIDESTEP_EVADE_TO, SIDESTEP_EVADE_DIST, THROW_BREAK, THROW_LAND, THROW_DIST, BACKDASH_ACT } from './constants';
 import { addKi, startUltCine } from './meters';
 import { moveDef, CHARS } from '../data';
 import { chance } from '../core/rng';
@@ -38,8 +38,10 @@ function trackingCatches(move: MoveDef, att: SF, def: SF): boolean {
   const t = move.tracking ?? 'none';
   if (t === 'full') return true;
   if (t === 'none') return false;
-  // which way (relative to the attacker) is the defender stepping?
-  const rx = -att.facing.z, rz = att.facing.x;
+  // which way (relative to the attacker) is the defender stepping? 'right' / 'left' are
+  // SCREEN-mirrored (see lateralSign) so the same move tracks the same way from either side.
+  const k = lateralSign(att);
+  const rx = -att.facing.z * k, rz = att.facing.x * k;
   const toRight = def.sim.ssX * rx + def.sim.ssZ * rz > 0;
   return t === 'right' ? toRight : !toRight;
 }
@@ -66,6 +68,21 @@ function canBlock(state: GameState, di: number, from: Vec3, move: MoveDef, crouc
   if (!wants) return false;
   if (move.height === 'low') return crouch;
   return !crouch;
+}
+
+/**
+ * Guard meter: every blocked hit drains it (projectiles less); returns true when it breaks.
+ * Cost = 40 + 2 x damage (light jab ~130, heavy special ~300); regenerates in updateMeters.
+ */
+function drainGuard(d: SF, move: MoveDef, proj: boolean): boolean {
+  let cost = 40 + 2 * move.damage;
+  if (proj) cost = Math.trunc(cost / 2);
+  if (move.kind === 'ultimate') cost = Math.trunc(cost / 2);
+  d.sim.guardIdle = 0;
+  const g = (d.sim.guard ?? GUARD_MAX) - cost;
+  if (g <= 0) return true;
+  d.sim.guard = g;
+  return false;
 }
 
 function isCounter(def: SF): boolean {
@@ -121,6 +138,20 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
   }
 
   const blocked = canBlock(state, di, from, move, crouch);
+  if (blocked && drainGuard(d, move, !!proj)) {
+    // GUARD CRUSH: the guard meter ran out -> stagger (comboable), meter refills
+    setMode(d, 'hitstun');
+    d.stun = GUARD_CRUSH_STUN;
+    d.sim.hitPose = 'stagger';
+    stunnedThisStep[di] = true;
+    d.sim.guard = GUARD_MAX;
+    push(d, dirx, dirz, pb);
+    d.hitstop = Math.max(d.hitstop, hs + COUNTER_HITSTOP);
+    if (!proj) { a.hitstop = Math.max(a.hitstop, hs + COUNTER_HITSTOP); a.sim.contact = 2; }
+    emit(state, { type: 'guardCrush', player: ai as 0 | 1, target: di as 0 | 1, pos: chest(d), strength: move.strength, element: move.element, moveId: move.id, charId: a.char });
+    if (!proj) state.advTrack = { att: ai, moveId: move.id, aFree: -1, dFree: -1 };
+    return 'block';
+  }
   if (blocked) {
     setMode(d, 'blockstun');
     d.stun = move.blockstun;
@@ -135,6 +166,24 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
     emit(state, { type: 'block', player: ai as 0 | 1, target: di as 0 | 1, pos: { ...point }, strength: move.strength, element: move.element, moveId: move.id, charId: a.char, damage: move.chip ?? 0 });
     if (!proj) state.advTrack = { att: ai, moveId: move.id, aFree: -1, dFree: -1 };
     return 'block';
+  }
+
+  // ---- ground hit on a lying opponent (OTG): stays down, combo continues, once per knockdown
+  if (d.mode === 'knockdown') {
+    let dmg = Math.trunc((move.damage * comboScale(d.comboHits)) / 1000);
+    if (a.awakened) dmg = Math.trunc((dmg * 11) / 10);
+    dmg = Math.max(1, Math.trunc((dmg * 7) / 10));
+    d.hp -= dmg;
+    if (state.training && d.hp < 1) d.hp = 1;
+    d.comboHits++;
+    d.comboDamage += dmg;
+    d.sim.otgUsed = true;
+    if (d.modeFrame > KD_MIN) d.modeFrame = KD_MIN; // pinned down a little longer
+    d.hitstop = Math.max(d.hitstop, hs);
+    if (!proj) { a.hitstop = Math.max(a.hitstop, hs); a.sim.contact = 1; }
+    addKi(state, ai, move.kiGain ?? 0);
+    emit(state, { type: 'hit', player: ai as 0 | 1, target: di as 0 | 1, pos: { ...point }, strength: move.strength, element: move.element, moveId: move.id, damage: dmg, charId: a.char, tag: 'otg', combo: d.comboHits });
+    return 'hit';
   }
 
   // ---- hit
@@ -154,7 +203,8 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
 
   // armor (Stone Skin etc): absorb one hit, take the damage, no stun
   const dm = d.mode === 'attack' ? moveOf(d) : undefined;
-  if (dm?.armor && !d.sim.armorUsed && move.height !== 'unblockable') {
+  // armor absorbs highs and mids only: lows, throws and unblockables go through (power-crush rule)
+  if (dm?.armor && !d.sim.armorUsed && move.height !== 'unblockable' && move.height !== 'low') {
     const fr = d.moveFrame + 1;
     if (fr >= dm.armor[0] && fr <= dm.armor[1]) {
       d.sim.armorUsed = true;
@@ -187,8 +237,8 @@ export function resolveStrike(state: GameState, ai: number, move: MoveDef, point
 
   const wasAir = d.airborne || d.mode === 'juggle' || d.mode === 'wallsplat';
   const effect: OnHitEffect = (counter && move.onCounterHit) ? move.onCounterHit : (move.onHit ?? 'normal');
-  d.hitstop = Math.max(d.hitstop, hs + (counter ? 2 : 0));
-  if (!proj) { a.hitstop = Math.max(a.hitstop, hs + (counter ? 2 : 0)); a.sim.contact = 1; }
+  d.hitstop = Math.max(d.hitstop, hs + (counter ? COUNTER_HITSTOP : 0));
+  if (!proj) { a.hitstop = Math.max(a.hitstop, hs + (counter ? COUNTER_HITSTOP : 0)); a.sim.contact = 1; }
   const evBase = { player: ai as 0 | 1, target: di as 0 | 1, strength: move.strength, element: move.element, moveId: move.id, charId: a.char };
 
   if (wasAir) applyJuggleHit(state, di, a, move, effect, dirx, dirz);
@@ -225,13 +275,17 @@ function applyGroundHit(state: GameState, di: number, a: SF, move: MoveDef, effe
       toJuggle(state, di, a, 22, 42);
       return;
     case 'groundbounce':
-      d.sim.bounce = true;
+      // a standing opponent only bounces on a COUNTER hit; otherwise it is a plain knockdown
+      if (!counter) { toJuggle(state, di, a, 26, 16); return; }
+      d.sim.bounce = !d.sim.bounceUsed;
       toJuggle(state, di, a, -12, 6);
       return;
     case 'stagger':
     case 'crumple':
+      // stagger / crumple only from a fresh hit: inside a combo it is a normal hit (no loops)
+      if (d.comboHits > 1) { applyGroundHit(state, di, a, move, 'normal', counter, dx, dz, pb); return; }
       setMode(d, 'hitstun');
-      d.stun = effect === 'crumple' ? 50 : move.hitstun + 10;
+      d.stun = effect === 'crumple' ? 50 : move.hitstun + STAGGER_EXTRA;
       d.sim.crumple = effect === 'crumple';
       d.sim.hitPose = 'stagger';
       stunnedThisStep[di] = true;
@@ -248,7 +302,7 @@ function applyGroundHit(state: GameState, di: number, a: SF, move: MoveDef, effe
   }
 }
 
-function applyJuggleHit(state: GameState, di: number, a: SF, move: MoveDef, effect: OnHitEffect, dx: number, dz: number): void {
+function applyJuggleHit(state: GameState, di: number, a: SF, move: MoveDef, effect: OnHitEffect, _dx: number, _dz: number): void {
   const d = F(state, di);
   if (d.mode === 'wallsplat') {
     if (effect === 'launch') toJuggle(state, di, a, Math.trunc(((move.launchVel ?? 60) * 7) / 10), -4);
@@ -256,12 +310,22 @@ function applyJuggleHit(state: GameState, di: number, a: SF, move: MoveDef, effe
   }
   const ch = d.comboHits;
   let vy: number;
-  let knock = 6;
-  if (effect === 'launch') vy = Math.trunc(((move.launchVel ?? 60) * 8) / 10);
-  else if (effect === 'groundbounce') { vy = -40; d.sim.bounce = true; }
+  let knock = JUGGLE_KNOCK;
+  // Ender rule: a special / ki move that hits a juggled opponent ENDS the juggle (sends them
+  // away into a knockdown) unless it is a bounce / wall tool. Specials are combo enders.
+  if (effect === 'groundbounce' && d.sim.bounceUsed) effect = 'knockdown';
+  if ((move.kind === 'special' || move.kind === 'ki') && effect !== 'groundbounce' && effect !== 'wallbounce') {
+    effect = 'knockdown';
+    d.sim.enderUsed = true;
+  }
+  // a launcher used mid-juggle only gives a slightly bigger pop (no relaunch loops)
+  if (effect === 'launch') vy = Math.max(JUGGLE_POP_MIN, JUGGLE_POP + 6 - JUGGLE_POP_DECAY * ch);
+  else if (effect === 'groundbounce') { vy = -40; d.sim.bounce = !d.sim.bounceUsed; }
   else if (effect === 'wallbounce') { vy = 18; knock = 42; }
-  else if (effect === 'knockdown') { vy = 16; knock = 16; }
-  else vy = Math.max(20, 46 - 3 * ch); // small pop per juggle hit, shrinking with combo length
+  else if (effect === 'knockdown') { vy = 22; knock = 18; }
+  else vy = Math.max(JUGGLE_POP_MIN, JUGGLE_POP - JUGGLE_POP_DECAY * ch); // small pop, shrinking with combo length
+  // hard cap: a long juggle stops popping and the opponent falls out (no infinites)
+  if (ch >= JUGGLE_HIT_CAP && vy > 0) { vy = Math.min(vy, 0); knock = Math.max(knock, 16); }
   // juggles get lower each hit: cap pop by combo length
   toJuggle(state, di, a, vy, knock);
   d.airborne = true;
@@ -270,6 +334,8 @@ function applyJuggleHit(state: GameState, di: number, a: SF, move: MoveDef, effe
 // ---------------------------------------------------------------- throws
 export function tryThrow(state: GameState, ai: number, move: MoveDef, point: Vec3): void {
   const a = F(state, ai), di = 1 - ai, d = F(state, di);
+  // a strike that landed on the thrower this same step beats the throw (independent of player order)
+  if (a.mode !== 'attack' || a.moveId !== move.id) return;
   if (d.airborne) return;
   const m = d.mode;
   if (m === 'hitstun' || m === 'blockstun' || m === 'juggle' || m === 'knockdown' || m === 'wallsplat' || m === 'thrown' || d.invuln) return;
@@ -312,14 +378,15 @@ function throwBreak(state: GameState, ai: number, point: Vec3): void {
 }
 
 /** per-frame update of a thrown fighter (lock, break window, damage) */
-export function updateThrown(state: GameState, di: number): void {
+export function updateThrown(state: GameState, di: number, view?: { x: number; z: number; fx: number; fz: number }): void {
   const d = F(state, di);
   const ai = d.sim.partner;
   if (ai < 0) { setMode(d, 'idle'); return; }
   const a = F(state, ai);
-  d.pos.x = a.pos.x + Math.trunc((a.facing.x * THROW_DIST) / 1000);
-  d.pos.z = a.pos.z + Math.trunc((a.facing.z * THROW_DIST) / 1000);
-  d.facing.x = -a.facing.x; d.facing.z = -a.facing.z;
+  const v = view ?? { x: a.pos.x, z: a.pos.z, fx: a.facing.x, fz: a.facing.z };
+  d.pos.x = v.x + Math.trunc((v.fx * THROW_DIST) / 1000);
+  d.pos.z = v.z + Math.trunc((v.fz * THROW_DIST) / 1000);
+  d.facing.x = -v.fx; d.facing.z = -v.fz;
   if (state.camera.cinematic?.kind === 'throw') state.camera.cinematic.frame = d.modeFrame;
   if (d.sim.breakable && d.modeFrame >= 1 && d.modeFrame <= THROW_BREAK && (d.sim.press[B_L] === 0 || d.sim.press[B_K] === 0)) {
     throwBreak(state, ai, chest(d));
@@ -349,8 +416,14 @@ const pending: Pending[] = [];
 
 function strikeable(d: SF): boolean {
   if (d.invuln) return false;
+  if (d.sim.enderUsed && d.mode === 'juggle') return false;
   const m = d.mode;
   return !(m === 'knockdown' || m === 'thrown' || m === 'intro' || m === 'clash' || m === 'win' || m === 'lose' || m === 'vanish' || m === 'awaken');
+}
+
+/** ground hits: only `otg` moves, after the first frames of the fall, once per knockdown */
+function otgable(d: SF, m: MoveDef): boolean {
+  return !!m.otg && d.modeFrame >= KD_OTG_FROM && !d.sim.otgUsed;
 }
 
 /** Find all connecting hitboxes for this frame first, then resolve (so trades work). */
@@ -362,7 +435,7 @@ export function detectStrikes(state: GameState, frozen: boolean[]): void {
     const m = moveOf(a);
     if (!m || m.internal && m.hitboxes.length === 0) continue;
     const d = F(state, 1 - ai);
-    if (!strikeable(d)) continue;
+    if (!(d.mode === 'knockdown' ? otgable(d, m) : strikeable(d))) continue;
     const fr = a.moveFrame + 1;
     for (let k = 0; k < m.hitboxes.length; k++) {
       const hb = m.hitboxes[k];
@@ -375,13 +448,14 @@ export function detectStrikes(state: GameState, frozen: boolean[]): void {
       }
     }
   }
+  // strikes first, then throws: a strike that lands on a thrower beats the throw no matter
+  // which player is processed first (tryThrow rejects a thrower that is no longer attacking)
   for (const p of pending) {
-    const a = F(state, p.ai);
-    const pt = vec(p.x, p.y, p.z);
-    if (p.move.height === 'throw') { tryThrow(state, p.ai, p.move, pt); continue; }
-    const r = resolveStrike(state, p.ai, p.move, pt);
-    if (r !== 'none') a.sim.hitMask |= 1 << p.k;
+    if (p.move.height === 'throw') continue;
+    const r = resolveStrike(state, p.ai, p.move, vec(p.x, p.y, p.z));
+    if (r !== 'none') F(state, p.ai).sim.hitMask |= 1 << p.k;
   }
+  for (const p of pending) if (p.move.height === 'throw') tryThrow(state, p.ai, p.move, vec(p.x, p.y, p.z));
 }
 
 /** whiff detection at the end of a move's active frames (called from the advance phase) */

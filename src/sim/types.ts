@@ -178,6 +178,8 @@ export interface MoveDef {
    * Undefined when the hit causes launch / knockdown / bounce (show the effect instead).
    */
   onHitAdv?: number;
+  /** (optional) can hit an opponent lying in knockdown (ground hit / stomp), once per knockdown */
+  otg?: boolean;
 }
 
 export interface CharDef {
@@ -292,6 +294,14 @@ export interface FighterSimData {
   hitPose: PoseName;
   crumple: boolean;
   airAttackUsed: boolean;
+  /** (optional, sim) a combo ender (special in a juggle) landed: no more hits until this fighter lands */
+  enderUsed?: boolean;
+  /** (optional, sim) hidden guard meter 0..GUARD_MAX; drains on block, empty = guard crush */
+  guard?: number;
+  /** (optional, sim) frames since this fighter last blocked (guard meter regen delay) */
+  guardIdle?: number;
+  /** (optional, sim) already took a ground hit during this knockdown */
+  otgUsed?: boolean;
 }
 
 export interface TrainingOptions {
@@ -312,6 +322,8 @@ export interface UltState {
   dealt: number;
   hitIndex: number;
   moveId: string; // the cinematic move id
+  /** (optional) hit-freeze frames remaining: the cinematic pauses (connect + final hit = 14, others 3) */
+  freeze?: number;
 }
 
 export interface ProjectileState {
@@ -351,7 +363,7 @@ export interface SimEvent {
     | 'launch' | 'wallSplat' | 'groundBounce' | 'land' | 'knockdown'
     | 'projectile' | 'projectileHit' | 'projectileDestroy'
     | 'kiCharge' | 'kiFull' | 'vanish' | 'awaken' | 'ultimateStart' | 'ultimateHit'
-    | 'clashStart' | 'clashEnd' | 'sidestep' | 'dash' | 'jump'
+    | 'clashStart' | 'clashEnd' | 'sidestep' | 'dash' | 'jump' | 'guardCrush'
     | 'moveStart' | 'roundStart' | 'fight' | 'ko' | 'timeout' | 'roundEnd' | 'matchEnd';
   frame: number;
   player: 0 | 1; // who caused it

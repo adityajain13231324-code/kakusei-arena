@@ -17,7 +17,7 @@ import { CHARS } from '../data';
 import { isqrt, clamp } from '../core/fixed';
 import {
   SIDESTEP_FRAMES, SIDEWALK_PCT, DASH_FRAMES, DASH_ACT, BACKDASH_FRAMES, BACKDASH_ACT, PREJUMP, JUMP_FWD,
-  LAND_LAG, AIR_LAND_LAG, GRAVITY, KICHARGE_HOLD, KD_MIN, SPLAT_FRAMES,
+  LAND_LAG, AIR_LAND_LAG, GRAVITY, KICHARGE_HOLD, KD_MIN, SPLAT_FRAMES, JUGGLE_G2_BASE, JUGGLE_G2_MAX_EXTRA,
 } from './constants';
 
 // ---------------------------------------------------------------- neutral input -> movement
@@ -141,8 +141,8 @@ export function think(state: GameState, i: number): void {
 
 // ---------------------------------------------------------------- physics
 /** move laterally (perpendicular to the fighter axis) while keeping the distance to the opponent */
-function circle(f: SF, o: SF, speed: number): void {
-  const dx0 = f.pos.x - o.pos.x, dz0 = f.pos.z - o.pos.z;
+function circle(f: SF, o: { x: number; z: number }, speed: number): void {
+  const dx0 = f.pos.x - o.x, dz0 = f.pos.z - o.z;
   const d0 = isqrt(dx0 * dx0 + dz0 * dz0);
   // lateral = perpendicular to facing, sign chosen to continue the stored direction
   let lx = -f.facing.z, lz = f.facing.x;
@@ -151,9 +151,9 @@ function circle(f: SF, o: SF, speed: number): void {
   let nx = f.pos.x + Math.trunc((lx * speed) / 1000);
   let nz = f.pos.z + Math.trunc((lz * speed) / 1000);
   if (d0 > 0) {
-    const ddx = nx - o.pos.x, ddz = nz - o.pos.z;
+    const ddx = nx - o.x, ddz = nz - o.z;
     const d1 = isqrt(ddx * ddx + ddz * ddz);
-    if (d1 > 0) { nx = o.pos.x + Math.trunc((ddx * d0) / d1); nz = o.pos.z + Math.trunc((ddz * d0) / d1); }
+    if (d1 > 0) { nx = o.x + Math.trunc((ddx * d0) / d1); nz = o.z + Math.trunc((ddz * d0) / d1); }
   }
   f.vel.x = nx - f.pos.x;
   f.vel.z = nz - f.pos.z;
@@ -168,14 +168,39 @@ function land(state: GameState, i: number, lag: number): void {
   emit(state, { type: 'land', player: i as 0 | 1, pos: vec(f.pos.x, 0, f.pos.z), charId: f.char });
 }
 
+/**
+ * Juggle gravity. In thousandths of mm/f²: (BASE + min(MAX_EXTRA, comboHits)) x 500 x weight/100,
+ * spread exactly over frames (integer, deterministic). Starts floaty (2 mm/f²) so a launcher can
+ * be followed up and gets heavier with every hit, so juggles always end (JUGGLE_* in constants).
+ * Weight counts half (Goro 125 -> x1.125, Shiori 92 -> x0.96) so one timing works on everyone.
+ */
 function juggleGravity(f: SF): number {
-  // juggle gravity grows with combo length so juggles can't go on forever
-  const g = 4 + Math.min(6, f.comboHits >> 1);
-  return Math.max(2, Math.trunc((g * CHARS[f.char].weight) / 100));
+  const w = 100 + Math.trunc((CHARS[f.char].weight - 100) / 2);
+  const gm = (JUGGLE_G2_BASE + Math.min(JUGGLE_G2_MAX_EXTRA, f.comboHits)) * 5 * w;
+  const t = f.modeFrame;
+  return Math.trunc((gm * (t + 1)) / 1000) - Math.trunc((gm * t) / 1000);
 }
 
+/**
+ * Start-of-physics snapshot of both fighters' position + facing. Everything in the physics
+ * phase that looks at the OTHER fighter (sidestep circling, teleports, throw holds) reads
+ * this snapshot, so the result does not depend on which player is processed first.
+ */
+export const snap = [
+  { x: 0, y: 0, z: 0, fx: 1000, fz: 0 },
+  { x: 0, y: 0, z: 0, fx: -1000, fz: 0 },
+];
+export function snapshot(state: GameState): void {
+  for (let i = 0; i < 2; i++) {
+    const f = F(state, i), p = snap[i];
+    p.x = f.pos.x; p.y = f.pos.y; p.z = f.pos.z; p.fx = f.facing.x; p.fz = f.facing.z;
+  }
+}
+
+/** phase 1 of physics: mode logic -> velocities (reads the other fighter only through `snap`) */
 export function physics(state: GameState, i: number): void {
-  const f = F(state, i), o = F(state, 1 - i), s = f.sim;
+  const f = F(state, i), s = f.sim;
+  const o = snap[1 - i];
   const c = CHARS[f.char];
   switch (f.mode) {
     case 'walk':
@@ -223,7 +248,7 @@ export function physics(state: GameState, i: number): void {
         } else if (!f.airborne) { f.vel.x = 0; f.vel.z = 0; }
       } else if (!f.airborne) { f.vel.x = 0; f.vel.z = 0; }
       if (f.airborne) f.vel.y -= GRAVITY;
-      if (m.teleport && f.moveFrame === m.teleport.frame && !f.stance) teleport(state, i, m.teleport.to);
+      if (m.teleport && f.moveFrame === m.teleport.frame && !f.stance) teleport(state, i, m.teleport.to, undefined, o);
       if (m.projectile && f.moveFrame + 1 === m.projectile.spawnFrame && !f.stance) spawnProjectiles(state, i, m);
       break;
     }
@@ -235,11 +260,11 @@ export function physics(state: GameState, i: number): void {
       f.vel.x = 0; f.vel.z = 0; f.vel.y = f.pos.y > 0 ? -5 : 0;
       break;
     case 'thrown':
-      updateThrown(state, i);
+      updateThrown(state, i, snap[f.sim.partner >= 0 ? f.sim.partner : 1 - i]);
       f.vel.x = f.vel.z = f.vel.y = 0;
       break;
     case 'vanish':
-      updateVanish(state, i);
+      updateVanish(state, i, o);
       f.vel.x = f.vel.z = 0;
       break;
     default:
@@ -248,6 +273,11 @@ export function physics(state: GameState, i: number): void {
       if (f.airborne) f.vel.y -= GRAVITY;
       else f.vel.y = 0;
   }
+}
+
+/** phase 2 of physics: integrate velocity + pushback, landing (runs after phase 1 for BOTH fighters) */
+export function integrate(state: GameState, i: number): void {
+  const f = F(state, i), o = F(state, 1 - i), s = f.sim;
 
   // integrate
   f.pos.x += f.vel.x;
@@ -275,7 +305,7 @@ export function physics(state: GameState, i: number): void {
           emit(state, { type: 'groundBounce', player: (1 - i) as 0 | 1, target: i as 0 | 1, pos: vec(f.pos.x, 0, f.pos.z), charId: o.char });
         } else {
           setMode(f, 'knockdown');
-          f.airborne = false; f.vel.y = 0; s.bounce = false;
+          f.airborne = false; f.vel.y = 0; s.bounce = false; s.enderUsed = false; s.otgUsed = false;
           emit(state, { type: 'land', player: i as 0 | 1, pos: vec(f.pos.x, 0, f.pos.z), charId: f.char, tag: 'body' });
           emit(state, { type: 'knockdown', player: (1 - i) as 0 | 1, target: i as 0 | 1, pos: vec(f.pos.x, 0, f.pos.z), charId: f.char, combo: f.comboHits, damage: f.comboDamage });
         }
