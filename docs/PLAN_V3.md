@@ -82,3 +82,16 @@ Same golden rules as `CONTINUE.md §4` (determinism, contracts, original designs
 
 ## Usage note
 Claude's helper agents hit the weekly usage limit (resets Nov 22, 4:30 am IST). Work resumes from P0 then.
+
+## ★ NEXT: Polish Pass "P8" (Nov 19 owner feedback)
+Goal: the fight is the star — real animation, real sound, clean small HUD, full graphics settings.
+
+| # | Track | What | Owner |
+|---|---|---|---|
+| 1 | **Animation v2** | Clip-based animation with the pose system as fallback: idle/walk/run/dash/hit/knockdown/getup/win/lose/intro + every attack as real keyframed clips (Mixamo / Cascadeur / Blender keyframes), blended (crossfade 2–4 f), root motion off (sim drives position), anticipation + follow-through + smear frames, per-character idle stances, secondary motion (hair/cloth springs). Move data gets optional `clip` + timing map so active frames still match hitboxes. | Claude (Opus) code; clips from owner/Astra |
+| 2 | **Models** | Owner's licensed crossover models dropped in + checked; Astra: Kitsu redo, crowd, props, remaining originals. Optional Meshy on owner's PC. | Owner + Astra |
+| 3 | **Compact HUD** | Smaller HP/Ki bars hugging the top/bottom edges, timer smaller, commentator panel collapsed to a one-line ticker by default (toggle "Broadcast: Off / Ticker / Full"), callouts shorter + smaller, training panel collapsible, HUD scale slider (70–120%) + safe-area aware. | Claude (Sonnet) |
+| 4 | **Sound v2** | Real recorded/sample SFX library (CC0 packs bundled, e.g. Kenney / Sonniss-free / Freesound CC0) layered with the synth: impacts by strength × material, whooshes per limb, footsteps, body falls, cloth, blocks, parries, crowd reactions (cheer/gasp/boo), UI. Voice lines per fighter (intro, specials, ultimate, win, hurt) + announcer ("ROUND 1", "FIGHT", "K.O.", "PERFECT", "DOMAIN EXPANSION"), optional AI-generated (ElevenLabs connector, owner's credits). Mixer: master/music/SFX/voice/announcer sliders, ducking, reverb per stage. | Claude (Sonnet) + owner approval for generated audio |
+| 5 | **Graphics settings** | Presets (Low/Medium/High/Ultra/Custom) + toggles: render scale 50–150%, FPS cap (30/60/120/unlimited), shadows (off/low/high), outlines, post FX (bloom, impact frames, speed lines, color grade), particles (low/med/high), crowd density, realm sky quality, texture res (1024/2048), anti-aliasing, show FPS, auto-benchmark on first launch. | Claude (Sonnet) |
+| 6 | **Feel** | Hit sparks per strength, better hitstop curves, camera punch on heavy hits, slow-mo KO replay, intros + win poses per fighter, parry flash. | Claude |
+| 7 | **Ship** | Vercel deploy + hub card, real-device perf (Iris Xe + phone), online test 2 devices. | Owner + Claude |
