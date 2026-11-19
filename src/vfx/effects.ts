@@ -232,11 +232,58 @@ export class Effects {
     fx.r.addShake(sh[0]!, sh[1]!);
     if (counter || lvl >= 3) fx.post.impact(3);
     else if (lvl >= 2) fx.post.impact(2);
-    if (lvl >= 2 || counter) {
+    const otg = ev.tag === 'otg';
+    if ((lvl >= 2 || counter) && !otg) {
       const key = this.ono(el, lvl, counter);
       tmpV.set(this.x, this.y + 0.55, this.z);
       fx.O.spawn(key, tmpV.x, tmpV.y, tmpV.z, lvl >= 3 ? 1.35 : 1.0);
     }
+    if (otg) this.otg(ev);
+  }
+
+  /** ground hit on a lying opponent: dust ring, small debris, "ドスッ!" */
+  otg(ev: SimEvent): void {
+    const fx = this.fx, P = fx.P;
+    const x = ev.pos.x / 1000, z = ev.pos.z / 1000;
+    this.dustRing(x, z, 10, 3.0, 0.7, 0.65);
+    for (let i = 0; i < this.n(11); i++) {
+      const a = rr(0, 6.2832), sp = rr(1.2, 3.4);
+      P.spec.reset().at(x + Math.cos(a) * 0.15, 0.1, z + Math.sin(a) * 0.15).v(Math.cos(a) * sp, rr(2.2, 4.8), Math.sin(a) * sp).ph(0.4, 15)
+        .ttl(rr(0.5, 0.9)).tx(T.SHARD).sz(rr(0.05, 0.11), rr(0.05, 0.11)).rt(rr(0, 6), rr(-9, 9)).col(0xb09a78, 0x6a5a44, 1, 1);
+      P.spec.pe = 6;
+      P.emit(false);
+    }
+    this.x = x; this.y = 0.12; this.z = z;
+    this.shock(2.6, 0.22, 0xe8dcc8, true, 0.7);
+    fx.r.addShake(0.022, 4);
+    this.origin({ x: ev.pos.x, y: 900, z: ev.pos.z }, 0.3);
+    fx.O.spawn('dosu', this.x, this.y, this.z, 1.0, 0.8);
+  }
+
+  /** guard meter emptied: glass-shatter burst of blue shards + "GUARD CRUSH!" */
+  guardCrush(ev: SimEvent): void {
+    const fx = this.fx, P = fx.P;
+    this.dirFrom(ev);
+    this.origin(ev.pos, 0.3);
+    for (let i = 0; i < this.n(30); i++) {
+      randDir();
+      const sp = rr(2.5, 7.5);
+      P.spec.reset().at(this.x, this.y, this.z).v(PR.dx * sp + this.ax * 1.5, PR.dy * sp + 1.2, PR.dz * sp + this.az * 1.5).ph(0.8, 9)
+        .ttl(rr(0.6, 1.1)).tx(T.SHARD).sz(rr(0.1, 0.3), rr(0.05, 0.14)).rt(rr(0, 6), rr(-12, 12)).col(0xe6f6ff, 0x2f7cff, 1, 0, 1.5);
+      P.spec.pe = 6;
+      P.emit(true);
+    }
+    this.sparks(18, 8, 1.2, 0xffffff, 0x3a8cff, 0.6, 0.45, 8);
+    this.glow(3.0, 0.22, 0xffffff, 0x3a8cff, 1, 1.5);
+    this.star(2.6, 0.22, 0xbfe4ff, 0, 0.95);
+    this.shock(3.4, 0.32, 0x8fd3ff);
+    fx.D.spawn('ring', this.x, this.y, this.z, 0.3, 2.2, 0.26, 0xffffff, 0, 0, 0.9, true);
+    fx.post.screenFlash(0x9fd0ff, 0.22, 10);
+    fx.post.vignettePulse(0.4);
+    fx.r.addShake(0.07, 9);
+    fx.post.impact(2);
+    tmpV.set(this.x, this.y + 0.65, this.z);
+    fx.O.spawn('guardcrush', tmpV.x, tmpV.y, tmpV.z, 1.25, 1.0);
   }
 
   block(ev: SimEvent): void {

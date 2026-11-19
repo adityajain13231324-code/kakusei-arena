@@ -201,7 +201,7 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   group.add(inst);
   // ---------- neon signs
   const signs: Array<{ text: string; color: string; font: string; w: number; h: number; pos: [number, number, number]; rot: number; size: [number, number]; vertical?: boolean }> = [
-    { text: 'KAKUSEI', color: '#ff3df0', font: 'bold 110px "Arial Black", Impact, sans-serif', w: 640, h: 180, pos: [-14, 9, -30], rot: 0.35, size: [12, 3.4] },
+    { text: 'KAKUSEI', color: '#ff3df0', font: 'bold 110px "Arial Black", Impact, sans-serif', w: 640, h: 180, pos: [-12, 4.9, -31], rot: 0.3, size: [11, 3.1] },
     { text: '覚醒', color: '#3dfcff', font: 'bold 240px "Noto Sans CJK JP", sans-serif', w: 200, h: 520, pos: [22, 12, -28], rot: -0.6, size: [2.6, 6.8], vertical: true },
     { text: 'RAMEN', color: '#ffb02e', font: 'bold 120px "Arial Black", Impact, sans-serif', w: 560, h: 170, pos: [30, 3, 12], rot: -1.6, size: [7, 2.1] },
     { text: '24H', color: '#5dff7a', font: 'bold 140px "Arial Black", Impact, sans-serif', w: 360, h: 180, pos: [-28, 4, 14], rot: 1.45, size: [4, 2] },

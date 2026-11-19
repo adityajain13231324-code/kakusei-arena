@@ -1,12 +1,12 @@
 /**
  * CPU controller. A pure function of (GameState, its own plain-data memory):
- * the PRNG is re-seeded every frame from (player, difficulty, state.frame), never Math.random.
+ * the PRNG is re-seeded every frame from (player, difficulty, state.frame, state.seed), never Math.random.
  * Look-ahead uses cloneState + step on a scratch copy (deterministic, never touches the live state).
  */
 import {
   Btn, type CharId, type FighterState, type GameState, type InputBits, type MoveDef,
 } from '../sim/types';
-import { cloneState, step as simStep, getMove } from '../sim/index';
+import { cloneState, step as simStep, getMove, getChar } from '../sim/index';
 import { PROFILES, PERSONALITY, type Difficulty, type Profile } from './profiles';
 import {
   catalog, moveFrames, toRaw, R_FWD, R_BACK, R_DOWN, R_UP, type CharCatalog, type MoveInfo,
@@ -77,7 +77,8 @@ function hdist(a: FighterState, b: FighterState): number {
   const dx = a.pos.x - b.pos.x, dz = a.pos.z - b.pos.z;
   return Math.sqrt(dx * dx + dz * dz);
 }
-const RADIUS: Record<CharId, number> = { kaito: 300, shiori: 280, ren: 300, goro: 360 };
+/** body radius (mm) straight from the character data */
+function radiusOf(id: CharId): number { return getChar(id).radius; }
 const FREE_MODES = new Set(['idle', 'walk', 'crouch', 'guard', 'sidewalk', 'kicharge']);
 
 function lastActive(m: MoveDef): number {
@@ -107,7 +108,8 @@ export class CpuController {
     const m = this.mem;
     m.last = state.frame;
     if (state.round.phase !== 'fight') { m.plan.length = 0; m.post = 'none'; return 0; }
-    const rng = new Rng((state.frame + 1) * 2654435761 + this.player * 40503 + DIFF_SALT[this.difficulty]);
+    // state.seed (the sim PRNG state) is mixed in so every match plays out differently, still a pure function of the state
+    const rng = new Rng(((state.frame + 1) * 2654435761 + this.player * 40503 + DIFF_SALT[this.difficulty]) ^ mix(state.seed | 0));
     const me = state.fighters[this.player];
     const rel = this.decide(state, rng);
     return toRaw(rel & ~(Btn.Guard | Btn.Ult | Btn.L | Btn.H | Btn.K | Btn.S), me.side) | (rel & (Btn.Guard | Btn.Ult | Btn.L | Btn.H | Btn.K | Btn.S));
@@ -121,7 +123,7 @@ export class CpuController {
     const cat = catalog(me.char), ocat = catalog(opp.char);
     const pers = PERSONALITY[me.char];
     const dist = hdist(me, opp);
-    const oR = RADIUS[opp.char], mR = RADIUS[me.char];
+    const oR = radiusOf(opp.char), mR = radiusOf(me.char);
 
     // ---- global states
     if (state.clash.active) {
@@ -305,7 +307,7 @@ export class CpuController {
   private blockstun(state: GameState, me: FighterState, opp: FighterState, cat: CharCatalog, ocat: CharCatalog, rng: Rng): number {
     const mem = this.mem;
     const dist = hdist(me, opp);
-    const th = this.threat(state, me, opp, ocat, dist, RADIUS[me.char]);
+    const th = this.threat(state, me, opp, ocat, dist, radiusOf(me.char));
     let low = me.pose === 'guardLow';
     if (th && th.kind !== 'throw' && th.kind !== 'unb' && this.perceived(state, th, rng)) low = th.low;
     // buffered punish: input the punisher a few frames before blockstun ends
@@ -327,7 +329,7 @@ export class CpuController {
       const dist = hdist(me, opp);
       const held = me.modeFrame - mi.m.stance.loopFrame;
       const qd = cat.byId[mi.m.stance.releaseMove];
-      const inRange = qd && dist <= qd.reach + 0.65 * RADIUS[opp.char] - 80;
+      const inRange = qd && dist <= qd.reach + 0.65 * radiusOf(opp.char) - 80;
       const oppAttacking = opp.mode === 'attack';
       if (held < 4) return Btn.S;
       if (oppAttacking && !inRange) return Btn.S; // wait for the parry

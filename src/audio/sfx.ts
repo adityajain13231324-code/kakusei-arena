@@ -6,7 +6,7 @@ const LVL: Record<Strength, number> = { light: 0, medium: 1, heavy: 2, super: 3 
 const EV_IDX: Record<string, number> = {};
 ['hit', 'block', 'counter', 'whiff', 'parry', 'throw', 'throwBreak', 'launch', 'wallSplat', 'groundBounce', 'land', 'knockdown',
   'projectile', 'projectileHit', 'projectileDestroy', 'kiCharge', 'kiFull', 'vanish', 'awaken', 'ultimateStart', 'ultimateHit',
-  'clashStart', 'clashEnd', 'sidestep', 'dash', 'jump', 'moveStart', 'roundStart', 'fight', 'ko', 'timeout', 'roundEnd', 'matchEnd']
+  'clashStart', 'clashEnd', 'sidestep', 'dash', 'jump', 'guardCrush', 'moveStart', 'roundStart', 'fight', 'ko', 'timeout', 'roundEnd', 'matchEnd']
   .forEach((k, i) => (EV_IDX[k] = i));
 
 interface Loop { g: GainNode; srcs: Array<OscillatorNode | AudioBufferSourceNode>; a?: OscillatorNode; f?: BiquadFilterNode; b?: OscillatorNode; lfo?: GainNode }
@@ -82,6 +82,31 @@ export class Sfx {
     if (l >= 2) e.tone(t, 0.12, { f0: 120, f1: 60, g: 0.4 });
   }
 
+  /** glassy shatter + low thump */
+  guardCrush(t: number): void {
+    const e = this.e;
+    e.tone(t, 0.3, { f0: 110, f1: 40, g: 0.85 });
+    e.noise(t, 0.2, { type: 'brown', ft: 'lowpass', f0: 600, f1: 90, g: 0.6 });
+    e.fm(t, 0.5, 3200, 2.9, 5, 0.17, this.wet());
+    e.fm(t + 0.02, 0.4, 4700, 1.7, 4, 0.11, this.wet());
+    e.noise(t, 0.3, { ft: 'highpass', f0: 5000, f1: 9000, g: 0.28, a: 0.002 });
+    for (let i = 0; i < 9; i++) {
+      const d = 0.03 + Math.random() * 0.4;
+      e.tone(t + d, 0.09, { type: 'triangle', f0: 2600 + Math.random() * 3800, f1: 1800 + Math.random() * 1500, g: 0.09 * (1 - d), a: 0.001 });
+      e.noise(t + d, 0.02, { ft: 'highpass', f0: 6000, g: 0.1, a: 0.001 });
+    }
+  }
+
+  /** ground hit on a lying opponent: heavy stomp thud with a dust swish */
+  otg(t: number): void {
+    const e = this.e;
+    e.tone(t, 0.28, { f0: 85, f1: 32, g: 0.9 });
+    e.noise(t, 0.2, { type: 'brown', ft: 'lowpass', f0: 380, f1: 70, g: 0.8 });
+    e.noise(t, 0.05, { ft: 'bandpass', f0: 1500, q: 1.5, g: 0.35 });
+    e.click(t, 0.25);
+    e.noise(t + 0.03, 0.3, { ft: 'bandpass', f0: 1800, f1: 600, q: 0.8, g: 0.2, a: 0.06 });
+  }
+
   whiff(t: number, l: number): void {
     this.e.noise(t, 0.12 + l * 0.05, { ft: 'bandpass', f0: 600, f1: 2400 + l * 400, q: 1.2, g: 0.2 + l * 0.04, a: 0.03 });
   }
@@ -148,10 +173,11 @@ export class Sfx {
     const t = e.now + 0.003;
     const st = ev.strength ?? 'medium';
     const l = LVL[st];
-    const big = ev.type === 'ko' || ev.type === 'awaken' || ev.type === 'ultimateStart' || ev.type === 'ultimateHit' || ev.type === 'fight' || ev.type === 'roundStart';
+    const big = ev.type === 'ko' || ev.type === 'guardCrush' || ev.type === 'awaken' || ev.type === 'ultimateStart' || ev.type === 'ultimateHit' || ev.type === 'fight' || ev.type === 'roundStart';
     if (!e.claim(ev.type === 'ko' ? 2 : 0.4, big || ev.type === 'counter')) return;
     switch (ev.type) {
-      case 'hit': this.hit(t, st, ev.element, false); break;
+      case 'hit': if (ev.tag === 'otg') this.otg(t); else this.hit(t, st, ev.element, false); break;
+      case 'guardCrush': this.guardCrush(t); break;
       case 'counter': this.hit(t, st, ev.element, true); break;
       case 'block': this.block(t, l); break;
       case 'parry': this.block(t, 1); e.fm(t, 0.5, 2400, 2.76, 3, 0.15, this.wet()); break;

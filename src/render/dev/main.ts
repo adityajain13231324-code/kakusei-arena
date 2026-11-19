@@ -171,7 +171,14 @@ window.addEventListener('keydown', (e) => {
     if (mode === 'poses') applyPose();
   },
   pause(p: boolean) { paused = p; },
-  advance(n: number) { for (let i = 0; i < n; i++) { if (mode !== 'menu') simStep(); draw(1, 1 / 60); } },
+  advance(n: number) {
+    for (let i = 0; i < n; i++) {
+      if (mode !== 'menu') simStep();
+      if (i === n - 1) draw(1, 1 / 60);
+      else if (mode === 'menu') R.updateMenu(1 / 60);
+      else { R.update(prev, state, 1, 1 / 60); camOverride(); }
+    }
+  },
   stats: () => R.getStats(),
   snapshot: (id: CharId, size: number) => R.snapshotCharacter(id, size),
   poses: () => POSES.slice(),

@@ -71,6 +71,7 @@ export class VfxSystem {
         }
         case 'counter': this.eff.hit(ev, true); break;
         case 'block': this.eff.block(ev); break;
+        case 'guardCrush': this.eff.guardCrush(ev); break;
         case 'parry': this.eff.parry(ev); break;
         case 'throw': this.eff.throwImpact(ev); break;
         case 'throwBreak': this.eff.throwBreak(ev); break;

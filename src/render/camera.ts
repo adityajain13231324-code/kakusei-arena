@@ -39,6 +39,8 @@ export class FightCamera {
   readonly fighterPos = [new THREE.Vector3(), new THREE.Vector3()];
   readonly fighterFacing = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1)];
   readonly normal = new THREE.Vector3(0, 0, 1);
+  /** camera x/z are kept inside ±bound (stage walls / props never block the view); 0 = off */
+  bound = 0;
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
@@ -74,11 +76,15 @@ export class FightCamera {
     this.normal.copy(_n);
     const sep = Math.max(ch.distance / 1000, f0.distanceTo(f1));
     // ---- neutral fight framing
-    const dist = Math.max(4.5, Math.min(10, 2.7 + sep * 0.95));
-    const height = 1.42 + Math.min(0.3, sep * 0.04);
+    // Tekken-like: both fighters head to toe with margin, camera ~1.4 m high, distance grows with separation
+    const aspect = Math.max(0.5, this.cam.aspect || 16 / 9);
+    const halfTan = Math.tan((40 * Math.PI) / 360);
+    const needW = (sep + 2.6) / (2 * halfTan * aspect); // horizontal fit (+1.3 m margin each side)
+    const dist = Math.max(5.6, Math.min(13, Math.max(3.4 + sep * 0.85, needW)));
+    const height = 1.38 + Math.min(0.22, sep * 0.03);
     const airY = Math.max(f0.y, f1.y);
-    _p.copy(_c).addScaledVector(_n, dist); _p.y = height + airY * 0.4;
-    _t.copy(_c); _t.y = 1.08 + airY * 0.5;
+    _p.copy(_c).addScaledVector(_n, dist); _p.y = height + airY * 0.35;
+    _t.copy(_c); _t.y = 1.22 + airY * 0.45;
     let omegaP = 7, omegaL = 9;
     let fov = 40, roll = 0;
     // ---- cinematics
@@ -97,26 +103,28 @@ export class FightCamera {
       switch (cine.kind) {
         case 'intro': {
           const k = Math.min(1, t / 3);
-          const ang = (1 - k) * 2.4;
-          const r = 9 - k * (9 - dist);
+          const e = k * k * (3 - 2 * k);
+          const ang = (1 - e) * 1.25;
+          const r = 7.2 - e * (7.2 - dist);
           _p.copy(_c).addScaledVector(_n, Math.cos(ang) * r).addScaledVector(_a.set(_n.z, 0, -_n.x), Math.sin(ang) * r);
-          _p.y = 3.2 - k * (3.2 - height);
-          _t.copy(_c); _t.y = 1.1;
+          _p.y = 2.6 - e * (2.6 - height);
+          _t.copy(_c); _t.y = 1.1 + e * 0.12;
           omegaP = 6; omegaL = 8;
           break;
         }
         case 'ultimate': {
-          const ang = 0.5 + t * 0.35;
-          const r = Math.max(2.0, 3.4 - t * 0.6);
-          _p.copy(me).addScaledVector(_side, Math.cos(ang) * r).addScaledVector(_f, Math.sin(ang) * r * 0.8);
+          // side-on, sweeping from behind the attacker's shoulder toward profile: never between the fighters
+          const ang = -0.55 + Math.min(1, t * 0.45) * 0.75;
+          const r = Math.max(2.4, 3.6 - t * 0.5);
+          _p.copy(me).addScaledVector(_side, Math.cos(ang) * r).addScaledVector(_f, Math.sin(ang) * r);
           _p.y = 0.55 + Math.sin(t * 0.8) * 0.1;
           _t.copy(me); _t.y = me.y + 1.25;
           fov = 46; omegaP = 5; omegaL = 10;
           break;
         }
         case 'awaken': {
-          const r = Math.max(1.5, 3.2 - t * 1.2);
-          _p.copy(me).addScaledVector(_f, r * 0.9).addScaledVector(_side, r * 0.45);
+          const r = Math.max(1.7, 3.2 - t * 1.2);
+          _p.copy(me).addScaledVector(_f, r * 0.55).addScaledVector(_side, r * 0.8);
           _p.y = me.y + 1.25;
           _t.copy(me); _t.y = me.y + 1.35;
           roll = 0.26; fov = 34; omegaP = 6; omegaL = 12;
@@ -142,6 +150,28 @@ export class FightCamera {
           fov = 46; omegaP = 5;
           break;
         }
+      }
+    }
+    if (cine) {
+      // keep the lens out of both bodies (min 1.25 m on the ground plane)
+      for (let i = 0; i < 2; i++) {
+        const q = this.fighterPos[i];
+        const dx = _p.x - q.x, dz = _p.z - q.z;
+        const d = Math.hypot(dx, dz);
+        const minD = 1.25;
+        if (d < minD) {
+          if (d < 1e-4) { _p.addScaledVector(_n, minD); continue; }
+          _p.x = q.x + (dx / d) * minD; _p.z = q.z + (dz / d) * minD;
+        }
+      }
+    }
+    if (this.bound > 0) {
+      const b = this.bound;
+      if (Math.abs(_p.x) > b || Math.abs(_p.z) > b) {
+        // slide toward the look target until inside, then lift a little so the shot stays readable
+        const over = Math.max(Math.abs(_p.x) - b, Math.abs(_p.z) - b);
+        _p.x = THREE.MathUtils.clamp(_p.x, -b, b); _p.z = THREE.MathUtils.clamp(_p.z, -b, b);
+        _p.y += Math.min(0.8, over * 0.25);
       }
     }
     this.pos.step(_p, omegaP, dt);

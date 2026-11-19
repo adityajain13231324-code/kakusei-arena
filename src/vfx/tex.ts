@@ -262,6 +262,8 @@ export const ONOMATO: Record<string, { text: string; top: string; bottom: string
   zudon: { text: 'ズドン!', top: '#ffe2a8', bottom: '#d98a2b' },
   ko: { text: 'K.O.!', top: '#ffffff', bottom: '#ff2a4a' },
   bishi: { text: 'ビシッ!', top: '#ffffff', bottom: '#ffe14a' },
+  guardcrush: { text: 'GUARD CRUSH!', top: '#ffffff', bottom: '#2f8cff' },
+  dosu: { text: 'ドスッ!', top: '#f1e6d2', bottom: '#a8865a' },
 };
 
 export function makeOnomato(key: string): THREE.CanvasTexture {
