@@ -11,12 +11,14 @@ import { Effects } from './effects';
 import type { FxCtx } from './effects';
 import { Auras, ClashFx, ProjectileFx } from './projectiles';
 import { XoverFx } from './xover';
+import { FlipbookFx } from './flipbook';
 
 export class VfxSystem {
   private readonly root = new THREE.Group();
   private readonly P = new ParticleSystem();
   private readonly D: DecalFx;
   private readonly O: Onomato;
+  private readonly F = new FlipbookFx();
   private readonly post = new PostFx();
   private readonly fx: FxCtx;
   private readonly eff: Effects;
@@ -32,14 +34,14 @@ export class VfxSystem {
     this.root.name = 'vfx';
     this.D = new DecalFx(this.root, r.camera);
     this.O = new Onomato(this.root);
-    this.fx = { P: this.P, D: this.D, O: this.O, post: this.post, r, cam: r.camera, scale: 1, low: false };
+    this.fx = { P: this.P, D: this.D, O: this.O, F: this.F, post: this.post, r, cam: r.camera, scale: 1, low: false };
     this.eff = new Effects(this.fx);
     const chest = (p: 0 | 1, out: THREE.Vector3): THREE.Vector3 => this.chest(p, out);
     this.proj = new ProjectileFx(this.fx, chest);
     this.clash = new ClashFx(this.fx, chest, this.eff, this.proj);
     this.auras = new Auras(this.fx);
     this.xover = new XoverFx(this.fx, this.eff, chest);
-    this.root.add(this.P.group, this.proj.group, this.clash.group, this.auras.group, this.xover.group);
+    this.root.add(this.P.group, this.F.group, this.proj.group, this.clash.group, this.auras.group, this.xover.group);
     r.scene.add(this.root);
     r.setPostPass((rr) => this.post.render(rr));
     this.setQuality('high');
@@ -112,6 +114,7 @@ export class VfxSystem {
     this.P.update(dt);
     this.D.update(dt);
     this.O.update(dt);
+    this.F.update(dt);
     this.auras.update(dt, state);
     this.proj.update(dt, state);
     this.clash.update(dt, state);
@@ -124,6 +127,7 @@ export class VfxSystem {
     this.P.setMax(max);
     this.fx.scale = q === 'low' ? 0.45 : q === 'medium' ? 0.75 : 1;
     this.fx.low = q === 'low';
+    this.F.setQuality(q);
     this.post.level = q === 'low' ? 0 : q === 'medium' ? 1 : 2;
   }
 
@@ -133,6 +137,7 @@ export class VfxSystem {
     this.P.setMax(q === 'low' ? 600 : q === 'medium' ? 1100 : 1500);
     this.fx.scale = q === 'low' ? 0.45 : q === 'medium' ? 0.75 : 1;
     this.fx.low = q === 'low';
+    this.F.setQuality(q);
     this.post.allowImpact = o.impactFrames; this.post.allowLines = o.speedLines; this.post.allowGrade = o.colorGrade; this.post.allowBloom = o.bloom;
     if (!o.impactFrames) this.post.impactLeft = 0;
   }
@@ -147,6 +152,7 @@ export class VfxSystem {
     this.P.clear();
     this.D.clear();
     this.O.clear();
+    this.F.clear();
     this.post.clear();
     this.proj.clear();
     this.clash.clear();
@@ -158,7 +164,7 @@ export class VfxSystem {
   dispose(): void {
     this.r.setPostPass(null);
     this.root.removeFromParent();
-    this.P.dispose(); this.D.dispose(); this.O.dispose(); this.post.dispose();
+    this.P.dispose(); this.D.dispose(); this.O.dispose(); this.F.dispose(); this.post.dispose();
     this.proj.dispose(); this.clash.dispose(); this.auras.dispose(); this.xover.dispose();
   }
 }

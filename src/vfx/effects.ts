@@ -7,11 +7,13 @@ import { ParticleSystem, T, randDir, rr } from './particles';
 import * as PR from './particles';
 import { DecalFx, Onomato } from './quads';
 import { PostFx } from './post';
+import type { FlipbookFx } from './flipbook';
 
 export interface FxCtx {
   P: ParticleSystem;
   D: DecalFx;
   O: Onomato;
+  F: FlipbookFx; // owner flipbook sprite sheets
   post: PostFx;
   r: GameRenderer;
   cam: THREE.PerspectiveCamera;
@@ -283,6 +285,7 @@ export class Effects {
       fx.post.vignettePulse(0.6);
     }
     if (el && el !== 'none') this.elemental(el, [0.6, 0.85, 1.15, 1.5][lvl]!);
+    this.flipHit(ev, lvl, el);
     const sh = [[0.012, 3], [0.03, 5], [0.065, 8], [0.13, 14]][lvl]!;
     fx.r.addShake(sh[0]!, sh[1]!);
     if (counter || lvl >= 3) fx.post.impact(3);
@@ -294,6 +297,14 @@ export class Effects {
       fx.O.spawn(key, tmpV.x, tmpV.y, tmpV.z, lvl >= 3 ? 1.35 : 1.0);
     }
     if (otg) this.otg(ev);
+  }
+
+  /** owner flipbook sprites layered on top of the procedural hit: fire burst, lightning crackle, sword slash arc */
+  private flipHit(ev: SimEvent, lvl: number, el: Element | undefined): void {
+    const F = this.fx.F, x = this.x, y = this.y, z = this.z;
+    if (el === 'fire' && (lvl >= 2 || (lvl >= 1 && ev.moveId?.startsWith('kaito_')))) F.spawn('fire', x, y + 0.1, z, [0, 1.5, 2.3, 3.2][lvl]!, [0, 0.45, 0.55, 0.7][lvl]!, 0xffffff, 0, 0.95);
+    else if (el === 'lightning') F.spawn('lightning', x, y, z, 1.4 + lvl * 0.45, 0.4, 0xffffff, rr(-0.4, 0.4), 0.95);
+    else if (el === 'blade') F.spawn('slash', x, y, z, 1.5 + lvl * 0.5, 0.3, 0xffffff, rr(-0.5, 0.35) + (this.az > 0 ? 0.35 : 0), 0.95);
   }
 
   /** ground hit on a lying opponent: dust ring, small debris, "ドスッ!" */
@@ -427,6 +438,7 @@ export class Effects {
   land(ev: SimEvent, big: boolean): void {
     const x = ev.pos.x / 1000, z = ev.pos.z / 1000;
     this.dustRing(x, z, big ? 12 : 6, big ? 3.6 : 2.2, big ? 0.8 : 0.5, big ? 0.7 : 0.45);
+    this.fx.F.spawn('dust', x, big ? 0.65 : 0.45, z, big ? 2.2 : 1.3, big ? 0.6 : 0.45, 0xffffff, 0, big ? 0.8 : 0.6);
     if (big) {
       this.fx.D.spawn('ring', x, 0.05, z, 0.3, 4.5, 0.35, 0xffffff, 1, 0, 0.8, true);
       this.fx.r.addShake(0.045, 6);
@@ -443,6 +455,7 @@ export class Effects {
       bx = -f.facing.x / 1000; bz = -f.facing.z / 1000;
       if (f.mode === 'backdash') { bx = -bx; bz = -bz; }
     }
+    this.fx.F.spawn('dust', x + bx * 0.3, 0.35, z + bz * 0.3, 1.0, 0.45, 0xffffff, 0, 0.55);
     for (let i = 0; i < this.n(7); i++) {
       P.spec.reset().at(x + rr(-0.2, 0.2), 0.1, z + rr(-0.2, 0.2)).v(bx * rr(1.5, 3) + rr(-0.5, 0.5), rr(0.2, 0.8), bz * rr(1.5, 3) + rr(-0.5, 0.5))
         .ph(2.5, -0.2).ttl(rr(0.3, 0.55)).tx(T.SMOKE).sz(0.35, 0.9).rt(rr(0, 6), rr(-1, 1)).col(0xcfc4b0, 0x6e6458, 0.5, 0);
@@ -504,6 +517,7 @@ export class Effects {
     this.shock(full ? 4.0 : 2.4, 0.4, c, true);
     this.shock(full ? 3.0 : 1.6, 0.35, c, false, 0.6);
     this.glow(full ? 3 : 1.6, 0.25, 0xffffff, c, 0.8);
+    this.fx.F.spawn('orb', this.x, this.y + 0.2, this.z, full ? 3.2 : 1.8, full ? 0.6 : 0.45, 0xffffff, 0, 0.9);
     if (full) {
       this.sparks(26, 7, 1.4, 0xffffff, c, 0.8, 0.7, -1, 1.2);
       this.fx.post.screenFlash(c, 0.16, 8);
@@ -565,6 +579,7 @@ export class Effects {
     this.x = ev.pos.x / 1000; this.y = ev.pos.y / 1000; this.z = ev.pos.z / 1000;
     if (this.y < 0.2 && s) this.y = 1.2;
     this.glow(1.2, 0.14, 0xffffff, col[0], 0.9);
+    this.fx.F.spawn('orb', this.x, this.y, this.z, 1.3, 0.4, 0xffffff, 0, 0.9);
     this.sparks(6, 4, 1.2, 0xffffff, col[0], 0.5, 0.3);
     this.shock(1.2, 0.18, col[0]);
   }
