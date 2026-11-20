@@ -139,6 +139,29 @@ const LINES: Record<string, Bit[]> = {
     [H('THE PATHS! A TITAN ARMY is marching and {B} is in the way!'), P('Stomps arrive every second. Crouch or jump. Panic is also an option.')],
     [H('The ground is shaking! That is not the crowd, that is HISTORY!')],
   ],
+  realm_sun_forge: [
+    [H('SUN FORGE! The arena is a FURNACE and {A} is the blacksmith!'), P('Blocking now costs you in burns. Fire does not respect a good guard.')],
+    [H('{A} brought the SUN indoors! Somebody open a window!'), P('Heat stacks: full. Fire insurance: void.')],
+  ],
+  realm_moonless_void: [
+    [H('MOONLESS VOID! Where did {A} go?! I can not see ANYTHING!'), P('No moon, no light, no idea. {B} is swinging at rumours.')],
+    [H('{A} just vanished into the dark! {B}, check behind you! And in front! And everywhere!'), P('Her strikes come out faster in there. Statistically: run.')],
+  ],
+  realm_petal_storm: [
+    [H('PETAL STORM DOJO! It is BEAUTIFUL and also extremely sharp!'), P('Quick Draw cancels into Quick Draw. The sheath has filed for overtime.')],
+    [H('Cherry blossoms everywhere! {B} is about to be very gently sliced!'), P('Petals per second: hundreds. Blade per second: also hundreds.')],
+  ],
+  realm_mountain_temple: [
+    [H('MOUNTAIN TEMPLE! {A} is literally made of STONE right now!'), P('One hit gets absorbed, then the stone grows back. Mountains are patient.')],
+    [H('We are above the CLOUDS, folks! {A} brought the whole mountain!'), P('Stone skin, half damage, zero flinching. {B} should try a low.')],
+  ],
+  realmBurn: [
+    [H('{B} blocked it and is STILL ON FIRE!'), P('Sun Forge rule: a blocked hit burns anyway. Fire reads frame data too.')],
+    [P('{B} is smoking. Not metaphorically. The forge does that.')],
+  ],
+  realmArmor: [
+    [H('{A} hits the stone skin and it just... SHRUGS!'), P('Absorbed. The mountain will regrow its armor in under a second.')],
+  ],
   realmClash: [
     [H('REALM CLASH!! TWO WORLDS, ONE ARENA, ZERO PERSONAL SPACE!'), P('The universe has filed a noise complaint. Mash accordingly.')],
     [H('Two Soul Realms collide! MASH! MASH! MASH!'), P('Whoever loses gets evicted from their own dimension.')],
@@ -227,6 +250,7 @@ const QUIPS: Partial<Record<CharId, Bit[]>> = {
 
 const REALM_NAME: Record<string, string> = {
   infinite_void: 'INFINITE VOID', tailed_beast_bomb: 'TAILED BEAST BOMB', king_of_hell: 'KING OF HELL', gear_fifth: 'GEAR FIFTH', paths: 'THE PATHS',
+  sun_forge: 'SUN FORGE', moonless_void: 'MOONLESS VOID', petal_storm: 'PETAL STORM DOJO', mountain_temple: 'MOUNTAIN TEMPLE',
 };
 
 const ENDERS: Partial<Record<CharId, string>> = {
@@ -411,6 +435,7 @@ export class Broadcast {
           this.hits[a]++;
           if (e.combo && e.combo > this.maxCombo) this.maxCombo = e.combo;
           this.idleT = 0;
+          if (e.type === 'hit' && e.tag === 'armor' && st.realm && st.realm.kind === 'mountain_temple' && st.realm.owner === t) this.say('realmArmor', 1.6, a, {}, 10);
           if (e.type === 'hit' && e.tag === 'otg') {
             this.say('otg', 1.8, a, {}, 6);
             if (Math.random() < 0.5) this.pushHeadline(`${this.names[a].toUpperCase()} stomps a grounded ${this.names[t]}; floor files for "second-hand damage"`);
@@ -470,6 +495,7 @@ export class Broadcast {
           this.pushHeadline('REALM CLASH! Two dimensions disagree about who owns the floor', true);
           break;
         case 'realmEnd': this.say('realmEnd', 1.2, a, {}, 3); break;
+        case 'burn': this.say('realmBurn', 1.4, a, {}, 12); break;
         case 'infinityBlock':
           if (e.tag === 'infinity' || e.tag === 'sixEyes') {
             this.say('infinity', 2.2, a, {}, 7);

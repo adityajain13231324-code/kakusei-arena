@@ -87,10 +87,14 @@ export const REALM: Partial<Record<CharId, RealmMeta>> = {
   naruto: { kind: 'tailed_beast_bomb', kicker: 'NINE-TAILS LINK', name: 'TAILED BEAST BOMB', jp: '尾獣玉', color: '#ff9a2a', desc: 'An unblockable arena blast, then shadow clones keep joining the fight.' },
   zoro: { kind: 'king_of_hell', kicker: 'ASURA UNSHEATHED', name: 'KING OF HELL', jp: '閻魔', color: '#4ae07a', desc: 'Blocked slashes still cut, and their guard drains twice as fast.' },
   luffy: { kind: 'gear_fifth', kicker: 'THE SUN GOD AWAKENS', name: 'GEAR FIFTH', jp: '五', color: '#ffffff', desc: 'Cartoon physics: floaty juggles and extra floor bounces.' },
+  kaito: { kind: 'sun_forge', kicker: 'HEAT OF A THOUSAND SUNS', name: 'SUN FORGE', jp: '日輪', color: '#ff8a2a', desc: 'Heat stacks fill up, and every hit they block still burns them (35% of its damage, burn cannot KO).' },
+  shiori: { kind: 'moonless_void', kicker: 'THE MOON GOES OUT', name: 'MOONLESS VOID', jp: '無月', color: '#a88cff', desc: 'You vanish between attacks. Your strikes start 2 frames faster and track sidesteps.' },
+  ren: { kind: 'petal_storm', kicker: 'THE BLADE BLOOMS', name: 'PETAL STORM DOJO', jp: '桜嵐', color: '#ffb8d8', desc: 'Quick Draw cancels into Quick Draw. Keep the blade moving.' },
+  goro: { kind: 'mountain_temple', kicker: 'THE MOUNTAIN DOES NOT MOVE', name: 'MOUNTAIN TEMPLE', jp: '不動', color: '#e8b84a', desc: 'Stone skin: the first high or mid hit is absorbed at half damage, then it re-forms 0.75 s later.' },
   eren: { kind: 'paths', kicker: 'THE RUMBLING', name: 'THE PATHS', jp: '道', color: '#b8d96a', desc: 'A Titan army stomps the floor every second. Crouch or jump it.' },
 };
 export function realmOfKind(kind: string): RealmMeta | undefined {
-  for (const id of CROSSOVER_CHARS) if (REALM[id]?.kind === kind) return REALM[id];
+  for (const id of ALL_CHARS) if (REALM[id]?.kind === kind) return REALM[id];
   return undefined;
 }
 
