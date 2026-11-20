@@ -692,6 +692,9 @@ export class GameRenderer {
   /** Optional (additive): directional camera punch (render offset over the sim camera), see FightCamera.punch */
   punch(dx: number, dz: number, k: number, dy = 0): void { this.fcam.punch(dx, dz, k, dy); }
 
+  /** Optional (additive): bright white rim flash on a fighter (parry / counter-stance success) */
+  parryFlash(player: 0 | 1): void { this.active[player]?.rimFlash(1); }
+
   /** Optional (additive): KO zoom toward the impact point (metres), render only */
   koFocus(x: number, y: number, z: number): void { this.fcam.koFocus(_v.set(x, y, z)); }
 

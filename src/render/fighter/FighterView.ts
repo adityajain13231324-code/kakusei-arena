@@ -45,6 +45,8 @@ const _qI = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _sc = new THREE.Vector3();
 const _hs = new THREE.Vector3();
+const _WHITE = new THREE.Color(1, 1, 1);
+const RIM_FLASH_T = 0.42;
 /** seconds to ease from the held hitstop position back onto the sim position */
 const HS_EASE = 4 / 60;
 const _AX = new THREE.Vector3(1, 0, 0), _AY = new THREE.Vector3(0, 1, 0);
@@ -126,6 +128,7 @@ export class FighterView {
   private contactT = 0; private contactK = 0;
   private strikeT = 0; private strikeK = 0;
   private easeT = 1; private readonly easeFrom = new THREE.Vector3(); private readonly basePos = new THREE.Vector3();
+  private rimT = 0; private rimK = 0;
   /** cap for the white contact flash on the body (reduce flashing) */
   flashCap = 1;
   private hasPose = false;
@@ -624,6 +627,7 @@ export class FighterView {
     }
     if (this.formOutline && u.uHue.value === 0) u.uOutlineColor.value.copy(this.formOutline);
     this.realmLook(f, dt, time);
+    if (this.rimT > 1e-4) this.rimFlashLook(dt);
     if (this.faceMat) this.pickExpression(f, dt);
   }
 
@@ -747,6 +751,18 @@ export class FighterView {
     this.contactT = 2 / 60;
     this.contactK = Math.min(0.75, 0.38 + strength * 0.37);
   }
+  /** parry / counter-stance success: bright white fresnel rim that fades over ~0.4 s (plus a soft body pop) */
+  rimFlash(k: number): void { this.rimT = RIM_FLASH_T; this.rimK = k; }
+  private rimFlashLook(dt: number): void {
+    const u = this.u;
+    this.rimT = Math.max(0, this.rimT - dt);
+    const e = this.rimT / RIM_FLASH_T, k = e * e * this.rimK;
+    u.uRimColor.value.lerp(_WHITE, Math.min(1, k * 1.5));
+    u.uRimStrength.value = Math.max(u.uRimStrength.value, 2.4 * k * (0.5 + 0.5 * this.flashCap));
+    u.uRimWidth.value = Math.min(u.uRimWidth.value, 0.62 - 0.3 * k);
+    u.uFlash.value = Math.max(u.uFlash.value, 0.3 * k * this.flashCap);
+  }
+
   /** this fighter's strike connected: 2-3 frame contact smear on the striking limb (render only) */
   onStrike(strength: number): void { this.strikeT = 2.5 / 60; this.strikeK = strength; }
 

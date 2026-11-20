@@ -429,12 +429,31 @@ export class Effects {
     this.fx.r.addShake(0.005 + k * 0.005, 3);
   }
 
+  /**
+   * Parry / counter-stance success (Ren's Sheath Stance, Gojo's Six Eyes counter, Zoro's Lion's Song, Eren's hardened
+   * fist; event 'parry', player = the parrying fighter): a white rim flash on the parrier, a short cold screen tint and a
+   * distinctive spark - a crossed pair of white iai arcs over a gold-cored hex flare with a sharp "ガキン!".
+   * Reduce flashing: the tint and the flash are capped (PostFx), the rim flash is softer (flashCap).
+   */
   parry(ev: SimEvent): void {
+    const fx = this.fx;
+    this.dirFrom(ev);
     this.origin(ev.pos, 0.3);
-    this.shock(2.6, 0.3, 0xffffff);
-    this.star(1.8, 0.18, 0xfff6a0);
-    this.sparks(18, 9, 1.1, 0xffffff, 0xffe14a, 0.7, 0.4);
-    this.fx.post.screenFlash(0xffffff, 0.25, 14);
+    const roll = rr(-0.3, 0.3);
+    fx.D.spawn('crescent', this.x, this.y, this.z, 1.2, 2.6, 0.22, 0xffffff, 0, roll + 0.6, 1, true, 0, 1, 0, 0.8);
+    fx.D.spawn('crescent', this.x, this.y, this.z, 1.0, 2.3, 0.22, 0xdff4ff, 0, roll + 0.6 + Math.PI, 0.9, true, 0, 1, 0, 0.8);
+    fx.D.spawn('hex', this.x, this.y, this.z, 0.4, 1.9, 0.2, 0xfff2b0, 0, roll, 0.85, true);
+    this.star(2.0, 0.16, 0xffffff, roll + 0.785);
+    this.glow(1.8, 0.14, 0xffffff, 0xffe14a, 1, 1.6);
+    this.shock(2.8, 0.3, 0xffffff);
+    this.streaks(10, 12, 0.6, 0xffffff, 0xffe14a, 0.16);
+    this.sparks(16, 9, 1.1, 0xffffff, 0xffe14a, 0.6, 0.35);
+    fx.post.screenFlash(0xffffff, 0.32, 16);
+    fx.post.colorGrade(0xcfe6ff, fx.post.reduce ? 0.12 : 0.32, 0.08);
+    fx.r.parryFlash(ev.player);
+    fx.r.punch(-this.ax, -this.az, 0.45); // the parrier pushes the attack back
+    tmpV.set(this.x, this.y + 0.6, this.z);
+    fx.O.spawn('gakin', tmpV.x, tmpV.y, tmpV.z, 1.1, 0.75);
   }
 
   throwImpact(ev: SimEvent): void {
