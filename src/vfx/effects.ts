@@ -412,9 +412,14 @@ export class Effects {
     this.dirFrom(ev);
     this.origin(ev.pos, 0.3);
     const k = LVL[ev.strength ?? 'medium'];
-    const nx = this.ax || 1, nz = this.az, roll = rr(0, 1.05);
-    this.fx.D.spawn('hex', this.x, this.y, this.z, 0.35 + k * 0.08, 1.0 + k * 0.32, 0.16 + k * 0.03, 0xcfeaff, 2, roll, 0.95, true, nx, 0, nz);
-    this.fx.D.spawn('ring', this.x, this.y, this.z, 0.25, 1.3 + k * 0.35, 0.2, 0x8fd3ff, 2, 0, 0.75, true, nx, 0, nz);
+    // plane normal: mostly toward the camera (a side camera would see a pure attacker-facing plane edge-on), tilted toward the attacker
+    const c = this.fx.cam.position;
+    let nx = c.x - this.x, ny = c.y - this.y, nz = c.z - this.z;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nx = nx / l - this.ax * 0.7; ny /= l; nz = nz / l - this.az * 0.7;
+    const roll = rr(0, 1.05);
+    this.fx.D.spawn('hex', this.x, this.y, this.z, 0.45 + k * 0.1, 1.1 + k * 0.35, 0.18 + k * 0.03, 0xcfeaff, 2, roll, 0.95, true, nx, ny, nz);
+    this.fx.D.spawn('ring', this.x, this.y, this.z, 0.25, 1.3 + k * 0.35, 0.2, 0x8fd3ff, 2, 0, 0.75, true, nx, ny, nz);
     this.glow(0.7 + k * 0.2, 0.09, 0xeaf6ff, 0x3a8cff, 0.75);
     // glance back toward the attacker and out to the sides
     this.ax = -this.ax * 0.6; this.az = -this.az * 0.6;
