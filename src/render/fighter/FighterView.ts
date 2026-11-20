@@ -151,7 +151,9 @@ export class FighterView {
   private formRim: THREE.Color | null = null; private formRimK = 0; private formOutline: THREE.Color | null = null;
   private sqX = 0; private sqV = 0;
   private rubber = false;
+  /** queued limb stretches this frame (pooled tuples: no per-frame allocation) */
   private stretchQ: Array<[Limb, number]> = [];
+  private stretchN = 0;
   private stretched: THREE.Bone[] = [];
   // ---- Soul Realm looks (Moonless Void veil, Mountain Temple stone skin)
   private veilK = 0; private veilOn = false; private veilLinger = 0; private veilShadowOff = false; private stoneK = 0;
@@ -523,7 +525,7 @@ export class FighterView {
   update(f: FighterState, prev: FighterState | null, alpha: number, dt: number, time: number): void {
     for (const b of this.stretched) b.matrixAutoUpdate = true;
     this.stretched.length = 0;
-    this.stretchQ.length = 0;
+    this.stretchN = 0;
     const p = prev ?? f;
     const x = (p.pos.x + (f.pos.x - p.pos.x) * alpha) / 1000;
     const y = (p.pos.y + (f.pos.y - p.pos.y) * alpha) / 1000;
@@ -584,8 +586,9 @@ export class FighterView {
     this.extW = 0;
     if (this.animV2 && this.clips.count && this.clips.apply(this.anim.ext, dt)) { this.extW = this.clips.weight; this.group.updateMatrixWorld(true); }
     this.strikeAssist(f, alpha);
+    this.smear(f, alpha);
     this.simChains(dt);
-    for (const [l, k] of this.stretchQ) this.applyStretch(l, k);
+    for (let i = 0; i < this.stretchN; i++) this.applyStretch(this.stretchQ[i][0], this.stretchQ[i][1]);
     // ---- material uniforms
     const u = this.u;
     u.uWipe.value = this.wipe;
@@ -700,6 +703,12 @@ export class FighterView {
     this.stretched.push(up, l.end);
   }
 
+  private queueStretch(l: Limb, k: number): void {
+    const e = this.stretchQ[this.stretchN];
+    if (e) { e[0] = l; e[1] = k; } else this.stretchQ.push([l, k]);
+    this.stretchN++;
+  }
+
   /** queue a rubber stretch so the limb reaches the hitbox target (_T) */
   private rubberReach(l: Limb): void {
     if (!this.rubber) return;
@@ -707,7 +716,7 @@ export class FighterView {
     l.up.getWorldPosition(_v3);
     const reach = (l.a + l.b) * ws * 0.97;
     const d = _v3.distanceTo(_T);
-    if (d > reach) this.stretchQ.push([l, Math.min(4.5, d / reach)]);
+    if (d > reach) this.queueStretch(l, Math.min(4.5, d / reach));
   }
 
   /** register a hit on this fighter (flash) */
@@ -847,6 +856,32 @@ export class FighterView {
   }
 
   private aw = 0; private afwd = 0; private ay = 0;
+
+  /**
+   * Smear / impact frames (Animation v2): on heavy, special, Ki and ultimate moves the striking limb stretches
+   * along its length for a few frames around the first active frame (anime smear), reusing the rubber-limb stretch.
+   */
+  private smear(f: FighterState, alpha: number): void {
+    if (!this.animV2 || this.rubber || !f.moveId || f.mode !== 'attack') return;
+    const mv = this.lookup(this.char, f.moveId);
+    if (!mv) return;
+    const sup = mv.strength === 'super' || mv.kind === 'ultimate';
+    if (!(sup || mv.strength === 'heavy' || mv.kind === 'special' || mv.kind === 'ki')) return;
+    const a = this.assistFor(f.moveId);
+    if (!a) return;
+    const fr = f.moveFrame - 1 + alpha; // displayed (interpolated) move frame
+    const start = a.hbs[0].from - 1; // first active moveFrame
+    const u = (fr - (start - 2)) / 4.5;
+    if (u <= 0 || u >= 1) return;
+    const K = 1 + (sup ? 0.34 : 0.24) * Math.sin(Math.PI * u) * (1 - 0.5 * this.extW);
+    switch (a.limb) {
+      case 'handL': if (this.armL) this.queueStretch(this.armL, K); break;
+      case 'handR': if (this.armR) this.queueStretch(this.armR, K); break;
+      case 'both': if (this.armL) this.queueStretch(this.armL, K); if (this.armR) this.queueStretch(this.armR, K); break;
+      case 'footL': if (this.legL) this.queueStretch(this.legL, K); break;
+      case 'footR': if (this.legR) this.queueStretch(this.legR, K); break;
+    }
+  }
 
   /** hitbox point (group-local, unscaled) → world, into _T */
   private assistTarget(lat: number): void {
