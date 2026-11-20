@@ -321,6 +321,11 @@ export function profileOf(char: CharId): Profile {
   return prof;
 }
 
+/** a custom key pose: channels over the stance (or over `from`) */
+type SK = PoseSpec & { from?: PoseName | 'stance' };
+/** key pose `b` with some channels replaced (build time only) */
+const w = (b: SK, o: SK): SK => ({ ...b, ...o });
+
 /** intros (90 f), win and lose poses per fighter */
 function buildShowClips(char: CharId, P: Profile): void {
   const s = (list: SeqKey[], name: string, dur: number) => seq(char, name, list, dur, P);
@@ -372,8 +377,92 @@ function buildShowClips(char: CharId, P: Profile): void {
       P.win = s([[0, 'stompExt'], [12, 'win', 'back'], [30, 'win']], 'win', 30);
       break;
     }
+    // ---- crossover pack: each gets its own original intro + win (P8 Feel). Hands: chest space (x = own left, y up,
+    // z forward); feet: root space; degrees. Built only from this file's pose vocabulary (no scene re-creations).
+    case 'gojo': {
+      // unhurried: hands tucked behind, a sideways glance, two fingers raised by the eyes, then a lazy beckon
+      const tucked: SK = { hip: [0.03, -0.01, 0], hipRot: [0, -6, 4], chest: [-6, 10, 0], head: [-4, -34, 6], handL: [0.17, -0.3, -0.1], elbowL: [1, -0.2, -1], handR: [-0.17, -0.3, -0.1], elbowR: [-1, -0.2, -1], footL: [0.1, 0.05, 0.06], footR: [-0.12, 0.05, -0.05], footRRot: [0, -20], open: [0.5, 0.5] };
+      const look = w(tucked, { hipRot: [0, -10, 4], chest: [-6, -2, 0], head: [-8, 18, 8], handR: [-0.06, 0.36, 0.16], elbowR: [-1, -0.6, 0], wristR: [-40, 0, 20], open: [0.5, 0.6] });
+      const beckon: SK = { hip: [0.02, -0.02, 0], hipRot: [0, -14, 2], chest: [-4, -4, 0], head: [-6, 16, 4], handL: [0.16, 0.16, 0.36], elbowL: [1, -0.8, 0], wristL: [-60, 0, 0], handR: [-0.17, -0.28, -0.08], elbowR: [-1, -0.2, -1], open: [1, 0.4] };
+      const curl = w(beckon, { handL: [0.14, 0.2, 0.3], wristL: [-10, 0, 0], open: [0.3, 0.4] });
+      P.intro = s([
+        [0, tucked], [24, tucked], [36, look, 'back'], [52, look],
+        [62, beckon, 'out'], [68, curl, 'io'], [73, beckon, 'io'], [78, curl, 'io'],
+        [86, 'stance'], [90, 'stance'],
+      ], 'intro', 90);
+      const point: SK = { hip: [0.05, -0.01, 0], hipRot: [0, -8, 8], chest: [-8, -4, -4], head: [-12, 10, 14], handR: [-0.22, 0.62, 0.16], elbowR: [-1, -0.2, 0], wristR: [-20, 0, 0], handL: [0.18, -0.3, -0.08], elbowL: [1, -0.2, -1], footL: [0.1, 0.05, 0.05], footR: [-0.14, 0.05, -0.04], footRRot: [0, -25], open: [0.5, 0.7] };
+      P.win = s([[0, 'recover'], [12, point, 'back'], [30, w(point, { hip: [0.06, -0.015, 0], chest: [-9, -4, -5], head: [-14, 10, 16] })]], 'win', 30);
+      break;
+    }
+    case 'naruto': {
+      // drops in low, springs up, hands together in front of the chest, then points a fist straight at the opponent
+      const landed: SK = { from: 'land', hip: [0, -0.42, 0.02], hipRot: [30, -20, 0], handL: [0.16, -0.46, 0.34], elbowL: [1, 0, 0], handR: [-0.3, 0.06, -0.06], elbowR: [-1, 0, 0], head: [-24, 20, 0], open: [1, 1] };
+      const seal: SK = { hip: [0, -0.14, 0], hipRot: [8, -14, 0], chest: [6, -2, 0], head: [-6, 10, 0], handL: [0.03, 0.17, 0.25], elbowL: [1, -0.6, 0], wristL: [-70, 0, 0], handR: [-0.03, 0.17, 0.25], elbowR: [-1, -0.6, 0], wristR: [-70, 0, 0], footL: [0.18, 0.05, 0.14], kneeL: [0.6, 0, 1], footR: [-0.2, 0.05, -0.12], kneeR: [-0.6, 0, 1], open: [1, 1] };
+      const sealDn = w(seal, { hip: [0, -0.18, 0] });
+      const point: SK = { hip: [0, -0.1, 0.04], hipRot: [4, 10, 0], spine: [2, 8, 0], chest: [-4, 16, 0], head: [-10, -4, 0], handR: [-0.02, 0.3, 0.64], elbowR: [-0.4, -1, 0], wristR: [0, 70, 0], handL: [0.22, -0.04, 0.06], elbowL: [1, -0.4, -0.4], footL: [0.12, 0.05, 0.3], footR: [-0.18, 0.05, -0.22], open: [0, 0] };
+      P.intro = s([
+        [0, landed], [10, landed], [18, { from: 'jumpUp' }, 'out'], [26, seal, 'back'],
+        [34, sealDn, 'io'], [42, seal, 'io'], [50, sealDn, 'io'],
+        [58, point, 'snap'], [72, point],
+        [84, 'stance'], [90, 'stance'],
+      ], 'intro', 90);
+      const behind: SK = { hip: [0, -0.02, 0], hipRot: [-4, -12, 0], chest: [-12, -6, 0], head: [-16, 12, 0], handL: [0.1, 0.44, -0.12], elbowL: [1, 0.4, 0.6], handR: [-0.1, 0.44, -0.12], elbowR: [-1, 0.4, 0.6], footL: [0.12, 0.05, 0.06], footR: [-0.14, 0.05, -0.06], footRRot: [0, -20], open: [0.6, 0.6] };
+      P.win = s([
+        [0, 'recover'], [8, { from: 'jumpUp', handL: [0.3, 0.5, 0.1], handR: [-0.3, 0.5, 0.1] }, 'out'], [18, behind, 'back'],
+        [34, w(behind, { chest: [-14, -6, 0], head: [-18, 12, 0] })],
+      ], 'win', 34);
+      break;
+    }
+    case 'zoro': {
+      // arms folded, head down; unfolds, both hands to the left hip, sinks low, a wide drawing sweep, a slow settle
+      const folded: SK = { hip: [0, -0.02, 0], hipRot: [0, -12, 0], chest: [-2, -4, 0], head: [22, 10, 0], handL: [-0.11, 0.12, 0.17], elbowL: [1, -0.5, 0.2], handR: [0.11, 0.1, 0.19], elbowR: [-1, -0.5, 0.2], footL: [0.12, 0.05, 0.06], footR: [-0.14, 0.05, -0.06], footRRot: [0, -15], open: [0, 0] };
+      const hip: SK = { hip: [0, -0.26, 0], hipRot: [14, -44, 0], spine: [10, -6, 0], chest: [8, -10, 0], head: [-14, 54, 0], handL: [0.2, -0.2, 0.1], elbowL: [1, -0.4, -0.4], handR: [0.16, -0.14, 0.2], elbowR: [-0.6, -0.6, 0.2], wristR: [-20, 40, 0], footL: [0.14, 0.05, 0.34], kneeL: [0.5, 0, 1], footR: [-0.24, 0.05, -0.28], kneeR: [-0.6, 0, 1], open: [0, 0] };
+      const sweep: SK = { hip: [0, -0.3, 0.16], hipRot: [14, 6, 0], spine: [6, 16, 0], chest: [4, 36, 0], head: [-14, 2, 0], handR: [-0.46, 0.18, 0.4], elbowR: [-1, -0.4, 0], wristR: [-10, -90, 0], handL: [0.24, -0.16, 0.04], elbowL: [1, -0.4, -0.4], footL: [0.12, 0.05, 0.48], kneeL: [0.4, 0, 1], footR: [-0.22, 0.05, -0.32], kneeR: [-0.4, -0.5, 1], open: [0, 0] };
+      P.intro = s([
+        [0, folded], [26, w(folded, { head: [14, 14, 0] })], [38, hip, 'io'], [52, hip],
+        [58, sweep, 'snap'], [70, sweep], [82, 'stance', 'io'], [90, 'stance'],
+      ], 'intro', 90);
+      // win: folds the arms again and turns three-quarters away, glancing back over the shoulder
+      const turned = w(folded, { hipRot: [0, -6, 0], chest: [-4, -4, 0], head: [-6, -46, 0], rootYaw: 70 });
+      P.win = s([[0, 'recover'], [16, folded, 'io'], [34, turned, 'io'], [46, turned]], 'win', 46);
+      break;
+    }
+    case 'luffy': {
+      // loose warm-up: a big arm windmill, fist into palm, a hand on the head, a bouncy grin into the stance
+      const up: SK = { hip: [0, -0.06, 0], hipRot: [0, -10, 0], chest: [-6, 10, 6], head: [-6, 10, 0], handR: [-0.12, 0.66, 0.0], elbowR: [-1, 0, 0], handL: [0.24, -0.06, 0.18], elbowL: [1, -0.4, 0], open: [0.3, 0.3] };
+      const front = w(up, { hip: [0, -0.1, 0.02], hipRot: [4, -20, 0], chest: [4, -10, 0], head: [-4, 14, 0], handR: [-0.1, 0.1, 0.56], elbowR: [-0.6, -1, 0] });
+      const back = w(up, { hip: [0, -0.08, 0], hipRot: [0, -24, 0], chest: [-4, -14, -4], head: [-6, 18, 0], handR: [-0.34, 0.1, -0.34] });
+      const palm: SK = { hip: [0, -0.12, 0], hipRot: [6, -12, 0], chest: [8, -6, 0], head: [6, 10, 0], handL: [0.02, 0.16, 0.3], elbowL: [1, -0.7, 0], wristL: [-80, 0, 0], handR: [-0.01, 0.17, 0.27], elbowR: [-1, -0.6, 0], open: [1, 0] };
+      const head: SK = { hip: [0, -0.06, 0], hipRot: [0, -12, 0], chest: [-6, -4, 0], head: [-10, 10, 0], handR: [-0.04, 0.6, 0.06], elbowR: [-1, 0.2, 0.2], wristR: [-80, 0, 0], handL: [0.24, -0.08, 0.16], elbowL: [1, -0.4, 0], open: [0.3, 1] };
+      P.intro = s([
+        [0, 'stance'], [8, up, 'out'], [15, front, 'in'], [22, back, 'lin'], [29, up, 'out'], [36, front, 'in'],
+        [46, palm, 'snap'], [52, w(palm, { hip: [0, -0.15, 0] }), 'io'],
+        [62, head, 'back'], [68, w(head, { hip: [0, -0.1, 0] }), 'io'], [74, head, 'io'],
+        [84, 'stance'], [90, 'stance'],
+      ], 'intro', 90);
+      const vee: SK = { hip: [0, -0.04, 0], hipRot: [-6, -6, 0], chest: [-16, -2, 0], head: [-26, 6, 0], handL: [0.52, 0.56, 0.1], elbowL: [1, 0, 0], handR: [-0.52, 0.56, 0.1], elbowR: [-1, 0, 0], footL: [0.24, 0.05, 0.06], kneeL: [0.8, 0, 1], footR: [-0.24, 0.05, -0.04], kneeR: [-0.8, 0, 1], open: [0, 0] };
+      const veeDn = w(vee, { hip: [0, -0.1, 0] });
+      P.win = s([[0, 'recover'], [10, vee, 'back'], [18, veeDn, 'io'], [26, vee, 'io'], [34, veeDn, 'io'], [42, vee, 'io']], 'win', 42);
+      break;
+    }
+    case 'eren': {
+      // hunched and coiled: a trembling fist before the face, hands back to two grips at the hips, then a crossed guard
+      const coil: SK = { hip: [0, -0.16, 0], hipRot: [16, -16, 0], spine: [14, -4, 0], chest: [12, -4, 0], head: [20, 14, 0], handL: [0.2, -0.2, 0.1], elbowL: [1, -0.4, 0], handR: [-0.2, -0.2, 0.1], elbowR: [-1, -0.4, 0], footL: [0.14, 0.05, 0.16], kneeL: [0.5, 0, 1], footR: [-0.18, 0.05, -0.16], kneeR: [-0.5, 0, 1], open: [0, 0] };
+      const fist = w(coil, { chest: [6, -4, 0], head: [6, 10, 0], handR: [-0.02, 0.3, 0.2], elbowR: [-1, -0.8, 0], wristR: [0, 30, 0] });
+      const fist2 = w(fist, { handR: [-0.01, 0.315, 0.21] });
+      const grips: SK = { hip: [0, -0.3, 0.04], hipRot: [24, -18, 0], spine: [14, -4, 0], chest: [8, -6, 0], head: [-22, 16, 0], handL: [0.26, -0.2, -0.14], elbowL: [1, 0, -0.6], handR: [-0.26, -0.2, -0.14], elbowR: [-1, 0, -0.6], footL: [0.16, 0.05, 0.3], kneeL: [0.5, 0, 1], footR: [-0.22, 0.05, -0.28], kneeR: [-0.6, 0, 1], open: [0, 0] };
+      const guard: SK = { hip: [0, -0.2, 0.06], hipRot: [12, -20, 0], chest: [6, -6, 0], head: [-10, 20, 0], handL: [-0.06, 0.24, 0.42], elbowL: [1, -0.6, 0], wristL: [0, -40, 0], handR: [0.07, 0.21, 0.42], elbowR: [-1, -0.6, 0], wristR: [0, 40, 0], footL: [0.14, 0.05, 0.3], kneeL: [0.5, 0, 1], footR: [-0.22, 0.05, -0.24], kneeR: [-0.6, 0, 1], open: [0, 0] };
+      P.intro = s([
+        [0, coil], [14, coil], [24, fist, 'out'], [28, fist2], [31, fist], [34, fist2], [37, fist], [40, fist2],
+        [50, grips, 'io'], [58, grips], [64, guard, 'snap'], [76, guard],
+        [86, 'stance'], [90, 'stance'],
+      ], 'intro', 90);
+      const sky: SK = { hip: [0, -0.04, 0], hipRot: [0, -14, 0], chest: [-10, -6, 0], head: [-30, 8, 0], handR: [-0.08, 0.66, 0.2], elbowR: [-1, -0.3, 0], handL: [0.22, -0.24, 0.06], elbowL: [1, -0.3, -0.3], footL: [0.14, 0.05, 0.1], footR: [-0.16, 0.05, -0.08], footRRot: [0, -20], open: [0, 0] };
+      P.win = s([[0, 'recover'], [10, coil, 'io'], [22, sky, 'back'], [38, w(sky, { head: [-32, 8, 0] })]], 'win', 38);
+      break;
+    }
     default:
-      // crossover / future fighters: gather Ki, flex, drop into the stance
+      // future fighters: gather Ki, flex, drop into the stance
       P.intro = s([
         [0, 'introPose'], [26, 'introPose'], [40, 'kiCharge', 'io'],
         [52, { from: 'awakenPose', chest: [-10, 0, 0] }, 'back'], [64, { from: 'awakenPose', chest: [-12, 0, 0] }],

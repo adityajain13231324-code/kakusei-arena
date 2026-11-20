@@ -36,6 +36,7 @@ export class FightCamera {
   private shakeDur = 1;
   private seed = Math.random() * 100;
   private lastCine: string | null = null;
+  private winT = 0;
   private cineT = 0;
   readonly fighterPos = [new THREE.Vector3(), new THREE.Vector3()];
   readonly fighterFacing = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1)];
@@ -219,7 +220,26 @@ export class FightCamera {
         }
       }
     }
-    if (cine) {
+    // ---- round / match won: render-only hero shot of the winner's win pose (slow orbit from the front-side)
+    const rd = s.round;
+    const winShot = !cine && (rd.phase === 'roundEnd' || rd.phase === 'matchEnd') && (rd.winner === 0 || rd.winner === 1);
+    if (winShot) {
+      this.winT += dt;
+      const me = this.fighterPos[rd.winner], other = this.fighterPos[1 - rd.winner];
+      _f.subVectors(other, me).setY(0);
+      if (_f.lengthSq() < 1e-6) _f.set(1, 0, 0);
+      _f.normalize();
+      _side.set(-_f.z, 0, _f.x);
+      if (_side.dot(_n) < 0) _side.negate();
+      const ease = Math.min(1, this.winT / 1.2);
+      const ang = 0.5 + this.winT * 0.05;
+      const r = 4.6 - 0.7 * ease * ease * (3 - 2 * ease);
+      _p.copy(me).addScaledVector(_side, Math.cos(ang) * r).addScaledVector(_f, Math.sin(ang) * r);
+      _p.y = 1.25;
+      _t.copy(me).addScaledVector(_f, 0.12); _t.y = me.y + 1.02;
+      fov = 36; omegaP = 3.2; omegaL = 4.5;
+    } else this.winT = 0;
+    if (cine || winShot) {
       // keep the lens out of both bodies (min 1.25 m on the ground plane)
       for (let i = 0; i < 2; i++) {
         const q = this.fighterPos[i];
