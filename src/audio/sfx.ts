@@ -8,7 +8,7 @@ const EV_IDX: Record<string, number> = {};
 ['hit', 'block', 'counter', 'whiff', 'parry', 'throw', 'throwBreak', 'launch', 'wallSplat', 'groundBounce', 'land', 'knockdown',
   'projectile', 'projectileHit', 'projectileDestroy', 'kiCharge', 'kiFull', 'vanish', 'awaken', 'ultimateStart', 'ultimateHit',
   'clashStart', 'clashEnd', 'sidestep', 'dash', 'jump', 'guardCrush', 'moveStart', 'roundStart', 'fight', 'ko', 'timeout', 'roundEnd', 'matchEnd',
-  'realmStart', 'realmEnd', 'realmClash', 'infinityBlock', 'formChange', 'summon', 'summonDispel']
+  'realmStart', 'realmEnd', 'realmClash', 'infinityBlock', 'formChange', 'summon', 'summonDispel', 'burn']
   .forEach((k, i) => (EV_IDX[k] = i));
 
 interface Loop { g: GainNode; srcs: Array<OscillatorNode | AudioBufferSourceNode>; a?: OscillatorNode; f?: BiquadFilterNode; b?: OscillatorNode; lfo?: GainNode }
@@ -25,6 +25,7 @@ export class Sfx {
   private lastMash = 0;
   private lastMashT = 0;
   private lastSpeak = '';
+  private lastBurnT = 0;
 
   private x: XSfx;
   constructor(private e: Engine) { this.x = new XSfx(e); }
@@ -182,11 +183,21 @@ export class Sfx {
       this.x.move(t, ev.moveId ?? '');
       return;
     }
+    if (ev.type === 'burn') {
+      // Sun Forge burn ticks every 5 frames: sizzle at most ~6 times a second, never steal a voice from a hit
+      if (t - this.lastBurnT < 0.16 || !e.claim(0.2)) return;
+      this.lastBurnT = t;
+      this.x.burn(t);
+      return;
+    }
     if (!e.claim(ev.type === 'ko' ? 2 : 0.4, big || ev.type === 'counter')) return;
     switch (ev.type) {
       case 'hit':
         if (ev.tag === 'otg') this.otg(t);
-        else { this.hit(t, st, ev.element, false); if (ev.tag === 'realm') this.x.realmHit(t); }
+        else if (ev.tag === 'armor') {
+          this.hit(t, st === 'light' ? 'light' : 'medium', ev.element, false);
+          this.x.armor(t, !!state.realm && state.realm.kind === 'mountain_temple' && state.realm.owner === ev.target);
+        } else { this.hit(t, st, ev.element, false); if (ev.tag === 'realm') this.x.realmHit(t); }
         break;
       case 'guardCrush': this.guardCrush(t); break;
       case 'counter': this.hit(t, st, ev.element, true); break;

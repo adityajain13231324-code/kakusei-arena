@@ -6,9 +6,11 @@ import { Engine } from './engine';
 const NOTE = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
 
-export type RealmKind = 'infinite_void' | 'tailed_beast_bomb' | 'king_of_hell' | 'gear_fifth' | 'paths';
+export type RealmKind = 'infinite_void' | 'tailed_beast_bomb' | 'king_of_hell' | 'gear_fifth' | 'paths'
+  | 'sun_forge' | 'moonless_void' | 'petal_storm' | 'mountain_temple';
 export const CHAR_REALM: Record<string, RealmKind> = {
   gojo: 'infinite_void', naruto: 'tailed_beast_bomb', zoro: 'king_of_hell', luffy: 'gear_fifth', eren: 'paths',
+  kaito: 'sun_forge', shiori: 'moonless_void', ren: 'petal_storm', goro: 'mountain_temple',
 };
 
 /**
@@ -513,6 +515,31 @@ export class XSfx {
         choir(e, t, [50, 57, 62, 66, 74], 2.6, 0.08, w, { vowel: 'ah', rise: 1.3, wet: 0.6 });
         thunder(e, t + 0.1, w, 0.8);
         break;
+      case 'sun_forge':
+        // furnace roar + three anvil strikes
+        e.noise(t, 1.6, { type: 'brown', ft: 'lowpass', f0: 300, f1: 1400, g: 0.6, a: 0.4, dest: w });
+        [0.15, 0.5, 0.85].forEach((d, i) => { e.fm(t + d, 0.9, 1500 + i * 160, 2.76, 5, 0.12, w); e.tone(t + d, 0.4, { f0: 120, f1: 50, g: 0.6 }); });
+        crackle(e, t + 0.2, 10, 1.2, 0.14);
+        break;
+      case 'moonless_void':
+        // everything drains away: a rising whoosh into a deep sub, one hollow flute breath
+        e.noise(t, 1.2, { ft: 'bandpass', f0: 300, f1: 6000, q: 0.8, g: 0.35, a: 1.0, dest: w });
+        e.tone(t + 1.0, 1.6, { f0: 70, f1: 30, g: 0.8, dest: w });
+        e.noise(t + 1.1, 1.4, { ft: 'bandpass', f0: 1400, q: 9, g: 0.12, a: 0.3, dest: w });
+        break;
+      case 'petal_storm':
+        // a gust full of petals, koto glissando, one sword ring
+        gust(e, t, 1.4, 0.3, 600, 4200);
+        [64, 65, 69, 71, 72, 76, 77, 81].forEach((n, i) => e.tone(t + 0.1 + i * 0.05, 0.6, { type: 'triangle', f0: NOTE(n), g: 0.09, a: 0.002, dest: w }));
+        e.fm(t + 0.6, 1.4, 2600, 3.1, 3, 0.08, w);
+        break;
+      case 'mountain_temple':
+        // huge temple bell + stone rumble + low monks
+        e.fm(t + 0.05, 3.2, NOTE(38), 1.41, 4, 0.22, w);
+        e.tone(t + 0.05, 2.5, { f0: NOTE(26), g: 0.7, dest: w });
+        e.noise(t, 1.2, { type: 'brown', ft: 'lowpass', f0: 500, f1: 90, g: 0.7, dest: w });
+        choir(e, t + 0.3, [38, 45, 50], 2.4, 0.06, w, { vowel: 'oh', rise: 1.0, wet: 0.5 });
+        break;
       default: break;
     }
   }
@@ -532,6 +559,22 @@ export class XSfx {
     e.noise(t, 0.7, { ft: 'bandpass', f0: 6000, f1: 300, q: 0.7, g: 0.4, a: 0.01, dest: w });
     e.tone(t, 0.6, { f0: 160, f1: 36, g: 0.6, dest: w });
     glassRipple(e, t + 0.05, w, 86, 0.07);
+  }
+
+  /** Sun Forge burn tick: a short quiet sizzle */
+  burn(t: number): void {
+    const e = this.e;
+    e.noise(t, 0.12, { ft: 'highpass', f0: 3500, f1: 6000, g: 0.07, a: 0.004 });
+    crackle(e, t, 2, 0.1, 0.05);
+  }
+
+  /** armor absorbed a strike (hit tag 'armor'): stone clank; `temple` = Goro's Mountain Temple stone skin */
+  armor(t: number, temple: boolean): void {
+    const e = this.e;
+    e.fm(t, temple ? 0.6 : 0.35, temple ? 520 : 760, 1.41, 3, temple ? 0.14 : 0.1, this.wet);
+    e.tone(t, 0.18, { f0: 160, f1: 70, g: 0.5 });
+    e.noise(t, 0.08, { ft: 'bandpass', f0: 1800, q: 1.4, g: 0.3, a: 0.001 });
+    if (temple) e.noise(t + 0.02, 0.3, { type: 'brown', ft: 'lowpass', f0: 600, f1: 120, g: 0.35 });
   }
 
   /** extra weight for a realm blast / Paths stomp (hit tag 'realm') */

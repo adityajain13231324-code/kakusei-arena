@@ -485,8 +485,73 @@ const paths: TrackDef = {
   },
 };
 
+// sun_forge: anvil strikes on the off-beats, driving taiko, low brass stabs (E phrygian), 104 bpm, 8 bars.
+const SF_ROOT = [40, 40, 41, 38];
+const sunForge: TrackDef = {
+  bpm: 104, bars: 8, loop: true, salt: 21,
+  play(m, s, bar, t) {
+    const bd = 60 / 104 * 4;
+    const root = SF_ROOT[(bar >> 1) % 4]!;
+    if (s === 0 || s === 8) m.taiko(t, 1);
+    if (s === 6 || s === 14) m.taiko(t, 0.55, true);
+    if (s === 4 || s === 12) m.e.fm(t, 0.5, 1400 + (bar % 2) * 180, 2.76, 4, 0.07, m.d); // anvil
+    if (s === 10 && bar % 2 === 1) m.e.fm(t, 0.35, 1900, 2.76, 3, 0.05, m.d);
+    if (s % 2 === 0 && bar >= 2) m.bass(t, N(root - 12), 0.12, 0.22, 600, 'sawtooth');
+    if (s === 0 && bar % 2 === 0) { m.brass(t, N(root), bd * 0.45, 0.08); m.brass(t, N(root + 7), bd * 0.45, 0.06); }
+    if (s === 0 && bar % 4 === 0) { m.e.noise(t, bd * 1.6, { type: 'brown', ft: 'lowpass', f0: 220, f1: 700, g: 0.3, a: bd * 0.6, dest: m.d }); m.crash(t); }
+    if (bar >= 4 && s === 8 && bar % 2 === 0) m.shaku(t, N(root + 25), bd * 0.45, 0.07);
+  },
+};
+
+// moonless_void: near silence. Low drone, a breathy flute phrase now and then, plucks like dripping ink. 50 bpm.
+const MV_NOTES = [74, 75, 79, 81, 86];
+const moonlessVoid: TrackDef = {
+  bpm: 50, bars: 8, loop: true, salt: 22,
+  play(m, s, bar, t) {
+    const bd = 60 / 50 * 4;
+    if (s === 0 && bar % 2 === 0) { m.pad(t, [33, 40, 46], bd * 2.05, 0.045, 420); m.e.tone(t, bd * 2, { f0: N(33), g: 0.12, a: bd * 0.5, dest: m.d }); }
+    if (s % 4 === 2 && rn(bar * 16 + s, 22) < 0.22) m.koto(t, N(MV_NOTES[Math.floor(rn(bar * 16 + s, 23) * MV_NOTES.length)]!), 0.07);
+    if (s === 4 && bar % 4 === 1) m.shaku(t, N(69), bd * 0.6, 0.06);
+    if (s === 4 && bar % 4 === 3) m.shaku(t, N(70), bd * 0.5, 0.05);
+    if (s === 12 && bar % 2 === 1) m.e.noise(t, 2.2, { ft: 'bandpass', f0: 900, f1: 2400, q: 8, g: 0.04, a: 1.0, dest: m.d });
+  },
+};
+
+// petal_storm: koto arpeggios in a miyako-bushi scale, soft taiko, flute melody on top. 88 bpm, 8 bars.
+const PS_SCALE = [64, 65, 69, 71, 72, 76, 77, 81];
+const PS_MEL = [76, 77, 76, 72, 71, 72, 69, 71];
+const petalStorm: TrackDef = {
+  bpm: 88, bars: 8, loop: true, salt: 23,
+  play(m, s, bar, t) {
+    const bd = 60 / 88 * 4;
+    if (s % 2 === 0) m.koto(t, N(PS_SCALE[(s / 2 + bar * 3) % PS_SCALE.length]! - (bar % 4 === 3 ? 2 : 0)), 0.09);
+    if (s === 0) m.taiko(t, 0.7);
+    if (s === 10) m.taiko(t, 0.4, true);
+    if (s === 12 && bar % 2 === 1) m.taiko(t, 0.5, true);
+    if (s === 0 && bar % 2 === 0) m.pad(t, [52, 59, 64], bd * 2, 0.03, 1100);
+    if (bar >= 2 && (s === 0 || s === 8)) m.shaku(t, N(PS_MEL[(bar * 2 + (s >> 3)) % 8]!), bd * 0.48, 0.08);
+    if (s === 14 && rn(bar, 24) < 0.5) m.e.noise(t, 0.4, { ft: 'bandpass', f0: 4000, f1: 7000, q: 1, g: 0.05, a: 0.1, dest: m.d }); // petal gust
+  },
+};
+
+// mountain_temple: deep temple bells, low monk choir, slow heavy taiko. 60 bpm, 8 bars.
+const MT_CH = [[38, 45, 50], [36, 43, 50], [41, 48, 53], [38, 45, 50]];
+const mountainTemple: TrackDef = {
+  bpm: 60, bars: 8, loop: true, salt: 24,
+  play(m, s, bar, t) {
+    const bd = 60 / 60 * 4;
+    if (s === 0 && bar % 2 === 0) m.choir(t, MT_CH[(bar >> 1) % 4]!, bd * 2.05, 0.05, 'oh');
+    if (s === 0) { m.e.fm(t, 4.5, N(50), 1.41, 3, 0.07, m.d); m.e.tone(t, 4, { f0: N(26), g: 0.2, a: 0.01, dest: m.d }); } // temple bell
+    if (s === 8 && bar % 2 === 1) m.e.fm(t, 3, N(57), 1.41, 2, 0.04, m.d);
+    if (s === 0 || (s === 12 && bar % 2 === 1)) m.taiko(t, 0.9);
+    if (s === 6 && bar % 4 === 2) m.taiko(t, 0.45, true);
+    if (bar >= 4 && s === 4 && bar % 2 === 0) m.shaku(t, N(62 + (bar % 4 === 0 ? 0 : 3)), bd * 0.55, 0.06);
+  },
+};
+
 const REALM_TRACKS: Record<string, TrackDef> = {
   infinite_void: infiniteVoid, tailed_beast_bomb: tailedBeastBomb, king_of_hell: kingOfHell, gear_fifth: gearFifth, paths,
+  sun_forge: sunForge, moonless_void: moonlessVoid, petal_storm: petalStorm, mountain_temple: mountainTemple,
 };
 
 const TRACKS: Partial<Record<MusicTrack, TrackDef>> = { menu, rooftop, shrine, training, victory };
