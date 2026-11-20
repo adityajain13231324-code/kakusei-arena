@@ -437,6 +437,17 @@ export function poseTable(id: CharId): PoseTable {
   return t;
 }
 
+/**
+ * A pose outside the PoseName list (render-only: intros, win poses, idle stances, procedural clip keys):
+ * starts from the character's own pose `base` (or stance) and overwrites the channels `spec` names.
+ */
+export function customPose(id: CharId, base: PoseName | 'stance', spec: PoseSpec, out: Float32Array = new Float32Array(NCH)): Float32Array {
+  const T = poseTable(id);
+  out.set(base === 'stance' ? T.idle : T[base]);
+  write(out, spec);
+  return out;
+}
+
 export function isPose(p: string): p is PoseName { return (POSES as readonly string[]).includes(p); }
 
 export const STRIKE_POSES = new Set<PoseName>([

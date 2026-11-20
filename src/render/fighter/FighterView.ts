@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { CharId, FighterState, PoseName, HitboxDef } from '../../sim/types';
 import { C, NCH, PAIN_POSES } from '../anim/poses';
 import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
+import { Animator } from '../anim/animator';
 import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
 import { charLook, resolvePalette, type CharLook } from './looks';
 import { makeFighterUniforms, makeFighterToon, makeFighterOutline, type FighterUniforms } from './toon';
@@ -117,6 +118,9 @@ export class FighterView {
   private quality: Q = 'high';
   private twoHand = false;
   lookup: MoveLookup = defaultMoveLookup;
+  /** Animation v2 clip layer (false = the v1 pose blender, for comparison: F3 in Training debug) */
+  animV2 = true;
+  readonly anim: Animator;
   visibleWeapon = false;
   private rimBase = new THREE.Color();
   private rimAwk = new THREE.Color();
@@ -183,6 +187,8 @@ export class FighterView {
       }
     });
     this.setupRig();
+    this.anim = new Animator(char);
+    this.anim.legScale = this.sL;
     // ---- materials / meshes
     const meshes: THREE.Mesh[] = [];
     this.model.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
@@ -528,6 +534,12 @@ export class FighterView {
     const fs = s * this.formS;
     this.group.scale.set(fs * (1 + this.sqX * 0.6), fs * (1 - this.sqX), fs * (1 + this.sqX * 0.6));
     // ---- pose
+    if (this.animV2) {
+      this.anim.update(f, prev, alpha, dt, time, this.lookup);
+      this.pose.set(this.anim.out);
+      this.info.pose = this.anim.so.label; this.info.strike = this.anim.so.strike; this.info.snap = true;
+      this.hasPose = true;
+    } else {
     sampleFighter(this.char, f, alpha, time, this.target, this.info, this.lookup);
     if (!this.hasPose || this.info.snap) {
       this.pose.set(this.target);
@@ -536,6 +548,7 @@ export class FighterView {
       const k = 1 - Math.exp(-dt * 16);
       for (let i = 0; i < NCH; i++) this.pose[i] += (this.target[i] - this.pose[i]) * k;
       this.pose[C.weapon] = this.target[C.weapon]; this.pose[C.twoHand] = this.target[C.twoHand];
+    }
     }
     let wv = this.pose[C.weapon] > 0.5;
     if (L.weapon === 'kunai') wv = !!(f.moveId && /kunai|throw|shuriken/i.test(f.moveId)) || this.info.pose === 'throwProjectile';
@@ -677,6 +690,7 @@ export class FighterView {
   /** register a hit on this fighter (flash) */
   onHit(strength: number): void {
     this.flash = Math.max(this.flash, 0.25 + strength * 0.25);
+    this.anim.onHit(strength);
   }
 
   // --------------------------------------------------------------------------- pose → bones
