@@ -127,6 +127,16 @@ export class VfxSystem {
     this.post.level = q === 'low' ? 0 : q === 'medium' ? 1 : 2;
   }
 
+  /** individual graphics toggles from the settings screen (particle level is independent of the coarse quality bucket) */
+  setGfx(o: { particles: Quality; impactFrames: boolean; speedLines: boolean; colorGrade: boolean; bloom: boolean }): void {
+    const q = o.particles;
+    this.P.setMax(q === 'low' ? 600 : q === 'medium' ? 1100 : 1500);
+    this.fx.scale = q === 'low' ? 0.45 : q === 'medium' ? 0.75 : 1;
+    this.fx.low = q === 'low';
+    this.post.allowImpact = o.impactFrames; this.post.allowLines = o.speedLines; this.post.allowGrade = o.colorGrade; this.post.allowBloom = o.bloom;
+    if (!o.impactFrames) this.post.impactLeft = 0;
+  }
+
   /** turn flashing effects (impact frames, strong screen flashes) on/off for accessibility */
   setReduceFlashing(on: boolean): void {
     this.post.reduce = on;

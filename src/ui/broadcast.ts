@@ -356,10 +356,11 @@ export class Broadcast {
     this.ticker = h('div', { class: 'bc-ticker' }, h('div', { class: 'bc-tag' }, h('span', null, 'BREAKING')), h('div', { class: 'bc-win' }, this.track));
   }
 
-  setEnabled(on: boolean): void {
-    this.enabled = on;
-    this.panel.classList.toggle('off', !on);
-    this.ticker.classList.toggle('off', !on);
+  /** display mode: off = nothing, ticker = one-line news ticker only, full = ticker + live commentator panel */
+  setMode(mode: 'off' | 'ticker' | 'full'): void {
+    this.enabled = mode !== 'off';
+    this.panel.classList.toggle('off', mode !== 'full');
+    this.ticker.classList.toggle('off', mode === 'off');
   }
 
   begin(chars: [CharId, CharId], mode: string, label?: string): void {

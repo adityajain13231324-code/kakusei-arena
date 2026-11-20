@@ -21,7 +21,9 @@ import { HowToScreen } from '../ui/screens/howto';
 import { OnlineMenuScreen, OnlineLobbyScreen } from '../ui/screens/online';
 import { OnlineController } from '../net/online';
 import { JOIN_HASH_RE } from '../net/protocol';
-import { SettingsStore } from './settings';
+import { SettingsStore, detectPhone } from './settings';
+import { GfxBenchmark, presetValues, applyPreset } from './gfx';
+import type { GfxSettings } from './gfx';
 import { MatchSession } from './session';
 import type { SessionHooks } from './session';
 import type { AppApi, Flow, Mode } from './api';
@@ -51,13 +53,17 @@ export class App implements AppApi {
   private menuKey = '';
   private toastEl: HTMLElement;
   private debugEl: HTMLElement;
+  private fpsEl: HTMLElement;
+  private fpsT = 0;
+  private lastFrameT = 0;
+  private bench: GfxBenchmark | null = null;
   private debugOn = false;
   private fpsAvg = 60; private workAvg = 0; private debugT = 0;
 
   constructor(private canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     let noWebGl = false;
     try {
-      this.renderer = new GameRenderer(canvas);
+      this.renderer = new GameRenderer(canvas, { antialias: this.settings.data.gfx.aa });
       this.vfx = new VfxSystem(this.renderer);
     } catch (e) {
       console.warn('[app] renderer unavailable', e);
@@ -91,7 +97,8 @@ export class App implements AppApi {
 
     this.toastEl = h('div', { class: 'toast' });
     this.debugEl = h('pre', { class: 'debug' });
-    uiRoot.append(this.toastEl, this.debugEl);
+    this.fpsEl = h('div', { class: 'fps-badge' });
+    uiRoot.append(this.toastEl, this.debugEl, this.fpsEl);
     this.input.attachTouch(uiRoot);
     this.attachUiFeel(uiRoot);
 
@@ -166,9 +173,9 @@ export class App implements AppApi {
   applySettings(): void {
     const s = this.settings.data;
     this.safe('audio.setVolumes', () => this.audio.setVolumes(s.master, s.music, s.sfx));
-    const q = this.settings.resolveQuality();
-    this.safe('renderer.setQuality', () => this.renderer?.setQuality(q));
-    this.safe('vfx.setQuality', () => this.vfx?.setQuality(q));
+    this.applyGfx(s.gfx);
+    this.ui.root.style.setProperty('--hud-scale', String(s.hudScale));
+    this.fpsEl.classList.toggle('on', s.gfx.showFps);
     this.safe('audio.setAnnouncer', () => (this.audio as unknown as { setAnnouncer?: (on: boolean) => void }).setAnnouncer?.(s.announcer));
     this.safe('vfx.setReduceFlashing', () => this.vfx?.setReduceFlashing(s.reduceFlashing));
     this.ui.root.classList.toggle('reduce-flash', s.reduceFlashing); // stops looping UI pulses/flicker (css)
@@ -177,10 +184,40 @@ export class App implements AppApi {
     this.resize();
     this.updateTouch();
   }
+  /** push graphics settings to the renderer + vfx (live); `g` may be a temporary benchmark preset */
+  private applyGfx(g: GfxSettings): void {
+    this.safe('renderer.setGfx', () => this.renderer?.setGfx({ quality: g.base, scale: g.renderScale, shadows: g.shadows, outlines: g.outlines, texRes: g.texRes, crowd: g.crowd, sky: g.realmSky }));
+    this.safe('vfx.setQuality', () => this.vfx?.setQuality(g.base));
+    this.safe('vfx.setGfx', () => this.vfx?.setGfx({ particles: g.particles, impactFrames: g.impactFrames, speedLines: g.speedLines, colorGrade: g.colorGrade, bloom: g.bloom }));
+  }
+
+  /** restart the first-launch benchmark (settings screen button) */
+  runBenchmark(): void { this.settings.data.gfx.benchDone = false; this.bench = null; this.toast('Benchmark runs on the title / main menu. Go back to the menu and wait a few seconds.'); }
+
+  private stepBenchmark(dt: number): void {
+    const g = this.settings.data.gfx;
+    const top = this.ui.top();
+    const onMenu = !this.session && (top === 'title' || top === 'menu');
+    if (!this.bench) {
+      if (g.benchDone || !onMenu || !this.renderer || document.hidden) return;
+      this.bench = new GfxBenchmark(detectPhone());
+      this.applyGfx({ ...g, ...presetValues(this.bench.current) });
+      return;
+    }
+    if (!onMenu) { this.bench = null; this.applySettings(); return; } // left the menu: discard, retry next launch
+    if (document.hidden) { this.bench.restart(); return; }
+    const next = this.bench.step(dt);
+    if (this.bench.done) {
+      const r = this.bench.result;
+      applyPreset(g, r); g.benchDone = true; g.benchMs = Math.round(this.bench.resultMs * 10) / 10;
+      this.bench = null;
+      this.settings.save();
+      this.applySettings();
+      this.toast(`Graphics set to ${r.toUpperCase()} (auto-detected). Change it any time in Settings.`);
+    } else if (next) this.applyGfx({ ...g, ...presetValues(next) });
+  }
   private resize(): void {
-    const q = this.settings.resolveQuality();
-    const cap = q === 'low' ? 1 : q === 'medium' ? 1.5 : 2;
-    const dpr = Math.min(window.devicePixelRatio || 1, cap);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = window.innerWidth, hgt = window.innerHeight;
     this.safe('renderer.resize', () => this.renderer?.resize(w, hgt, dpr));
     // phone held upright: the "rotate your device" overlay covers the game, so don't let a match run behind it
@@ -432,11 +469,16 @@ export class App implements AppApi {
   // ------------------------------------------------------------ main loop
   private loop = (t: number): void => {
     requestAnimationFrame(this.loop);
+    // FPS cap: skip display frames (dt keeps accumulating, so the sim stays in real time); never while benchmarking
+    const cap = this.settings.data.gfx.fpsCap;
+    if (cap > 0 && !this.bench && t - this.lastFrameT < 1000 / cap - 1.5) return;
+    this.lastFrameT = t;
     const now = t / 1000;
     const dt = Math.min(0.25, Math.max(0, now - this.last));
     this.last = now;
     const w0 = performance.now();
     this.input.poll();
+    this.stepBenchmark(dt);
     this.ui.update(dt);
     const topNow = this.ui.top();
     if (topNow !== this.lastTop) { this.lastTop = topNow; this.updateTouch(); } // touch pad follows whichever screen is on top
@@ -460,6 +502,10 @@ export class App implements AppApi {
     const work = performance.now() - w0;
     this.workAvg = this.workAvg * 0.92 + work * 0.08;
     this.fpsAvg = this.fpsAvg * 0.95 + (dt > 0 ? 1 / dt : 60) * 0.05;
+    if (this.settings.data.gfx.showFps && (this.fpsT -= dt) <= 0) {
+      this.fpsT = 0.5;
+      this.fpsEl.textContent = `${Math.round(this.fpsAvg)} FPS`;
+    }
     if (this.debugOn && (this.debugT -= dt) <= 0) {
       this.debugT = 0.25;
       const st = this.safe('getStats', () => r?.getStats()) ?? { drawCalls: 0, triangles: 0 };

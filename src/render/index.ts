@@ -36,12 +36,24 @@ import { charLook, resolvePalette } from './fighter/looks';
 import { FightCamera } from './camera';
 import { DebugBoxes } from './debug';
 import { buildStage, getRealmBuilder, type StageBuild } from './stage';
+import { stageTuning } from './stage/common';
 export { registerRealm, unregisterRealm, registeredRealms, type RealmBuilder } from './stage';
 import { blankFighter } from './util';
 import type { MoveLookup } from './anim/sampler';
 import { defaultMoveLookup } from './anim/sampler';
 
 export type Quality = 'low' | 'medium' | 'high';
+/** individual graphics toggles (settings screen); `quality` is the coarse bucket for everything without its own toggle */
+export interface GfxOptions {
+  quality: Quality;
+  /** render resolution multiplier (applied on top of min(devicePixelRatio, 1.5)) */
+  scale: number;
+  shadows: 'off' | 'low' | 'high';
+  outlines: boolean;
+  texRes: 1024 | 2048;
+  crowd: 'off' | 'low' | 'high';
+  sky: 'low' | 'high';
+}
 export type BoneName = 'head' | 'chest' | 'hips' | 'handL' | 'handR' | 'footL' | 'footR' | 'weapon';
 
 const STRENGTH: Record<string, number> = { light: 0.2, medium: 0.45, heavy: 0.75, super: 1 };
@@ -98,6 +110,8 @@ export class GameRenderer {
   private stageId: StageId | null = null;
   private stageHalf = 0;
   private stageQuality: Quality | null = null;
+  private stageKey = '';
+  private gfx: GfxOptions;
   private sun = new THREE.DirectionalLight(0xffffff, 2.4);
   /** flat ambient (anime look: no smooth hemisphere gradients on toon surfaces) */
   private hemi = new THREE.AmbientLight(0xffffff, 1.2);
@@ -116,9 +130,10 @@ export class GameRenderer {
   private matchLoad: Promise<void> | null = null;
   private matchToken = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, opts: { antialias?: boolean } = {}) {
     this.quality = initialQuality();
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: this.quality === 'high', powerPreference: 'high-performance', alpha: false, stencil: false });
+    this.gfx = { quality: this.quality, scale: 1, shadows: this.quality === 'low' ? 'off' : 'high', outlines: true, texRes: this.quality === 'low' ? 1024 : 2048, crowd: 'high', sky: 'high' };
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias ?? this.quality === 'high', powerPreference: 'high-performance', alpha: false, stencil: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -143,23 +158,36 @@ export class GameRenderer {
   }
 
   // ------------------------------------------------------------------ setup
-  private res(): ModelRes { return this.quality === 'low' ? 1024 : 2048; }
+  private res(): ModelRes { return this.gfx.texRes; }
 
   private pixelRatioFor(dpr: number): number {
-    if (this.quality === 'low') return Math.min(dpr, 0.75);
-    if (this.quality === 'medium') return Math.min(dpr, 1);
-    return Math.min(dpr, 1.5);
+    return Math.min(2.5, Math.max(0.35, Math.min(dpr, 1.5) * this.gfx.scale));
   }
 
   private applyQualityToLights(): void {
-    this.sun.castShadow = this.quality !== 'low';
+    const sh = this.gfx.shadows;
+    this.sun.castShadow = sh !== 'off';
+    const ms = sh === 'high' ? 2048 : 1024;
+    if (this.sun.shadow.mapSize.x !== ms) {
+      this.sun.shadow.mapSize.set(ms, ms);
+      this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; // re-allocated at the new size on next render
+    }
+  }
+
+  private applyViewGfx(v: FighterView): void {
+    v.setQuality(this.quality);
+    v.setShadows(this.gfx.shadows !== 'off');
+    v.setOutlines(this.gfx.outlines);
   }
 
   private setStage(id: StageId, halfM: number): void {
-    if (this.stage && this.stageId === id && Math.abs(this.stageHalf - halfM) < 1e-3 && this.stageQuality === this.quality) return;
+    if (this.stage && this.stageId === id && Math.abs(this.stageHalf - halfM) < 1e-3 && this.stageQuality === this.quality && this.stageKey === this.stageTuneKey()) return;
     if (this.stage) { this.stage.dispose(); this.scene.remove(this.stage.group); }
     this.disposeRealms();
+    stageTuning.crowd = this.gfx.crowd === 'off' ? 0 : this.gfx.crowd === 'low' ? 0.55 : 1;
+    stageTuning.sky = this.gfx.sky === 'low' ? 0 : 1;
     this.stage = buildStage(id, halfM, this.quality);
+    this.stageKey = this.stageTuneKey();
     this.stageId = id;
     this.stageHalf = halfM;
     this.stageQuality = this.quality;
@@ -183,7 +211,7 @@ export class GameRenderer {
   private makeView(char: CharId, asset: CharAsset, alt: boolean): FighterView {
     const v = new FighterView(char, asset, { alt });
     v.lookup = this.moveLookup;
-    v.setQuality(this.quality);
+    this.applyViewGfx(v);
     v.setShadowTint(this.stage ? this.stage.shadowTint : null);
     if (this.stage) v.setStageRim(this.stageRim);
     this.scene.add(v.group);
@@ -583,18 +611,26 @@ export class GameRenderer {
     this.camera.updateProjectionMatrix();
   }
 
-  setQuality(q: Quality): void {
-    if (q === this.quality) return;
+  private stageTuneKey(): string { return `${this.gfx.crowd}|${this.gfx.sky}`; }
+
+  /** apply all graphics toggles live (cheap no-op when nothing changed) */
+  setGfx(o: GfxOptions): void {
+    const prev = this.gfx;
+    const same = prev.quality === o.quality && prev.scale === o.scale && prev.shadows === o.shadows && prev.outlines === o.outlines && prev.texRes === o.texRes && prev.crowd === o.crowd && prev.sky === o.sky;
+    if (same) return;
     const oldRes = this.res();
-    this.quality = q;
-    try { localStorage.setItem('kakusei-quality', q); } catch { /* ignore */ }
+    this.gfx = { ...o };
+    this.quality = o.quality;
+    try { localStorage.setItem('kakusei-quality', o.quality); } catch { /* ignore */ }
     this.renderer.setPixelRatio(this.pixelRatioFor(this.dpr));
     this.renderer.setSize(this.size.w, this.size.h, true);
     this.applyQualityToLights();
-    for (const v of this.views) v?.setQuality(q);
-    for (const m of this.formViews) for (const v of m.values()) v?.setQuality(q);
-    for (const v of this.menuPool.values()) v.setQuality(q);
-    if (this.stageId) this.setStage(this.stageId, this.stageHalf);
+    const each = (v: FighterView | null | undefined) => { if (v) this.applyViewGfx(v); };
+    for (const v of this.views) each(v);
+    for (const m of this.formViews) for (const v of m.values()) each(v);
+    for (const v of this.menuPool.values()) each(v);
+    for (const c of this.clones) each(c.view);
+    if (this.stageId && (prev.quality !== o.quality || prev.crowd !== o.crowd || prev.sky !== o.sky)) this.setStage(this.stageId, this.stageHalf);
     if (this.res() !== oldRes) {
       // swap model resolution: match views reload on next update(); menu rebuilds its slots
       for (const c of ALL_CHARS) loadCharacter(c, this.res()).catch(() => { /* retried on demand */ });
@@ -606,6 +642,9 @@ export class GameRenderer {
       }
     }
   }
+
+  /** legacy single-bucket setter */
+  setQuality(q: Quality): void { this.setGfx({ ...this.gfx, quality: q }); }
 
   setDebugBoxes(boxes: Capsule[] | null): void { this.debug.set(boxes); }
 

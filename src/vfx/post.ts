@@ -89,6 +89,8 @@ export class PostFx {
   private grade = new THREE.Vector4(0, 0, 0, 0);
   private gradeTarget = 0; private gradeHold = 0;
   reduce = false;
+  /** settings toggles: individual post effects (bloom is reserved: no bloom pass exists yet) */
+  allowImpact = true; allowLines = true; allowGrade = true; allowBloom = true;
   /** 0 low, 1 medium, 2 high */
   level = 2;
   private copyFailed = false;
@@ -111,7 +113,7 @@ export class PostFx {
 
   // ---- triggers ----
   impact(frames: 2 | 3): void {
-    if (this.reduce || this.level === 0) return;
+    if (this.reduce || !this.allowImpact) return;
     this.impactTotal = frames;
     this.impactLeft = frames;
     this.seed = Math.random();
@@ -123,6 +125,7 @@ export class PostFx {
     this.flashDecay = decay;
   }
   speedLines(intensity: number, hold: number, hex = 0xffffff): void {
+    if (!this.allowLines) return;
     if (this.level === 0) intensity *= 0.6;
     if (this.reduce) intensity *= 0.6;
     if (intensity < this.lines) return;
@@ -135,6 +138,7 @@ export class PostFx {
   letterbox(target: number): void { this.letterTarget = target; }
   /** colour wash toward `hex` at `amount` (0..1), held for `hold` s then eased out */
   colorGrade(hex: number, amount: number, hold = 0.1): void {
+    if (!this.allowGrade) return;
     this.grade.x = ((hex >> 16) & 255) / 255; this.grade.y = ((hex >> 8) & 255) / 255; this.grade.z = (hex & 255) / 255;
     this.gradeTarget = Math.max(0, Math.min(0.8, amount));
     this.gradeHold = hold;

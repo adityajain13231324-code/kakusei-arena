@@ -116,8 +116,8 @@ export class HudScreen extends BaseScreen {
       this.sides[0].combo, this.sides[1].combo, this.callouts, this.clash, this.training.root,
       this.bc.panel, this.bc.ticker);
     this.sides[0].combo.classList.add('c1'); this.sides[1].combo.classList.add('c2');
-    app.settings.onChange(() => this.bc.setEnabled(app.settings.data.broadcast));
-    this.bc.setEnabled(app.settings.data.broadcast);
+    app.settings.onChange(() => this.bc.setMode(app.settings.data.broadcastMode));
+    this.bc.setMode(app.settings.data.broadcastMode);
   }
 
   begin(session: MatchSession): void {
@@ -151,7 +151,7 @@ export class HudScreen extends BaseScreen {
     this.hpShake = [0, 0];
     this.el.classList.toggle('training', session.mode === 'training');
     this.training.begin(session);
-    this.bc.setEnabled(this.app.settings.data.broadcast);
+    this.bc.setMode(this.app.settings.data.broadcastMode);
     this.bc.begin(this.chars, session.mode);
   }
 
@@ -373,7 +373,7 @@ class TrainingPanel {
     // on touch screens the open panel sits under the action buttons: start collapsed (the TRAINING tab re-opens it)
     let coarse = false;
     try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch { /* ignore */ }
-    this.root.classList.toggle('closed', coarse && window.innerWidth < 1100);
+    this.root.classList.toggle('closed', coarse || window.innerWidth < 1100);
     this.refreshLabels();
   }
   cycle(d: -1 | 1): void {

@@ -24,6 +24,12 @@ export interface StageBuild {
 const _v = new THREE.Vector3();
 const _c = new THREE.Color();
 
+/**
+ * Graphics-settings knobs read at stage build time (the renderer rebuilds the stage when they change).
+ * crowd: spectator density 0 (none) .. 1 (full); sky: 0 = low-poly sky dome, 1 = full.
+ */
+export const stageTuning = { crowd: 1, sky: 1 };
+
 /** Accumulates static geometry (pos/normal/color/uv) into one indexed BufferGeometry. */
 export class Merger {
   pos: number[] = []; nrm: number[] = []; col: number[] = []; uv: number[] = []; idx: number[] = [];
@@ -74,7 +80,7 @@ export function M(pos: [number, number, number], rotDeg: [number, number, number
 /** Gradient sky dome (unlit). stops: [t (0 = horizon, 1 = zenith), colour] */
 export function skyDome(stops: Array<[number, string]>, opts: { radius?: number; sunDir?: THREE.Vector3; sunColor?: string; sunSize?: number; glow?: number } = {}): THREE.Mesh {
   const r = opts.radius ?? 180;
-  const g = new THREE.SphereGeometry(r, 32, 16);
+  const g = stageTuning.sky < 0.5 ? new THREE.SphereGeometry(r, 16, 8) : new THREE.SphereGeometry(r, 32, 16);
   const cols = stops.map((s) => new THREE.Color(s[1]));
   const ts = stops.map((s) => s[0]);
   while (cols.length < 5) { cols.push(cols[cols.length - 1].clone()); ts.push(1.01 + cols.length); }
