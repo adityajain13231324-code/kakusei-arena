@@ -7,6 +7,8 @@ import type { GfxSettings } from './gfx';
 
 export type BroadcastMode = 'off' | 'ticker' | 'full';
 export type TouchSetting = 'auto' | 'on' | 'off';
+/** camera shake + hit punches (render only) */
+export type CameraShake = 'off' | 'low' | 'full';
 
 export interface SettingsData {
   master: number; music: number; sfx: number; // 0..1
@@ -15,6 +17,8 @@ export interface SettingsData {
   /** graphics preset + toggles (src/app/gfx.ts) */
   gfx: GfxSettings;
   reduceFlashing: boolean;
+  /** camera shake / punch strength (P8 Feel); old saves get 'full' */
+  cameraShake: CameraShake;
   announcer: boolean;
   /** broadcast flavor layer: off / one-line news ticker / ticker + live commentator panel */
   broadcastMode: BroadcastMode;
@@ -30,7 +34,7 @@ const KEY = 'kakusei-arena.settings.v1';
 export function defaultSettings(): SettingsData {
   return {
     master: 0.8, music: 0.7, sfx: 0.9, voice: 0.9, announcerVol: 0.9,
-    gfx: defaultGfx(), reduceFlashing: false, announcer: true, broadcastMode: 'off', hudScale: 1, touch: 'auto',
+    gfx: defaultGfx(), reduceFlashing: false, cameraShake: 'full', announcer: true, broadcastMode: 'off', hudScale: 1, touch: 'auto',
     scheme: ['pro', 'pro'],
     keys: { p1: cloneBindings(DEFAULT_P1), p2: cloneBindings(DEFAULT_P2) },
   };
@@ -66,6 +70,7 @@ export class SettingsStore {
       }
       if (typeof j.reduceFlashing === 'boolean') d.reduceFlashing = j.reduceFlashing;
       if (typeof j.announcer === 'boolean') d.announcer = j.announcer;
+      if (j.cameraShake === 'off' || j.cameraShake === 'low' || j.cameraShake === 'full') d.cameraShake = j.cameraShake;
       // the news ticker / commentator layer was removed (owner request, P8): saved modes are ignored, it stays off
       if (typeof j.hudScale === 'number' && isFinite(j.hudScale)) d.hudScale = Math.round(Math.min(1.2, Math.max(0.7, j.hudScale)) * 20) / 20;
       if (j.touch === 'auto' || j.touch === 'on' || j.touch === 'off') d.touch = j.touch;

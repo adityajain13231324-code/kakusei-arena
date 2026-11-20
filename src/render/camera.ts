@@ -43,11 +43,22 @@ export class FightCamera {
   bound = 0;
   /** framing scale (>1 pulls back, e.g. while a fighter is in a giant form) */
   zoom = 1;
+  /**
+   * Camera feel multiplier for shake + punches (settings "Camera shake": off 0 / low 0.45 / full 1, x0.6 with
+   * reduce flashing). Render offsets only: the sim camera hint is never touched.
+   */
+  feel = 1;
+  // punch: underdamped spring offsets (position kick + FOV punch) added on top of the framed camera
+  private kick = new THREE.Vector3();
+  private kickV = new THREE.Vector3();
+  private fovK = 0; private fovV = 0;
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
   addShake(intensity: number, frames: number): void {
     // intensity = metres of offset (≈0.012 light .. 0.2 KO)
+    intensity *= this.feel;
+    if (intensity <= 1e-5) return;
     if (intensity >= this.shakeAmp * (this.shakeT / this.shakeDur)) {
       this.shakeAmp = intensity;
       this.shakeDur = Math.max(1, frames) / 60;
@@ -55,7 +66,43 @@ export class FightCamera {
     }
   }
 
-  reset(): void { this.pos.init = false; this.look.init = false; this.lastCine = null; }
+  reset(): void {
+    this.pos.init = false; this.look.init = false; this.lastCine = null;
+    this.kick.set(0, 0, 0); this.kickV.set(0, 0, 0); this.fovK = 0; this.fovV = 0;
+  }
+
+  /**
+   * Directional camera punch: a short kick along the hit direction (dx, dz: attacker -> defender, any length),
+   * a nudge toward the action, an optional vertical kick (dy: + up / - down) and an FOV punch, all settling on a
+   * stiff underdamped spring in ~0.25 s. k = strength 0..1 (heavy ~0.67, counter >= 0.7, ultimate 1).
+   */
+  punch(dx: number, dz: number, k: number, dy = 0): void {
+    const f = this.feel * Math.min(1.2, Math.max(0, k));
+    if (f <= 1e-4) return;
+    const l = Math.hypot(dx, dz);
+    if (l > 1e-6) { this.kickV.x += (dx / l) * 3.6 * f; this.kickV.z += (dz / l) * 3.6 * f; }
+    // toward the look target (a small push-in) and the vertical component
+    _a.subVectors(this.look.x, this.pos.x);
+    if (_a.lengthSq() > 1e-6) this.kickV.addScaledVector(_a.normalize(), 2.2 * f);
+    this.kickV.y += dy * 2.2 * f - 0.6 * f;
+    this.fovV -= 150 * f;
+  }
+
+  private stepPunch(dt: number): void {
+    // x'' = -w^2 x - 2 z w x' with w = 30 rad/s, z = 0.42 (one small overshoot, settles in ~0.25 s)
+    const w = 30, z = 0.42;
+    let left = Math.min(dt, 0.1);
+    while (left > 1e-6) {
+      const h = Math.min(left, 1 / 240);
+      left -= h;
+      this.kickV.addScaledVector(this.kick, -w * w * h).multiplyScalar(1 - 2 * z * w * h);
+      this.kick.addScaledVector(this.kickV, h);
+      this.fovV += (-w * w * this.fovK) * h; this.fovV *= 1 - 2 * z * w * h;
+      this.fovK += this.fovV * h;
+    }
+    if (this.kick.lengthSq() < 1e-8 && this.kickV.lengthSq() < 1e-6) { this.kick.set(0, 0, 0); this.kickV.set(0, 0, 0); }
+    if (Math.abs(this.fovK) < 1e-3 && Math.abs(this.fovV) < 1e-2) { this.fovK = 0; this.fovV = 0; }
+  }
 
   update(prev: GameState | null, s: GameState, alpha: number, dt: number): void {
     const p = prev ?? s;
@@ -197,7 +244,8 @@ export class FightCamera {
   /** place camera from springs + shake */
   apply(dt: number): void {
     const cam = this.cam;
-    cam.position.copy(this.pos.x);
+    this.stepPunch(dt);
+    cam.position.copy(this.pos.x).add(this.kick);
     if (this.shakeT > 0) {
       this.shakeT = Math.max(0, this.shakeT - dt);
       const k = this.shakeT / this.shakeDur;
@@ -208,9 +256,12 @@ export class FightCamera {
       cam.position.z += Math.sin(tt * 1.3 + 2) * a * 0.5;
     }
     cam.up.set(0, 1, 0);
-    cam.lookAt(this.look.x);
+    // the look target takes half the kick, so the punch reads as a jolt of the whole frame rather than a pivot
+    _t.copy(this.look.x).addScaledVector(this.kick, 0.5);
+    cam.lookAt(_t);
     if (Math.abs(this.roll) > 1e-4) cam.rotateZ(this.roll);
-    if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
+    const fov = Math.max(20, this.fov + this.fovK);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
   }
 
   /** direct placement (menu / snapshots) */

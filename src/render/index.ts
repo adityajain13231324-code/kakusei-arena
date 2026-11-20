@@ -179,6 +179,7 @@ export class GameRenderer {
     v.setShadows(this.gfx.shadows !== 'off');
     v.setOutlines(this.gfx.outlines);
     v.animV2 = this.animV2;
+    v.flashCap = this.flashCap;
   }
 
   // ------------------------------------------------------------------ Animation v2 (docs/ANIMATION.md)
@@ -685,6 +686,17 @@ export class GameRenderer {
   setDebugBoxes(boxes: Capsule[] | null): void { this.debug.set(boxes); }
 
   addShake(intensity: number, frames: number): void { this.fcam.addShake(intensity, frames); }
+
+  /** Optional (additive): directional camera punch (render offset over the sim camera), see FightCamera.punch */
+  punch(dx: number, dz: number, k: number, dy = 0): void { this.fcam.punch(dx, dz, k, dy); }
+
+  /** Optional (additive): settings "Camera shake" (off / low / full) + reduce flashing scale shake, punches and body flashes */
+  setCameraFeel(level: 'off' | 'low' | 'full', reduceFlashing: boolean): void {
+    this.fcam.feel = (level === 'off' ? 0 : level === 'low' ? 0.45 : 1) * (reduceFlashing ? 0.6 : 1);
+    this.flashCap = reduceFlashing ? 0.55 : 1;
+    this.eachView((v) => { v.flashCap = this.flashCap; });
+  }
+  private flashCap = 1;
 
   getBoneWorld(player: 0 | 1, bone: BoneName, out: THREE.Vector3): THREE.Vector3 {
     const v = this.active[player] ?? this.views[player];

@@ -3,6 +3,7 @@ import { ACTIONS, ACTION_LABEL, DEFAULT_P1, DEFAULT_P2, cloneBindings, keyLabel 
 import type { Action } from '../../input/bindings';
 import type { MenuAction } from '../../input';
 import { defaultSettings } from '../../app/settings';
+import type { CameraShake } from '../../app/settings';
 import { PRESET_ORDER, applyPreset, relabel } from '../../app/gfx';
 import type { CrowdQ, FpsCap, GfxPreset, Level3, ShadowQ } from '../../app/gfx';
 import { h, sfx } from '../dom';
@@ -93,6 +94,7 @@ export class SettingsScreen extends BaseScreen {
       toggle('Post FX: color grade', () => g.colorGrade, (v) => { g.colorGrade = v; }, gsave),
       { section: 'HUD', ...num('HUD scale', 0.7, 1.2, 0.05, () => s.hudScale, (v) => { s.hudScale = v; }, () => this.save()) } as SRow,
       { section: 'GAMEPLAY', ...toggle('Announcer voice', () => s.announcer, (v) => { s.announcer = v; }, () => this.save()) } as SRow,
+      choice<CameraShake>('Camera shake', ['off', 'low', 'full'], () => s.cameraShake, (v) => { s.cameraShake = v; }, up, () => this.save()),
       { section: 'CONTROLS', label: 'Touch controls', value: () => s.touch.toUpperCase(),
         left: () => { s.touch = this.cycle(T, s.touch, -1); this.save(); }, right: () => { s.touch = this.cycle(T, s.touch, 1); this.save(); } },
       sch(0), sch(1),

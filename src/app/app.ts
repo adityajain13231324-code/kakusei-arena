@@ -184,6 +184,7 @@ export class App implements AppApi {
     this.fpsEl.classList.toggle('on', s.gfx.showFps);
     this.safe('audio.setAnnouncer', () => (this.audio as unknown as { setAnnouncer?: (on: boolean) => void }).setAnnouncer?.(s.announcer));
     this.safe('vfx.setReduceFlashing', () => this.vfx?.setReduceFlashing(s.reduceFlashing));
+    this.safe('renderer.setCameraFeel', () => this.renderer?.setCameraFeel(s.cameraShake, s.reduceFlashing));
     this.ui.root.classList.toggle('reduce-flash', s.reduceFlashing); // stops looping UI pulses/flicker (css)
     this.input.setBindings(0, s.keys.p1);
     this.input.setBindings(1, s.keys.p2);

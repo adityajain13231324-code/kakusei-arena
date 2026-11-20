@@ -340,6 +340,8 @@ export class Effects {
     this.flipHit(ev, lvl, el);
     const sh = SHAKE[lvl]!;
     fx.r.addShake(sh[0], sh[1]);
+    // directional camera punch on heavy / counter / super connects (render offset over the sim camera)
+    if (lvl >= 2 || counter) fx.r.punch(this.ax, this.az, counter ? Math.max(0.75, lvl / 3) : lvl / 3);
     if (counter || lvl >= 3) fx.post.impact(3);
     else if (lvl >= 2) fx.post.impact(2);
     const otg = ev.tag === 'otg';
@@ -456,6 +458,8 @@ export class Effects {
 
   launch(ev: SimEvent): void {
     const P = this.fx.P;
+    this.dirFrom(ev);
+    this.fx.r.punch(this.ax, this.az, 0.55, 1); // kick up with the launch
     const x = ev.pos.x / 1000, z = ev.pos.z / 1000, y = Math.max(0.2, ev.pos.y / 1000);
     for (let i = 0; i < this.n(14); i++) {
       P.spec.reset().at(x + rr(-0.45, 0.45), y + rr(-0.2, 1.4), z + rr(-0.45, 0.45)).v(0, rr(-9, -16), 0).ph(0, 0)
@@ -495,6 +499,7 @@ export class Effects {
     this.y = y;
     this.sparks(14, 8, 1.2, 0xffffff, 0xffd080, 0.8, 0.4);
     this.fx.r.addShake(0.1, 12);
+    this.fx.r.punch(-nx, -nz, 0.85); // into the wall
     this.fx.post.impact(2);
     this.fx.O.spawn('baki', x + nx * 0.5, y + 0.7, z + nz * 0.5, 1.2);
   }
@@ -506,6 +511,7 @@ export class Effects {
     if (big) {
       this.fx.D.spawn('ring', x, 0.05, z, 0.3, 4.5, 0.35, 0xffffff, 1, 0, 0.8, true);
       this.fx.r.addShake(0.045, 6);
+      this.fx.r.punch(0, 0, 0.3, -1); // subtle downward thud on the body landing
     }
   }
 
