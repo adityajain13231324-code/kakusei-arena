@@ -9,7 +9,7 @@ import { CHAR_REALM } from './crossover';
 import type { MatchInfo } from './layer';
 
 export type UiSound = 'move' | 'select' | 'back' | 'start' | 'error' | 'hover' | 'press';
-export type MusicTrack = 'menu' | 'rooftop' | 'shrine' | 'training' | 'victory' | 'none';
+export type MusicTrack = 'menu' | 'rooftop' | 'shrine' | 'training' | 'victory' | 'char_select' | 'market' | 'oboro_boss' | 'none';
 
 export class AudioSystem {
   private e = new Engine();

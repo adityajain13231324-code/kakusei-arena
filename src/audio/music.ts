@@ -2,6 +2,7 @@
 import { Engine } from './engine';
 import type { MusicTrack } from './index';
 import { choir } from './crossover';
+import { MusicFiles } from './files';
 
 const N = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 /** deterministic pseudo-random in [0,1) from an integer */
@@ -10,7 +11,9 @@ function rn(n: number, salt = 0): number {
   return x - Math.floor(x);
 }
 
-interface RealmLayer { kind: string; def: TrackDef; tg: GainNode; next: number; step: number }
+interface RealmLayer { kind: string; def: TrackDef | null; tg: GainNode; next: number; step: number; src?: AudioBufferSourceNode }
+/** tracks without a procedural version fall back to this one while no owner file exists */
+const FALLBACK: Record<string, MusicTrack> = { char_select: 'menu', market: 'menu', oboro_boss: 'rooftop' };
 interface TrackDef {
   bpm: number; bars: number; loop: boolean; swing?: number; salt: number;
   play(m: Music, s: number, bar: number, t: number): void;
@@ -29,33 +32,80 @@ export class Music {
   private realmIdle = 0;
   /** destination for instruments of the current track */
   d!: AudioNode;
-  constructor(readonly e: Engine) {}
+  constructor(readonly e: Engine) { this.files = new MusicFiles(e); }
 
   get current(): MusicTrack { return this.cur; }
+
+  readonly files: MusicFiles;
+  private proc = '';
+  private fileSrc: AudioBufferSourceNode | null = null;
+
+  /** crossfade out whatever stage track is playing (procedural or file) */
+  private fadeOut(): void {
+    const now = this.e.now;
+    if (this.layers.length) this.realmOff();
+    const old = this.tg, src = this.fileSrc;
+    this.tg = null; this.fileSrc = null; this.def = null; this.proc = '';
+    if (old) {
+      old.gain.cancelScheduledValues(now);
+      old.gain.setTargetAtTime(0, now, 0.22);
+      setTimeout(() => { try { src?.stop(); } catch { /* ended */ } try { old.disconnect(); } catch { /* ignore */ } }, 1400);
+    }
+  }
+
+  private newTrackGain(): GainNode {
+    const e = this.e, now = e.now;
+    const tg = e.ctx!.createGain();
+    tg.gain.setValueAtTime(0.0001, now);
+    tg.gain.setTargetAtTime(1, now + 0.05, 0.22);
+    tg.connect(e.musicBus);
+    return tg;
+  }
 
   set(track: MusicTrack): void {
     const e = this.e;
     if (!e.ctx || track === this.cur) return;
-    const now = e.now;
-    if (this.layers.length) this.realmOff();
-    if (this.tg) {
-      const old = this.tg;
-      old.gain.cancelScheduledValues(now);
-      old.gain.setTargetAtTime(0, now, 0.12);
-      setTimeout(() => { try { old.disconnect(); } catch { /* ignore */ } }, 900);
-      this.tg = null;
-    }
     this.cur = track;
-    this.def = TRACKS[track] ?? null;
+    const name = 'music_' + track;
+    const buf = this.files.peek(name);
+    if (buf) { this.startFile(track, name, buf); return; }
+    this.startProc(track);
+    // owner file (public/music/music_<track>.*) replaces the procedural track as soon as it is found
+    if (buf === undefined && track !== 'none') void this.files.request(name).then((b) => { if (b && this.cur === track && e.ctx) this.startFile(track, name, b); });
+  }
+
+  private startProc(track: MusicTrack): void {
+    const res: MusicTrack = TRACKS[track] ? track : (FALLBACK[track] ?? 'none');
+    if (this.proc === res && this.tg && !this.fileSrc) return;
+    this.fadeOut();
+    this.def = TRACKS[res] ?? null;
     if (!this.def) { this.stopTimer(); return; }
-    this.tg = e.ctx.createGain();
-    this.tg.gain.setValueAtTime(0.0001, now);
-    this.tg.gain.setTargetAtTime(1, now + 0.05, 0.15);
-    this.tg.connect(e.musicBus);
+    this.proc = res;
+    this.tg = this.newTrackGain();
     this.d = this.tg;
     this.step = 0;
-    this.nextT = now + 0.08;
+    this.nextT = this.e.now + 0.08;
     if (this.timer === null) this.timer = window.setInterval(() => this.tick(), 30);
+  }
+
+  private startFile(track: MusicTrack, name: string, buf: AudioBuffer): void {
+    const e = this.e;
+    this.fadeOut();
+    this.stopTimer();
+    const tg = (this.tg = this.newTrackGain());
+    const src = e.ctx!.createBufferSource();
+    src.buffer = buf;
+    if (track !== 'victory') {
+      src.loop = true;
+      const le = this.files.loopEnd(name);
+      src.loopStart = 0;
+      src.loopEnd = le > 0 && le < buf.duration ? le : buf.duration;
+    } else {
+      src.onended = () => { if (this.fileSrc === src) { this.fileSrc = null; this.cur = 'none'; this.onEnd?.(); } };
+    }
+    src.connect(tg);
+    src.start(e.now + 0.02);
+    this.fileSrc = src;
   }
 
   private stopTimer(): void {
@@ -86,7 +136,7 @@ export class Music {
 
   private finish(): void {
     const tg = this.tg;
-    this.cur = 'none'; this.def = null; this.tg = null;
+    this.cur = 'none'; this.def = null; this.tg = null; this.proc = '';
     this.stopTimer();
     if (tg) {
       const now = this.e.now + 1.5;
@@ -101,16 +151,33 @@ export class Music {
   /** duck the stage track and start the realm theme (two layers = Realm Clash) */
   realmOn(kind: string): void {
     const e = this.e;
-    const def = REALM_TRACKS[kind];
-    if (!e.ctx || !def || this.layers.some((l) => l.kind === kind)) return;
+    const def = REALM_TRACKS[kind] ?? null;
+    const name = 'realm_' + kind;
+    const buf = this.files.peek(name);
+    if (!e.ctx || this.layers.some((l) => l.kind === kind) || (!def && buf === null)) return;
     const now = e.now;
     const tg = e.ctx.createGain();
     tg.gain.setValueAtTime(0.0001, now);
     tg.gain.setTargetAtTime(1, now + 0.03, 0.2);
     tg.connect(e.musicBus);
-    this.layers.push({ kind, def, tg, next: now + 0.06, step: 0 });
+    const layer: RealmLayer = { kind, def: buf ? null : def, tg, next: now + 0.06, step: 0 };
+    this.layers.push(layer);
+    if (buf) this.attachRealmFile(layer, name, buf);
+    else if (buf === undefined) {
+      // owner file (public/music/realm_<kind>.*) takes over from the procedural theme once found
+      void this.files.request(name).then((b) => { if (b && this.layers.includes(layer) && !layer.src) { layer.def = null; this.attachRealmFile(layer, name, b); } });
+    }
     this.duckStage(true);
     if (this.rtimer === null) this.rtimer = window.setInterval(() => this.tickRealm(), 30);
+  }
+  private attachRealmFile(l: RealmLayer, name: string, buf: AudioBuffer): void {
+    const src = this.e.ctx!.createBufferSource();
+    src.buffer = buf; src.loop = true; src.loopStart = 0;
+    const le = this.files.loopEnd(name);
+    src.loopEnd = le > 0 && le < buf.duration ? le : buf.duration;
+    src.connect(l.tg);
+    src.start(this.e.now + 0.02);
+    l.src = src;
   }
   /** stop one realm theme (or all) and restore the stage track once none is left */
   realmOff(kind?: string): void {
@@ -121,8 +188,8 @@ export class Music {
       if (kind && l.kind !== kind) { keep.push(l); continue; }
       l.tg.gain.cancelScheduledValues(now);
       l.tg.gain.setTargetAtTime(0, now, 0.25);
-      const g = l.tg;
-      setTimeout(() => { try { g.disconnect(); } catch { /* ignore */ } }, 1500);
+      const g = l.tg, src = l.src;
+      setTimeout(() => { try { src?.stop(); } catch { /* ended */ } try { g.disconnect(); } catch { /* ignore */ } }, 1500);
     }
     this.layers = keep;
     if (!keep.length) {
@@ -146,6 +213,7 @@ export class Music {
     const e = this.e;
     if (!e.ctx || e.ctx.state !== 'running') return;
     for (const l of this.layers) {
+      if (!l.def) continue;
       const sd = 60 / l.def.bpm / 4;
       if (l.next < e.now - 0.25) l.next = e.now + 0.02;
       while (l.next < e.now + 0.1) {

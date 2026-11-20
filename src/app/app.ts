@@ -266,7 +266,7 @@ export class App implements AppApi {
   toCharSelect(): void {
     this.endSession();
     this.input.setContext('menu');
-    this.safe('audio.music', () => this.audio.music('menu'));
+    this.safe('audio.music', () => this.audio.music('char_select'));
     this.ui.go('charselect', { mode: this.flow.mode });
   }
   pickChars(p1: CharId, p2: CharId, schemes: [ControlScheme, ControlScheme]): void {
