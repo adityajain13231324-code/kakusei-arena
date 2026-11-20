@@ -756,7 +756,7 @@ export class Auras {
       const charge = f.mode === 'kicharge';
       const fa = formAura(f);
       const awake = f.awakened || !!fa;
-      const target = charge ? 1 : fa ? fa.k : awake ? 0.55 : 0;
+      const target = f.veiled ? 0 : charge ? 1 : fa ? fa.k : awake ? 0.55 : 0; // Moonless Void: the aura hides with her
       this.a[i]! += (target - this.a[i]!) * Math.min(1, dt * 8);
       const a = this.a[i]!;
       const m = this.mesh[i]!;
@@ -778,7 +778,7 @@ export class Auras {
       this.maps[i]!.offset.x += dt * 0.2;
       // particles
       const x = f.pos.x / 1000, y = f.pos.y / 1000, z = f.pos.z / 1000;
-      const rate = (charge ? 80 : 26) * this.fx.scale;
+      const rate = f.veiled ? 0 : (charge ? 80 : 26) * this.fx.scale;
       this.acc[i]! += dt * rate;
       while (this.acc[i]! >= 1) {
         this.acc[i]! -= 1;

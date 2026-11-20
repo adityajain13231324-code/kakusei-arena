@@ -44,6 +44,7 @@ const _e = new THREE.Euler();
 const _sc = new THREE.Vector3();
 const _AX = new THREE.Vector3(1, 0, 0), _AY = new THREE.Vector3(0, 1, 0);
 const _cA = new THREE.Vector3(), _cB = new THREE.Vector3();
+const VEIL_TINT = new THREE.Color('#9a7cff'), STONE_RIM = new THREE.Color('#ffcf6a');
 
 interface Limb {
   up: THREE.Bone; lo: THREE.Bone; end: THREE.Bone;
@@ -138,6 +139,8 @@ export class FighterView {
   private rubber = false;
   private stretchQ: Array<[Limb, number]> = [];
   private stretched: THREE.Bone[] = [];
+  // ---- Soul Realm looks (Moonless Void veil, Mountain Temple stone skin)
+  private veilK = 0; private veilOn = false; private veilLinger = 0; private veilShadowOff = false; private stoneK = 0;
 
   constructor(readonly char: CharId, asset: CharAsset, opts: { alt?: boolean } = {}) {
     this.look = charLook(char);
@@ -560,7 +563,49 @@ export class FighterView {
       u.uRimWidth.value = 0.5;
     }
     if (this.formOutline && u.uHue.value === 0) u.uOutlineColor.value.copy(this.formOutline);
+    this.realmLook(f, dt, time);
     if (this.faceMat) this.pickExpression(f, dt);
+  }
+
+  /**
+   * Soul Realm looks, read-only from FighterState:
+   *  - veiled (Shiori, Moonless Void): fades to a faint violet shimmer between attacks, no shadow. The materials stay
+   *    transparent for a moment after the veil drops so attacks in and out of the dark do not flip material state.
+   *  - realmArmor (Goro, Mountain Temple): strong gold stone-skin rim while the 1-hit armor is up.
+   */
+  private realmLook(f: FighterState, dt: number, time: number): void {
+    const u = this.u;
+    const vt = f.veiled ? 1 : 0;
+    this.veilK += (vt - this.veilK) * Math.min(1, dt * (vt ? 8 : 24));
+    if (vt) this.veilLinger = 1.5;
+    else if (this.veilLinger > 0) this.veilLinger -= dt;
+    if (this.veilK > 0.004 || (this.veilOn && this.veilLinger > 0)) {
+      const shimmer = 0.04 * Math.sin(time * 11) + 0.025 * Math.sin(time * 27.3);
+      this.setGhost(Math.min(0.995, 1 - this.veilK * (0.92 - shimmer)), VEIL_TINT, 0.4 * this.veilK);
+      u.uFlash.value = Math.max(this.flash, this.ghostTint);
+      this.veilOn = true;
+      const hide = this.veilK > 0.5;
+      if (hide !== this.veilShadowOff) {
+        this.veilShadowOff = hide;
+        const sh = !hide && this.quality !== 'low';
+        for (const m of this.bodyMeshes) m.castShadow = sh;
+        if (this.handWeapon) this.handWeapon.castShadow = sh;
+      }
+    } else if (this.veilOn) {
+      this.veilOn = false;
+      this.setGhost(1, null);
+      u.uFlashColor.value.set(0xffffff);
+      u.uFlash.value = this.flash;
+      if (this.veilShadowOff) { this.veilShadowOff = false; this.setQuality(this.quality); }
+    }
+    const st = f.realmArmor ? 1 : 0;
+    this.stoneK += (st - this.stoneK) * Math.min(1, dt * (st ? 6 : 16));
+    if (this.stoneK > 0.01) {
+      const pulse = 0.85 + 0.15 * Math.sin(time * 4);
+      u.uRimColor.value.lerp(STONE_RIM, this.stoneK);
+      u.uRimStrength.value = Math.max(u.uRimStrength.value, 1.1 * this.stoneK * pulse);
+      u.uRimWidth.value = Math.min(u.uRimWidth.value, 0.62 - 0.24 * this.stoneK);
+    }
   }
 
   /**

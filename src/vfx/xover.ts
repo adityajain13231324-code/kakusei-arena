@@ -48,9 +48,11 @@ export function formAura(f: FighterState): { col: number; k: number; scale: numb
 
 const REALM_GRADE: Record<string, number> = {
   infinite_void: 0x2a1a6a, tailed_beast_bomb: 0x7a0a1a, king_of_hell: 0x8a0a10, gear_fifth: 0xfff4d0, paths: 0x1a3a6a,
+  sun_forge: 0x7a2a06, moonless_void: 0x1a0a3a, petal_storm: 0x4a1a3a, mountain_temple: 0x6a4a1a,
 };
 const REALM_COL: Record<string, number> = {
   infinite_void: 0x9fb0ff, tailed_beast_bomb: 0xff4a2a, king_of_hell: 0xff2a3a, gear_fifth: 0xffffff, paths: 0x8fe0ff,
+  sun_forge: 0xffa040, moonless_void: 0xa88cff, petal_storm: 0xffb8d8, mountain_temple: 0xffd27a,
 };
 
 type HandOrb = { g: THREE.Group; core: THREE.Mesh; d1: THREE.Mesh; d2: THREE.Mesh; glow: THREE.Sprite; on: boolean };
@@ -142,6 +144,7 @@ export class XoverFx {
   private realmKind: string | null = null;
   private realmPhase: string | null = null;
   private realmAcc = 0; private beatT = 0;
+  private burnAcc = [0, 0];
   state: GameState | null = null;
 
   constructor(private fx: FxCtx, private eff: Effects, private chest: ChestFn) {
@@ -305,7 +308,16 @@ export class XoverFx {
         if (k.startsWith('rasenshuriken')) this.shurikenHit(ev, true);
         break;
       }
-      case 'hit': case 'counter': case 'ultimateHit': this.hitFlourish(ev, state, true); break;
+      case 'hit': case 'counter': case 'ultimateHit':
+        if (ev.type === 'hit' && ev.tag === 'armor') this.armorHit(ev, state);
+        this.hitFlourish(ev, state, true);
+        break;
+      case 'burn': {
+        // Sun Forge burn tick: a small puff of embers off the burning fighter
+        this.at(ev.pos.x / 1000, Math.max(0.5, ev.pos.y / 1000), ev.pos.z / 1000);
+        this.eff.sparks(this.n(4), 3, 0.8, 0xffe08a, 0xff4a08, 0.45, 0.35, -1);
+        break;
+      }
       case 'block': this.hitFlourish(ev, state, false); break;
       case 'groundBounce': {
         if (ev.tag === 'gear5') {
@@ -347,7 +359,69 @@ export class XoverFx {
     fx.O.spawn('rv_' + kind, v1.x, v1.y + 1.3, v1.z, 1.9, 1.9);
     fx.r.addShake(0.08, 40);
     if (kind === 'paths') this.lightningStrike(ev.player, 0.8);
+    else if (kind === 'sun_forge') {
+      fx.post.screenFlash(0xffa040, 0.45, 5);
+      this.eff.elemental('fire', 2.2);
+      this.eff.sparks(60, 14, 1.6, 0xfff0a0, 0xff5a10, 1.0, 1.2, -2, 1.0);
+    } else if (kind === 'moonless_void') {
+      this.eff.smokePuffs(18, 3, 1.6, 1.4, 0x2a1a4a, 0x0a0614, 0.8, 0.4);
+    } else if (kind === 'petal_storm') {
+      this.petalBurst(v1, 70);
+    } else if (kind === 'mountain_temple') {
+      this.eff.smokePuffs(16, 4, 1.4, 1.2, 0xd8c8a8, 0x8a7a68, 0.7, 0.2);
+      this.eff.shock(10, 0.7, 0xffd27a, true);
+      fx.r.addShake(0.12, 30);
+    }
     this.beatT = 0;
+  }
+
+  /** a strike absorbed by armor (hit tag 'armor'); Goro's Mountain Temple stone skin gets the heavy version */
+  private armorHit(ev: SimEvent, state: GameState): void {
+    const fx = this.fx;
+    const x = ev.pos.x / 1000, y = Math.max(0.4, ev.pos.y / 1000), z = ev.pos.z / 1000;
+    const temple = !!state.realm && state.realm.kind === 'mountain_temple' && state.realm.owner === ev.target;
+    this.at(x, y, z);
+    fx.D.spawn('ring', x, y, z, 0.3, temple ? 2.6 : 1.8, 0.25, temple ? 0xffd27a : 0xd8e0ff, 0, 0, 0.9, true);
+    this.eff.sparks(temple ? 18 : 10, 7, 1.2, 0xfff4d0, temple ? 0xb08a4a : 0x9aa8c0, 0.6, 0.35, 9);
+    if (temple) {
+      this.eff.smokePuffs(5, 1.4, 0.5, 0.5, 0xd8c8a8, 0x8a7a68, 0.5, 0.3);
+      fx.O.spawn('gakin', x, y + 0.9, z, 0.8, 0.6);
+    }
+  }
+
+  /** cherry petals bursting out from a point (normal blend, tumbling) */
+  private petalBurst(at: THREE.Vector3, n: number): void {
+    const P = this.fx.P;
+    for (let i = 0, c = this.n(n); i < c; i++) {
+      randDir();
+      const sp = rr(2, 7);
+      P.spec.reset().at(at.x, at.y, at.z).v(PR.dx * sp, Math.abs(PR.dy) * sp * 0.6 + 1, PR.dz * sp).ph(2.2, 0.6).ttl(rr(1.0, 2.0))
+        .tx(T.PETAL).sz(0.12, 0.1).rt(rr(0, 6.28), rr(-6, 6)).col(0xffe0ec, 0xff9ac0, 1, 0, 1);
+      P.emit(false);
+    }
+  }
+
+  /** Sun Forge: small flames licking off a fighter while it still has burn damage to tick (FighterState.burn) */
+  private updateBurn(p: 0 | 1, state: GameState, dt: number): void {
+    const f = state.fighters[p];
+    const b = f.burn ?? 0;
+    if (b <= 0) { this.burnAcc[p] = 0; return; }
+    this.burnAcc[p]! += dt * (20 + Math.min(30, b) * 0.8) * this.fx.scale;
+    const P = this.fx.P;
+    while (this.burnAcc[p]! >= 1) {
+      this.burnAcc[p]! -= 1;
+      this.bone(p, Math.random() < 0.5 ? 'chest' : 'hips', v1);
+      const px = v1.x + rr(-0.22, 0.22), py = v1.y + rr(-0.35, 0.3), pz = v1.z + rr(-0.22, 0.22);
+      if (Math.random() < 0.25) {
+        // dark smoke so the flames read on bright stages too
+        P.spec.reset().at(px, py + 0.2, pz).v(rr(-0.2, 0.2), rr(0.8, 1.4), rr(-0.2, 0.2)).ph(1, -0.5).ttl(rr(0.5, 0.8)).tx(T.SMOKE)
+          .sz(0.18, 0.4).rt(rr(0, 6), rr(-1, 1)).col(0x3a2a22, 0x1a1412, 0.45, 0, 1);
+        P.emit(false);
+      }
+      P.spec.reset().at(px, py, pz).v(rr(-0.2, 0.2), rr(1.2, 2.0), rr(-0.2, 0.2))
+        .ph(1.5, -1).ttl(rr(0.3, 0.5)).tx(T.FLAME).sz(0.3, 0.08, 0.45, 0.15).rt(rr(-0.3, 0.3), 0).col(0xfff0a0, 0xff2400, 1, 0, 1.5);
+      P.emit(true);
+    }
   }
 
   private formChange(ev: SimEvent, state: GameState): void {
@@ -401,7 +475,7 @@ export class XoverFx {
       this.atV(v1);
       this.eff.smokePuffs(8, 1.6, 0.8, 0.6, 0xffffff, 0xd8d0c8, 0.6, 0.4);
       if (k !== 'clone_smoke') fx.post.speedLines(0.7, 0.4, 0xffffff);
-    } else if (k === 'infinite_void' || k === 'tailed_beast_bomb' || k === 'king_of_hell' || k === 'gear_fifth' || k === 'paths') {
+    } else if (REALM_COL[k] !== undefined) {
       // hand sign charge-up before the realm opens
       this.chest(ev.player, v1);
       this.atV(v1);
@@ -607,7 +681,7 @@ export class XoverFx {
     this.state = state;
     this.time += dt;
     for (const b of this.bolts) b.update(dt, this.fx.cam);
-    for (let i = 0; i < 2; i++) this.updatePlayer(i as 0 | 1, state, dt);
+    for (let i = 0; i < 2; i++) { this.updatePlayer(i as 0 | 1, state, dt); this.updateBurn(i as 0 | 1, state, dt); }
     this.updateTrench(state, dt);
     this.updateRealm(state, dt);
   }
@@ -1108,6 +1182,54 @@ export class XoverFx {
           this.realmAcc -= 1;
           const x = (fo.pos.x + fp.pos.x) / 2000 + rr(-6, 6), z = (fo.pos.z + fp.pos.z) / 2000 + rr(-4, 4);
           P.spec.reset().at(x, 0.05, z).v(rr(-0.2, 0.2), rr(0.5, 1.5), rr(-0.2, 0.2)).ph(0.5, 0).ttl(rr(1.2, 2.2)).tx(T.SOFT).sz(0.08, 0.02).col(0xfff4c0, 0x5ad0ff, 1, 0, 1.6);
+          P.emit(true);
+        }
+        break;
+      }
+      case 'sun_forge': {
+        // sparks spitting up from the molten floor around the fight
+        this.realmAcc += dt * 24 * sc;
+        while (this.realmAcc >= 1) {
+          this.realmAcc -= 1;
+          const x = (fo.pos.x + fp.pos.x) / 2000 + rr(-7, 7), z = (fo.pos.z + fp.pos.z) / 2000 + rr(-5, 5);
+          P.spec.reset().at(x, 0.05, z).v(rr(-0.3, 0.3), rr(1.0, 2.5), rr(-0.3, 0.3)).ph(0.6, -0.3).ttl(rr(0.8, 1.6)).tx(T.SPARK).sz(0.07, 0.02).col(0xffe08a, 0xff4a08, 1, 0, 1.7);
+          P.emit(true);
+        }
+        break;
+      }
+      case 'moonless_void': {
+        // a faint shimmer where the veiled owner stands, so a sharp eye can still just about track her
+        if (fo.veiled) {
+          this.realmAcc += dt * 10 * sc;
+          while (this.realmAcc >= 1) {
+            this.realmAcc -= 1;
+            const x = fo.pos.x / 1000 + rr(-0.35, 0.35), z = fo.pos.z / 1000 + rr(-0.35, 0.35);
+            P.spec.reset().at(x, fo.pos.y / 1000 + rr(0.2, 1.7), z).v(0, rr(0.2, 0.6), 0).ph(1, 0).ttl(rr(0.4, 0.8)).tx(T.SOFT).sz(0.06, 0.01).col(0xd8c8ff, 0x6a4aff, 0.5, 0, 1.2);
+            P.emit(true);
+          }
+        } else this.realmAcc = 0;
+        break;
+      }
+      case 'petal_storm': {
+        // petals gusting past the fighters (on top of the world's own petal storm)
+        this.realmAcc += dt * 16 * sc;
+        while (this.realmAcc >= 1) {
+          this.realmAcc -= 1;
+          const cx = (fo.pos.x + fp.pos.x) / 2000, cz = (fo.pos.z + fp.pos.z) / 2000;
+          const a = rr(0, 6.28), rad = rr(1, 5);
+          P.spec.reset().at(cx + Math.cos(a) * rad, rr(0.5, 3.5), cz + Math.sin(a) * rad).v(-Math.sin(a) * 3, rr(-0.3, 0.3), Math.cos(a) * 3).ph(0.4, 0.2)
+            .ttl(rr(1.2, 2.2)).tx(T.PETAL).sz(0.1, 0.09).rt(rr(0, 6.28), rr(-5, 5)).col(0xffe0ec, 0xffa8c8, 1, 0, 1);
+          P.emit(false);
+        }
+        break;
+      }
+      case 'mountain_temple': {
+        // golden motes drifting up through the temple light
+        this.realmAcc += dt * 12 * sc;
+        while (this.realmAcc >= 1) {
+          this.realmAcc -= 1;
+          const x = (fo.pos.x + fp.pos.x) / 2000 + rr(-6, 6), z = (fo.pos.z + fp.pos.z) / 2000 + rr(-4, 4);
+          P.spec.reset().at(x, rr(0, 2), z).v(rr(-0.15, 0.15), rr(0.3, 0.8), rr(-0.15, 0.15)).ph(0.3, 0).ttl(rr(1.5, 2.5)).tx(T.SOFT).sz(0.06, 0.02).col(0xfff0c0, 0xffb040, 1, 0, 1.5);
           P.emit(true);
         }
         break;
