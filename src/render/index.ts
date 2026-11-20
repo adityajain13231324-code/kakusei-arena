@@ -186,6 +186,7 @@ export class GameRenderer {
     this.disposeRealms();
     stageTuning.crowd = this.gfx.crowd === 'off' ? 0 : this.gfx.crowd === 'low' ? 0.55 : 1;
     stageTuning.sky = this.gfx.sky === 'low' ? 0 : 1;
+    stageTuning.texRes = this.gfx.texRes;
     this.stage = buildStage(id, halfM, this.quality);
     this.stageKey = this.stageTuneKey();
     this.stageId = id;
@@ -611,7 +612,7 @@ export class GameRenderer {
     this.camera.updateProjectionMatrix();
   }
 
-  private stageTuneKey(): string { return `${this.gfx.crowd}|${this.gfx.sky}`; }
+  private stageTuneKey(): string { return `${this.gfx.crowd}|${this.gfx.sky}|${this.gfx.texRes}`; }
 
   /** apply all graphics toggles live (cheap no-op when nothing changed) */
   setGfx(o: GfxOptions): void {
@@ -630,7 +631,7 @@ export class GameRenderer {
     for (const m of this.formViews) for (const v of m.values()) each(v);
     for (const v of this.menuPool.values()) each(v);
     for (const c of this.clones) each(c.view);
-    if (this.stageId && (prev.quality !== o.quality || prev.crowd !== o.crowd || prev.sky !== o.sky)) this.setStage(this.stageId, this.stageHalf);
+    if (this.stageId && (prev.quality !== o.quality || prev.crowd !== o.crowd || prev.sky !== o.sky || prev.texRes !== o.texRes)) this.setStage(this.stageId, this.stageHalf);
     if (this.res() !== oldRes) {
       // swap model resolution: match views reload on next update(); menu rebuilds its slots
       for (const c of ALL_CHARS) loadCharacter(c, this.res()).catch(() => { /* retried on demand */ });

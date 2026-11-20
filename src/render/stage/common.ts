@@ -28,7 +28,88 @@ const _c = new THREE.Color();
  * Graphics-settings knobs read at stage build time (the renderer rebuilds the stage when they change).
  * crowd: spectator density 0 (none) .. 1 (full); sky: 0 = low-poly sky dome, 1 = full.
  */
-export const stageTuning = { crowd: 1, sky: 1 };
+export const stageTuning = { crowd: 1, sky: 1, texRes: 2048 as 1024 | 2048 };
+
+function assetBase(): string {
+  const env = (import.meta as unknown as { env?: { BASE_URL?: string } }).env;
+  return env?.BASE_URL ?? './';
+}
+
+/**
+ * Load an owner-supplied tiling texture (public/stages/tex/<name>_{512|1024}.webp, size follows the texture-res setting).
+ * Fire-and-forget: `ok` runs only when the image loaded, so callers keep their procedural look as the fallback.
+ */
+export function loadStageTex(name: string, repeat: number, ok: (t: THREE.Texture) => void): void {
+  const size = stageTuning.texRes >= 2048 ? 1024 : 512;
+  new THREE.TextureLoader().load(`${assetBase()}stages/tex/${name}_${size}.webp`, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat, repeat);
+    t.anisotropy = 8;
+    ok(t);
+  }, undefined, () => { /* keep procedural fallback */ });
+}
+
+/** Planar-project UVs from world position (dominant normal axis), `meters` = world size of one texture tile. */
+export function worldUV(g: THREE.BufferGeometry, meters: number): void {
+  const P = g.attributes.position as THREE.BufferAttribute, N = g.attributes.normal as THREE.BufferAttribute, U = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < P.count; i++) {
+    const ax = Math.abs(N.getX(i)), ay = Math.abs(N.getY(i)), az = Math.abs(N.getZ(i));
+    if (ay >= ax && ay >= az) U.setXY(i, P.getX(i) / meters, P.getZ(i) / meters);
+    else if (ax >= az) U.setXY(i, P.getZ(i) / meters, P.getY(i) / meters);
+    else U.setXY(i, P.getX(i) / meters, P.getY(i) / meters);
+  }
+  U.needsUpdate = true;
+}
+
+/**
+ * Painted backdrop (owner art, public/stages/sky/<name>_{1024|2048}.webp) on an inside-out dome. The flat 2:1 painting is mapped
+ * 180 degrees of azimuth per image, mirrored around so it never seams; `hor` = height of the painted horizon (0 bottom .. 1 top),
+ * 90 degrees of elevation per image height. Starts hidden: call-back `onReady` runs once the image decoded, so the gradient
+ * `skyDome` underneath stays the fallback. Low sky quality / 1024 texture setting use the 1024 image.
+ */
+export function skyPanorama(name: string, hor: number, onReady: (m: THREE.Mesh) => void, opts: { bright?: number; radius?: number; yaw?: number } = {}): THREE.Mesh {
+  const r = opts.radius ?? 175;
+  const g = new THREE.SphereGeometry(r, stageTuning.sky < 0.5 ? 24 : 48, stageTuning.sky < 0.5 ? 12 : 24);
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: null }, uHor: { value: hor }, uBright: { value: opts.bright ?? 1 }, uYaw: { value: opts.yaw ?? 0 } },
+    vertexShader: /* glsl */`
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = p.xyww;
+      }`,
+    fragmentShader: /* glsl */`
+      uniform sampler2D uMap; uniform float uHor; uniform float uBright; uniform float uYaw;
+      varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        float az = atan(d.x, -d.z) + uYaw;
+        float s = az / 3.14159265 + 0.5;
+        float u = 1.0 - abs(1.0 - mod(s, 2.0));
+        float v = clamp(uHor + asin(clamp(d.y, -1.0, 1.0)) / 1.5707963, 0.0, 1.0);
+        vec3 col = texture2D(uMap, vec2(u, v)).rgb * uBright;
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
+      }`,
+    side: THREE.BackSide, depthWrite: false, fog: false,
+  });
+  m.toneMapped = false;
+  const mesh = new THREE.Mesh(g, m);
+  mesh.renderOrder = -9;
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  const size = stageTuning.sky < 0.5 || stageTuning.texRes < 2048 ? 1024 : 2048;
+  new THREE.TextureLoader().load(`${assetBase()}stages/sky/${name}_${size}.webp`, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    m.uniforms.uMap!.value = t;
+    mesh.visible = true;
+    onReady(mesh);
+  }, undefined, () => { /* keep gradient sky */ });
+  return mesh;
+}
 
 /** Accumulates static geometry (pos/normal/color/uv) into one indexed BufferGeometry. */
 export class Merger {

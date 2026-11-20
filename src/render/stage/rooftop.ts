@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { makeToonMaterial, makeGlowMaterial } from '../materials';
 import { Crowd, ringSpots, Banners, LanternStrings } from './festival';
-import { Merger, M, addNearFade, skyDome, canvas, canvasTex, rand, neonTexture, glowTexture, disposeGroup, type StageBuild } from './common';
+import { Merger, M, addNearFade, skyDome, canvas, canvasTex, rand, neonTexture, glowTexture, disposeGroup, loadStageTex, skyPanorama, worldUV, type StageBuild } from './common';
 
 function floorTexture(): THREE.CanvasTexture {
   const { cv, c } = canvas(512, 512);
@@ -64,15 +64,19 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
+  // owner concrete tile on the floor (procedural texture stays if it fails to load)
+  loadStageTex('rooftop_concrete', roofHalf / 2, (t) => { floorMat.map = t; floorMat.color.set('#b8bcd8'); floorMat.needsUpdate = true; });
   // ---------- static props merged
   const m = new Merger();
+  const mc = new Merger(); // concrete masonry (parapet, curb, stair house, bleachers): owner concrete texture
+
   const R = rand(3);
   // parapet around the roof edge
   for (const s of [-1, 1]) {
-    m.add(new THREE.BoxGeometry(roofHalf * 2 + 0.6, 0.9, 0.3), M([0, 0.45, s * (roofHalf + 0.15)]), '#4a4d60');
-    m.add(new THREE.BoxGeometry(0.3, 0.9, roofHalf * 2 + 0.6), M([s * (roofHalf + 0.15), 0.45, 0]), '#4a4d60');
-    m.add(new THREE.BoxGeometry(roofHalf * 2 + 0.7, 0.08, 0.4), M([0, 0.92, s * (roofHalf + 0.15)]), '#6a6e85');
-    m.add(new THREE.BoxGeometry(0.4, 0.08, roofHalf * 2 + 0.7), M([s * (roofHalf + 0.15), 0.92, 0]), '#6a6e85');
+    mc.add(new THREE.BoxGeometry(roofHalf * 2 + 0.6, 0.9, 0.3), M([0, 0.45, s * (roofHalf + 0.15)]), '#4a4d60');
+    mc.add(new THREE.BoxGeometry(0.3, 0.9, roofHalf * 2 + 0.6), M([s * (roofHalf + 0.15), 0.45, 0]), '#4a4d60');
+    mc.add(new THREE.BoxGeometry(roofHalf * 2 + 0.7, 0.08, 0.4), M([0, 0.92, s * (roofHalf + 0.15)]), '#6a6e85');
+    mc.add(new THREE.BoxGeometry(0.4, 0.08, roofHalf * 2 + 0.7), M([s * (roofHalf + 0.15), 0.92, 0]), '#6a6e85');
   }
   // fence posts & rails at the arena walls
   const fh = 2.3;
@@ -91,8 +95,8 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   }
   // fence base curb
   for (const s of [-1, 1]) {
-    m.add(new THREE.BoxGeometry(half * 2 + 0.2, 0.12, 0.18), M([0, 0.06, s * half]), '#3e4152');
-    m.add(new THREE.BoxGeometry(0.18, 0.12, half * 2 + 0.2), M([s * half, 0.06, 0]), '#3e4152');
+    mc.add(new THREE.BoxGeometry(half * 2 + 0.2, 0.12, 0.18), M([0, 0.06, s * half]), '#3e4152');
+    mc.add(new THREE.BoxGeometry(0.18, 0.12, half * 2 + 0.2), M([s * half, 0.06, 0]), '#3e4152');
   }
   // water tank on legs (corner)
   const tx = half + 1.9, tz = -(half + 1.8);
@@ -109,8 +113,8 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   }
   // stair house with door (other corner)
   const sx = -(half + 1.9), sz = -(half + 1.4);
-  m.add(new THREE.BoxGeometry(3.0, 3.0, 2.4), M([sx, 1.5, sz]), '#8e92a6');
-  m.add(new THREE.BoxGeometry(3.3, 0.2, 2.7), M([sx, 3.1, sz]), '#5a5e72');
+  mc.add(new THREE.BoxGeometry(3.0, 3.0, 2.4), M([sx, 1.5, sz]), '#8e92a6');
+  mc.add(new THREE.BoxGeometry(3.3, 0.2, 2.7), M([sx, 3.1, sz]), '#5a5e72');
   m.add(new THREE.BoxGeometry(0.95, 2.0, 0.06), M([sx + 0.6, 1.0, sz + 1.21]), '#4a5a7a');
   m.add(new THREE.BoxGeometry(0.06, 0.06, 0.12), M([sx + 0.25, 1.0, sz + 1.26]), '#d0d0d0');
   m.add(new THREE.BoxGeometry(0.7, 0.35, 0.05), M([sx - 0.7, 2.2, sz + 1.21]), '#ffe8a0');
@@ -124,14 +128,27 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   const skipCorner = (x: number, z: number) => Math.hypot(x - tx, z - tz) < 2.0 || Math.hypot(x - sx, z - sz) < 2.3;
   for (let r = 1; r < 3; r++) {
     const d = half + 0.75 + r * 0.8, y = r * 0.35;
-    m.add(new THREE.BoxGeometry((half + 3.3) * 2, y, 0.8), M([0, y / 2, -d]), r % 2 ? '#3c3f58' : '#454866');
-    for (const sx2 of [-1, 1]) m.add(new THREE.BoxGeometry(0.8, y, (half + 0.4) * 2), M([sx2 * d, y / 2, 0.6]), r % 2 ? '#3c3f58' : '#454866');
+    mc.add(new THREE.BoxGeometry((half + 3.3) * 2, y, 0.8), M([0, y / 2, -d]), r % 2 ? '#3c3f58' : '#454866');
+    for (const sx2 of [-1, 1]) mc.add(new THREE.BoxGeometry(0.8, y, (half + 0.4) * 2), M([sx2 * d, y / 2, 0.6]), r % 2 ? '#3c3f58' : '#454866');
   }
   void R;
   addNearFade(toon);
   const props = new THREE.Mesh(m.build(), toon);
   props.receiveShadow = true;
   group.add(props);
+  const concMat = makeToonMaterial({ vertexColors: true, shadowTint: '#5a5a9a', rimStrength: 0 });
+  addNearFade(concMat);
+  const concGeo = mc.build();
+  worldUV(concGeo, 3);
+  const conc = new THREE.Mesh(concGeo, concMat);
+  conc.receiveShadow = true;
+  group.add(conc);
+  loadStageTex('rooftop_concrete', 1, (t) => {
+    concMat.map = t; concMat.needsUpdate = true;
+    const c = concGeo.attributes.color as THREE.BufferAttribute; // lighten the flat colours so the texture reads
+    for (let i = 0; i < c.count; i++) c.setXYZ(i, 0.62 + c.getX(i) * 0.7, 0.62 + c.getY(i) * 0.7, 0.66 + c.getZ(i) * 0.7);
+    c.needsUpdate = true;
+  });
   // ---------- chain-link fence panels (one draw call)
   const fm = new Merger();
   const panel = new THREE.PlaneGeometry(1, 1);
@@ -208,17 +225,28 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
     { text: 'ラーメン', color: '#ff4a4a', font: 'bold 150px "Noto Sans CJK JP", sans-serif', w: 180, h: 640, pos: [-20, 7, 30], rot: 2.6, size: [2, 7], vertical: true },
   ];
   const glowT = glowTexture('rgba(255,255,255,0.55)');
+  const signMeshes: THREE.Mesh[] = [];
   for (const s of signs) {
     const tex = neonTexture(s.text, s.color, s.font, s.w, s.h, !!s.vertical);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(s.size[0], s.size[1]), makeGlowMaterial('#ffffff', { map: tex }));
     mesh.position.set(...s.pos);
     mesh.rotation.y = s.rot;
     group.add(mesh);
+    signMeshes.push(mesh);
     const halo = new THREE.Mesh(new THREE.PlaneGeometry(s.size[0] * 1.7, s.size[1] * 1.9), makeGlowMaterial(s.color, { map: glowT, additive: true, opacity: 0.35 }));
     halo.position.copy(mesh.position).add(new THREE.Vector3(Math.sin(s.rot), 0, Math.cos(s.rot)).multiplyScalar(-0.05));
     halo.rotation.y = s.rot;
     group.add(halo);
   }
+  // owner neon sign sheet: crop the katakana RAMEN sign onto the ramen board (additive, so the black backdrop drops out)
+  const ramen = signMeshes[2]!;
+  loadStageTex('neon_sign_glow', 1, (t) => {
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.repeat.set(0.25, 0.1); t.offset.set(0, 1 - 0.35);
+    const mt = ramen.material as THREE.MeshBasicMaterial;
+    mt.map = t; mt.blending = THREE.AdditiveBlending; mt.depthWrite = false; mt.needsUpdate = true;
+    ramen.scale.set(0.9, 1.15, 1);
+  });
   // sign on the stair house
   const small = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.5), makeGlowMaterial('#ffffff', { map: neonTexture('屋上', '#ff5fa0', 'bold 120px "Noto Sans CJK JP", sans-serif', 400, 140) }));
   small.position.set(sx, 2.7, sz + 1.24);
@@ -291,6 +319,9 @@ export function buildRooftop(half: number, quality: 'low' | 'medium' | 'high' = 
   group.add(lanterns.group);
   const blink: THREE.MeshBasicMaterial[] = [];
   group.traverse((o) => { const mm2 = (o as THREE.Mesh).material as THREE.MeshBasicMaterial; if (mm2 && mm2.blending === THREE.AdditiveBlending && mm2.map === glowT) blink.push(mm2); });
+  // owner painted skyline replaces the procedural city ring / stars / moon once loaded (they stay as the fallback)
+  const painted = skyPanorama('rooftop', 0.4, () => { inst.visible = false; stars.visible = false; moon.visible = false; glowRing.visible = false; }, { bright: 0.95 });
+  group.add(painted);
   const base = blink.map((b) => b.opacity);
   return {
     group,

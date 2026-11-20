@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { makeToonMaterial, makeGlowMaterial } from '../materials';
 import { Crowd, ringSpots, Banners, LanternStrings } from './festival';
-import { Merger, M, addNearFade, skyDome, canvas, canvasTex, rand, glowTexture, disposeGroup, type StageBuild } from './common';
+import { Merger, M, addNearFade, skyDome, canvas, canvasTex, rand, glowTexture, disposeGroup, loadStageTex, skyPanorama, worldUV, type StageBuild } from './common';
 
 function stoneTexture(): THREE.CanvasTexture {
   const { cv, c } = canvas(512, 512);
@@ -85,38 +85,42 @@ export function buildShrine(half: number, quality: 'low' | 'medium' | 'high'): S
   // floor
   const st = stoneTexture();
   st.repeat.set(courtHalf / 2.5, courtHalf / 2.5);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(courtHalf * 2, courtHalf * 2), makeToonMaterial({ map: st, shadowTint: '#a07a90', rimStrength: 0 }));
+  const floorMat = makeToonMaterial({ map: st, shadowTint: '#a07a90', rimStrength: 0 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(courtHalf * 2, courtHalf * 2), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
+  // owner flagstone tile (~3 m per repeat); procedural flagstones remain if it fails to load
+  loadStageTex('shrine_stone', courtHalf * 2 / 3, (t) => { floorMat.map = t; floorMat.color.set('#e8d8d8'); floorMat.needsUpdate = true; });
   // outer ground (moss/gravel) ring
   const ground = new THREE.Mesh(new THREE.RingGeometry(courtHalf * 1.3, 140, 32, 1), new THREE.MeshBasicMaterial({ color: '#4a3a3a' }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02;
   group.add(ground);
   const m = new Merger();
+  const fw = new Merger(); // wooden fence (owner wood texture)
   const R = rand(8);
   // wooden fence at walls: posts, two rails, slats
   const wood = '#7a4a2a', woodL = '#9a6238';
   const fh = 1.15;
   for (let i = -half; i <= half + 1e-3; i += 1.0) {
     for (const s of [-1, 1]) {
-      m.add(new THREE.BoxGeometry(0.12, fh + 0.15, 0.12), M([i, (fh + 0.15) / 2, s * half]), wood);
-      m.add(new THREE.BoxGeometry(0.16, 0.05, 0.16), M([i, fh + 0.17, s * half]), '#3a2a20');
+      fw.add(new THREE.BoxGeometry(0.12, fh + 0.15, 0.12), M([i, (fh + 0.15) / 2, s * half]), wood);
+      fw.add(new THREE.BoxGeometry(0.16, 0.05, 0.16), M([i, fh + 0.17, s * half]), '#3a2a20');
       if (Math.abs(i) < half - 1e-3) {
-        m.add(new THREE.BoxGeometry(0.12, fh + 0.15, 0.12), M([s * half, (fh + 0.15) / 2, i]), wood);
-        m.add(new THREE.BoxGeometry(0.16, 0.05, 0.16), M([s * half, fh + 0.17, i]), '#3a2a20');
+        fw.add(new THREE.BoxGeometry(0.12, fh + 0.15, 0.12), M([s * half, (fh + 0.15) / 2, i]), wood);
+        fw.add(new THREE.BoxGeometry(0.16, 0.05, 0.16), M([s * half, fh + 0.17, i]), '#3a2a20');
       }
     }
   }
   for (const s of [-1, 1]) for (const y of [0.35, fh - 0.08]) {
-    m.add(new THREE.BoxGeometry(half * 2, 0.08, 0.06), M([0, y, s * half]), woodL);
-    m.add(new THREE.BoxGeometry(0.06, 0.08, half * 2), M([s * half, y, 0]), woodL);
+    fw.add(new THREE.BoxGeometry(half * 2, 0.08, 0.06), M([0, y, s * half]), woodL);
+    fw.add(new THREE.BoxGeometry(0.06, 0.08, half * 2), M([s * half, y, 0]), woodL);
   }
   // vertical slats (lattice) between rails
   for (let i = -half + 0.25; i < half; i += 0.25) {
     for (const s of [-1, 1]) {
-      m.add(new THREE.BoxGeometry(0.035, fh - 0.45, 0.03), M([i, 0.35 + (fh - 0.45) / 2, s * half]), woodL);
-      m.add(new THREE.BoxGeometry(0.03, fh - 0.45, 0.035), M([s * half, 0.35 + (fh - 0.45) / 2, i]), woodL);
+      fw.add(new THREE.BoxGeometry(0.035, fh - 0.45, 0.03), M([i, 0.35 + (fh - 0.45) / 2, s * half]), woodL);
+      fw.add(new THREE.BoxGeometry(0.03, fh - 0.45, 0.035), M([s * half, 0.35 + (fh - 0.45) / 2, i]), woodL);
     }
   }
   // red torii gate behind the back wall
@@ -207,6 +211,17 @@ export function buildShrine(half: number, quality: 'low' | 'medium' | 'high'): S
   const props = new THREE.Mesh(m.build(), toon);
   props.castShadow = false; props.receiveShadow = true;
   group.add(props);
+  const fenceMat = makeToonMaterial({ vertexColors: true, shadowTint: '#9a6a8a', rimStrength: 0 });
+  addNearFade(fenceMat);
+  const fenceGeo = fw.build();
+  worldUV(fenceGeo, 1.4);
+  group.add(new THREE.Mesh(fenceGeo, fenceMat));
+  loadStageTex('wooden_fence', 1, (t) => {
+    fenceMat.map = t; fenceMat.needsUpdate = true;
+    const c = fenceGeo.attributes.color as THREE.BufferAttribute; // lighten flat colours so the wood grain reads
+    for (let i = 0; i < c.count; i++) c.setXYZ(i, 0.8 + c.getX(i) * 0.5, 0.8 + c.getY(i) * 0.5, 0.8 + c.getZ(i) * 0.5);
+    c.needsUpdate = true;
+  });
   const leafGeo = new THREE.IcosahedronGeometry(1, quality === 'low' ? 0 : 1);
   const leafMat = makeToonMaterial({ shadowTint: '#c86a9a', rimColor: '#fff0f6', rimStrength: 0.25 });
   const foliage = new THREE.InstancedMesh(leafGeo, leafMat, clumps.length);
@@ -229,6 +244,9 @@ export function buildShrine(half: number, quality: 'low' | 'medium' | 'high'): S
   const sunDir = new THREE.Vector3(0.6, 0.28, -0.75).normalize();
   const sky = skyDome([[0, '#ffb06a'], [0.08, '#ff8a7a'], [0.25, '#d0628a'], [0.55, '#5a4a9a'], [1, '#26306a']], { sunDir, sunColor: '#fff0c0', sunSize: 0.0025, glow: 0.6 });
   group.add(sky);
+  // owner painted sunset replaces the mountain cards once loaded
+  const mountains = group.children.filter((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).type === 'MeshBasicMaterial' && o.position.y === -2);
+  group.add(skyPanorama('shrine', 0.4, () => { for (const o of mountains) o.visible = false; }, { bright: 1 }));
   // festival: crowd behind the fence, nobori banners, lantern strings, yatai stalls
   const treeSkip = (x: number, z: number) => trees.some(([tx2, tz2]) => Math.hypot(x - tx2, z - tz2) < 1.1) || lanternSpots.some(([lx, lz]) => Math.hypot(x - lx, z - lz) < 0.8);
   const spots = ringSpots(half + 0.9, quality === 'low' ? 2 : 4, { spacing: quality === 'low' ? 0.85 : 0.6, rowDepth: 0.75, tier: 0.0, sides: ['n', 'e', 'w'], seed: 9, skip: (x, z) => treeSkip(x, z) || z > half + 0.4 || (Math.abs(x) < gw + 0.6 && z < -half - 2.2) });
