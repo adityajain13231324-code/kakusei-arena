@@ -99,7 +99,7 @@ the game, the controller could mix `state.seed` into its PRNG seed.
 Damage below is with no Heat stacks, vs any opponent (the BnBs are verified on all four).
 Notation: numpad, `,` = string / follow-up, `xx` = cancel, `66` = dash, `(wall)` = defender ~0.7 m from a wall.
 
-### Kaito — all-rounder (1020 HP)
+### Kaito — all-rounder (1050 HP)
 Plan: mid-range pressure. Jab (+1) and Blazing Elbow (−3, counter-hit stagger) keep turns,
 Homura Shot controls mid range, every hit-confirm ends in Blaze Knuckle (cashes in Heat stacks).
 Rising Phoenix (7f, invincible) is the reversal; Cinder Drop bounces juggles.
@@ -145,7 +145,7 @@ Thrust −4 → −8.
 | Ultimate ender (3 bars) | `3H, H, 236H+S` | 8 | 418 |
 | Wall splat (wall) | `3H, H, H,H (splat), 66 H, H,H` | 5 | 369 |
 
-### Goro — armored grappler (1080 HP)
+### Goro — armored grappler (1140 HP)
 Plan: walk forward behind Stone Skin (H, 3H, 6H armor highs/mids), force the opponent to block
 or crouch, then Mountain Hug (unbreakable, grabs crouchers) or a normal throw. Avalanche Charge
 ends combos into the wall. Lows and throws beat his armor.
@@ -179,9 +179,37 @@ Before this pass, at hard: Goro won 90–100% against Kaito and Shiori, Shiori l
 matchup, and juggles barely worked (launcher recovery outlasted the opponent's airtime).
 
 
+### Full roster with Soul Realms (2026-11-20)
+
+The original four now have Soul Realms too (Sun Forge, Moonless Void, Petal Storm Dojo, Mountain Temple, rules in
+docs/CROSSOVER.md section 1), and the CPU opens them when awakened with 300 Ki. Changes in that pass: Kaito HP
+1020 → 1050, Goro HP 1080 → 1140 and walk 40 → 44, Ren / Shiori realm-aware CPU, several crossover specials trimmed
+(Rasengan 95 → 88, Oni Giri 95 → 85 / 21f, Thunder Spear 110 → 80, Red 100 → 92, Rocket 110 → 100), Eren HP
+970 → 980, and Luffy HP 1000 → 990 (the WIP had raised it to 1020, which put him at 61% vs the original four).
+
+`npm run test:balance`, CPU hard vs hard, 100 matches per cell, sides alternate (row fighter's win rate):
+
+| vs | kaito | shiori | ren | goro | gojo | naruto | zoro | luffy | eren | avg |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **kaito** | — | 45% | 53% | 42% | 40% | 61% | 49% | 44% | 60% | 49% |
+| **shiori** | 55% | — | 49% | 43% | 59% | 33% | 50% | 41% | 49% | 47% |
+| **ren** | 47% | 51% | — | 52% | 53% | 44% | 44% | 60% | 28% | 47% |
+| **goro** | 58% | 57% | 49% | — | 41% | 47% | 57% | 40% | 55% | 50% |
+| **gojo** | 60% | 41% | 47% | 59% | — | 46% | 52% | 76% | 43% | 53% |
+| **naruto** | 39% | 67% | 56% | 53% | 54% | — | 70% | 53% | 61% | 57% |
+| **zoro** | 51% | 50% | 56% | 43% | 48% | 30% | — | 66% | 61% | 51% |
+| **luffy** | 56% | 59% | 40% | 60% | 25% | 47% | 34% | — | 59% | 48% |
+| **eren** | 40% | 51% | 72% | 45% | 57% | 40% | 39% | 41% | — | 48% |
+
+All four originals average 47–50% over the full roster, and every crossover fighter averages 50–54% against the
+original four. 8979 rounds, average 34.3 s, 186 time-outs. Mirror P1 rate 42–56% per fighter, 50% pooled.
+Still outside the 35–65% cell band (5 checks fail): naruto vs shiori 67%, eren vs ren 72%, gojo vs luffy 76%,
+naruto vs zoro 70%, luffy vs zoro 34%. Four of them are crossover-vs-crossover; eren vs ren was already 85% before
+this pass. Next tuning targets: Eren's zoning vs Ren and Gojo vs Luffy.
+
 ### Crossover Pack (Gojo, Naruto, Zoro, Luffy, Eren)
 Kits, BnB combos, Soul Realm rules and the new contract fields are in **docs/CROSSOVER.md**.
-Win rate vs the original four (CPU hard vs hard, 100 matches per cell, sides alternate; target 40-60% on average):
+Win rate vs the original four before the Soul Realm pass (kept for history; current numbers in the table above):
 
 | Fighter | HP | vs kaito | vs shiori | vs ren | vs goro | **avg** |
 |---|---|---|---|---|---|---|

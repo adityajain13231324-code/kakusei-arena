@@ -15,7 +15,7 @@ export const LUFFY: CharDef = {
   id: 'luffy',
   name: 'MONKEY D. LUFFY',
   title: 'The Rubber Captain',
-  maxHp: 1020,
+  maxHp: 990,
   walkSpeed: 50,
   backWalkSpeed: 40,
   dashSpeed: 105,

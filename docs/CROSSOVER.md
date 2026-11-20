@@ -29,6 +29,15 @@ Inputs use numpad notation for a fighter facing right (6 = forward). Easy scheme
 | Zoro | King of Hell (`king_of_hell`) | 360 f | Blocked slashes still cut: chip = 40% of the move's damage, and guard meter drain is doubled. |
 | Luffy | Gear Fifth (`gear_fifth`) | 360 f | Cartoon physics: the opponent's juggle gravity is 2/3, and a juggled opponent bounces off the floor up to 2 extra times (event `groundBounce` tag `gear5`). Juggle hit cap still applies. `form = 'gear5'`. |
 | Eren | The Paths (`paths`) | 360 f | Every 60 frames (on frames 30, 90, ...) a Titan-army stomp hits a grounded opponent: 45-damage **low**, knockdown. The opponent can crouch-block it or jump over it. |
+| Kaito | Sun Forge (`sun_forge`) | 360 f | Heat stacks fill to 3 when it opens. Every strike / projectile the opponent **blocks** adds 35% of its damage as **burn** (`FighterState.burn`), ticking 6 damage every 5 frames (event `burn`). Burn cannot KO. |
+| Shiori | Moonless Void (`moonless_void`) | 300 f | Shiori is **invisible between attacks** (`FighterState.veiled` = 1 outside attack / hit states; the renderer fades her to a faint shimmer and hides her aura and shadow). Her strikes start 2 frames earlier and track sidesteps fully. CPU reactions to her are 6 frames late. |
+| Ren | Petal Storm Dojo (`petal_storm`) | 360 f | Quick Draw cancels into another Quick Draw (S) from its first active frame. |
+| Goro | Mountain Temple (`mountain_temple`) | 360 f | Always-on **1-hit stone armor** (`FighterState.realmArmor` = 1 while ready): the first high / mid strike is absorbed at half damage with no stun (`hit` tag `armor`), then the armor re-forms 45 frames later. Lows, throws, unblockables, ultimates and hits while Goro is airborne or already stunned go through. |
+
+Presentation (render / audio / UI only, read from `state.realm`, the fighter fields and events): each realm has a
+procedural world in `src/render/stage/realms/` (registered in `realms/index.ts`, prewarmed with the match), a
+realm music layer + opening stinger (`src/audio/music.ts`, `src/audio/crossover.ts`), a title card
+(`src/ui/meta.ts` REALM, `src/vfx/tex.ts` `rv_<kind>`) and commentator lines (`src/ui/broadcast.ts`).
 
 ---------------------------------------------------------------------------------------------------------------
 
