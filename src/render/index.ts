@@ -323,10 +323,11 @@ export class GameRenderer {
       let cheer = 0;
       for (const e of state.events) {
         if ((e.type === 'hit' || e.type === 'counter' || e.type === 'ultimateHit' || e.type === 'throw') && e.target !== undefined) {
-          const st = STRENGTH[e.strength ?? 'medium'] ?? 0.4;
-          this.active[e.target]?.onHit(st);
+          const st = e.type === 'ultimateHit' ? 1 : STRENGTH[e.strength ?? 'medium'] ?? 0.4;
+          const atk = state.fighters[e.player], def = state.fighters[e.target];
+          this.active[e.target]?.onHit(st, def.pos.x - atk.pos.x, def.pos.z - atk.pos.z, e.type === 'counter');
+          this.active[e.player]?.onStrike(st);
           // Gear Fifth cartoon physics: hit reactions squash & stretch
-          const atk = state.fighters[e.player];
           if (atk && (atk.form === 'gear5' || state.realm?.kind === 'gear_fifth')) this.active[e.target]?.squash(0.12 + st * 0.3);
         }
         if (e.type === 'groundBounce' && e.tag === 'gear5' && e.target !== undefined) this.active[e.target]?.squash(0.35);

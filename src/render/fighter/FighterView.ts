@@ -44,6 +44,9 @@ const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THRE
 const _qI = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _sc = new THREE.Vector3();
+const _hs = new THREE.Vector3();
+/** seconds to ease from the held hitstop position back onto the sim position */
+const HS_EASE = 4 / 60;
 const _AX = new THREE.Vector3(1, 0, 0), _AY = new THREE.Vector3(0, 1, 0);
 const _cA = new THREE.Vector3(), _cB = new THREE.Vector3();
 const VEIL_TINT = new THREE.Color('#9a7cff'), STONE_RIM = new THREE.Color('#ffcf6a');
@@ -118,6 +121,13 @@ export class FighterView {
   private wasAwakened = false;
   private popT = 0;
   private flash = 0;
+  // ---- hitstop feel (P8, render only): defender shake over the freeze, contact flash / smear, ease back into motion
+  private prevHs = 0; private hsMax = 1; private hsAmp = 0; private hsDX = 1; private hsDZ = 0;
+  private contactT = 0; private contactK = 0;
+  private strikeT = 0; private strikeK = 0;
+  private easeT = 1; private readonly easeFrom = new THREE.Vector3(); private readonly basePos = new THREE.Vector3();
+  /** cap for the white contact flash on the body (reduce flashing) */
+  flashCap = 1;
   private hasPose = false;
   private yaw = 0;
   private lastAnchor = new THREE.Vector3(1e9, 0, 0);
@@ -533,7 +543,7 @@ export class FighterView {
     const fx = p.facing.x + (f.facing.x - p.facing.x) * alpha;
     const fz = p.facing.z + (f.facing.z - p.facing.z) * alpha;
     if (fx * fx + fz * fz > 1) this.yaw = Math.atan2(fx, fz);
-    this.group.position.set(x, y, z);
+    this.group.position.copy(this.hitstopFeel(f, p, x, y, z, alpha, dt, time));
     this.group.rotation.set(0, this.yaw, 0);
     const L = this.look;
     // ---- awakening (bottom→top atlas wipe, pop, plates)
@@ -585,8 +595,10 @@ export class FighterView {
     this.applyPose(this.pose);
     this.extW = 0;
     if (this.animV2 && this.clips.count && this.clips.apply(this.anim.ext, dt)) { this.extW = this.clips.weight; this.group.updateMatrixWorld(true); }
-    this.strikeAssist(f, alpha);
-    this.smear(f, alpha);
+    // frozen move frame (hitstop): hold the strike pose exactly instead of re-sweeping alpha every tick
+    const am = prev && prev.moveId === f.moveId && prev.moveFrame === f.moveFrame ? 1 : alpha;
+    this.strikeAssist(f, am);
+    this.smear(f, am, dt);
     this.simChains(dt);
     for (let i = 0; i < this.stretchN; i++) this.applyStretch(this.stretchQ[i][0], this.stretchQ[i][1]);
     // ---- material uniforms
@@ -600,7 +612,10 @@ export class FighterView {
     u.uRimWidth.value = 0.62 - 0.1 * awk;
     if (f.counterHitFlash > 0) this.flash = Math.max(this.flash, 0.45);
     this.flash = Math.max(0, this.flash - dt * 5);
-    u.uFlash.value = Math.max(this.flash, this.ghostTint);
+    // 2-frame contact pop on top of the normal flash fade (does not lengthen it)
+    let pop = 0;
+    if (this.contactT > 1e-4) { this.contactT -= dt; pop = this.contactK * this.flashCap; }
+    u.uFlash.value = Math.max(this.flash, pop, this.ghostTint);
     if (L.outlineAwk && u.uHue.value === 0) u.uOutlineColor.value.copy(awk > 0.5 ? this.outAwk : this.outBase);
     if (this.formRim) {
       u.uRimColor.value.copy(this.formRim);
@@ -720,9 +735,52 @@ export class FighterView {
   }
 
   /** register a hit on this fighter (flash) */
-  onHit(strength: number): void {
-    this.flash = Math.max(this.flash, 0.25 + strength * 0.25);
+  onHit(strength: number, dx = 0, dz = 0, counter = false): void {
+    this.flash = Math.max(this.flash, (0.25 + strength * 0.25) * this.flashCap);
     this.anim.onHit(strength);
+    // hitstop shake: amplitude by strength (counter hits a bit more), along the hit direction
+    const amp = (0.012 + 0.042 * strength) * (counter ? 1.3 : 1);
+    this.hsAmp = this.contactT > 0 ? Math.max(this.hsAmp, amp) : amp; // hit + counter events of one contact
+    const l = Math.hypot(dx, dz);
+    if (l > 1e-6) { this.hsDX = dx / l; this.hsDZ = dz / l; }
+    // 2-frame white contact flash, then the normal flash fade
+    this.contactT = 2 / 60;
+    this.contactK = Math.min(0.75, 0.38 + strength * 0.37);
+  }
+  /** this fighter's strike connected: 2-3 frame contact smear on the striking limb (render only) */
+  onStrike(strength: number): void { this.strikeT = 2.5 / 60; this.strikeK = strength; }
+
+  /**
+   * Render-side hitstop curve: the sim freezes both fighters for N frames (balance data, untouched). Here the
+   * defender shakes along the hit direction with an amplitude that decays over the freeze, and when the freeze ends
+   * both bodies ease from the held position back onto the sim position over ~4 frames instead of snapping.
+   */
+  private hitstopFeel(f: FighterState, p: FighterState, x: number, y: number, z: number, alpha: number, dt: number, time: number): THREE.Vector3 {
+    const hs = f.hitstop;
+    if (hs > this.prevHs) this.hsMax = Math.max(1, hs);
+    const out = _hs.set(x, y, z);
+    if (this.prevHs > 0 && hs === 0) {
+      // freeze over: ease out of the held pose (skip on teleports / round resets)
+      if (this.basePos.distanceToSquared(out) < 0.36) { this.easeT = 0; this.easeFrom.copy(this.basePos); }
+      this.hsAmp = 0;
+    }
+    this.prevHs = hs;
+    if (this.easeT < HS_EASE) {
+      this.easeT += dt;
+      const u = Math.min(1, this.easeT / HS_EASE);
+      out.lerpVectors(this.easeFrom, out, u * u * (3 - 2 * u));
+    }
+    this.basePos.copy(out);
+    if (hs > 0 && this.hsAmp > 0) {
+      const hsI = Math.max(0, p.hitstop + (hs - p.hitstop) * alpha);
+      const k = Math.min(1, hsI / this.hsMax);
+      const a = this.hsAmp * k * Math.sqrt(k);
+      const w = Math.sin(time * 188.5), w2 = Math.cos(time * 131.9); // ~30 Hz along the hit, ~21 Hz across
+      out.x += (this.hsDX * w - this.hsDZ * w2 * 0.45) * a;
+      out.z += (this.hsDZ * w + this.hsDX * w2 * 0.45) * a;
+      out.y += w2 * a * 0.25;
+    }
+    return out;
   }
 
   // --------------------------------------------------------------------------- pose → bones
@@ -861,19 +919,25 @@ export class FighterView {
    * Smear / impact frames (Animation v2): on heavy, special, Ki and ultimate moves the striking limb stretches
    * along its length for a few frames around the first active frame (anime smear), reusing the rubber-limb stretch.
    */
-  private smear(f: FighterState, alpha: number): void {
+  private smear(f: FighterState, alpha: number, dt: number): void {
+    const contact = this.strikeT > 1e-4;
+    if (contact) this.strikeT -= dt;
     if (!this.animV2 || this.rubber || !f.moveId || f.mode !== 'attack') return;
     const mv = this.lookup(this.char, f.moveId);
     if (!mv) return;
-    const sup = mv.strength === 'super' || mv.kind === 'ultimate';
-    if (!(sup || mv.strength === 'heavy' || mv.kind === 'special' || mv.kind === 'ki')) return;
     const a = this.assistFor(f.moveId);
     if (!a) return;
-    const fr = f.moveFrame - 1 + alpha; // displayed (interpolated) move frame
-    const start = a.hbs[0].from - 1; // first active moveFrame
-    const u = (fr - (start - 2)) / 4.5;
-    if (u <= 0 || u >= 1) return;
-    const K = 1 + (sup ? 0.34 : 0.24) * Math.sin(Math.PI * u) * (1 - 0.5 * this.extW);
+    let K = 1;
+    const sup = mv.strength === 'super' || mv.kind === 'ultimate';
+    if (sup || mv.strength === 'heavy' || mv.kind === 'special' || mv.kind === 'ki') {
+      const fr = f.moveFrame - 1 + alpha; // displayed (interpolated) move frame
+      const start = a.hbs[0].from - 1; // first active moveFrame
+      const u = (fr - (start - 2)) / 4.5;
+      if (u > 0 && u < 1) K = 1 + (sup ? 0.34 : 0.24) * Math.sin(Math.PI * u) * (1 - 0.5 * this.extW);
+    }
+    // contact smear: the limb that connected snaps a little longer for 2-3 frames
+    if (contact) K = Math.max(K, 1 + (0.05 + 0.1 * this.strikeK) * (1 - 0.5 * this.extW));
+    if (K <= 1.001) return;
     switch (a.limb) {
       case 'handL': if (this.armL) this.queueStretch(this.armL, K); break;
       case 'handR': if (this.armR) this.queueStretch(this.armR, K); break;
