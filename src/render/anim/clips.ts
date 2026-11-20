@@ -36,7 +36,7 @@ const BINARY = [C.weapon, C.twoHand];
 /** out = a + (b - a) * k for every channel (k may be > 1: extrapolate; binary channels take b) */
 export function mixPose(out: Float32Array, a: Float32Array, b: Float32Array, k: number): Float32Array {
   for (let i = 0; i < NCH; i++) out[i] = a[i] + (b[i] - a[i]) * k;
-  if (k < 0 || k > 1) for (const i of BINARY) out[i] = k > 1 ? b[i] : a[i];
+  if (k < 0 || k > 1) for (let j = 0; j < BINARY.length; j++) { const i = BINARY[j]; out[i] = k > 1 ? b[i] : a[i]; }
   // never push a planted foot through the floor
   if (out[C.fL + 1] < 0.035) out[C.fL + 1] = 0.035;
   if (out[C.fR + 1] < 0.035) out[C.fR + 1] = 0.035;
@@ -242,7 +242,7 @@ const SPECS: Partial<Record<CharId, ProfileSpec>> = {
   ren: { breath: 1.2, breathHz: 0.24, sway: 0.003, swayHz: 0.2, stride: 0.95 },
   // wide sumo stance, heavy side-to-side weight shift
   goro: {
-    stance: { hip: [0, -0.17, 0], hipRot: [8, -14, 0], footL: [0.26, 0.05, 0.12], kneeL: [0.9, 0, 0.8], footLRot: [0, 22], footR: [-0.28, 0.05, -0.12], kneeR: [-0.9, 0, 0.8], footRRot: [0, -38] },
+    stance: { hip: [0, -0.2, 0], hipRot: [10, -24, 0], spine: [6, 0, 0], footL: [0.27, 0.05, 0.2], kneeL: [0.9, 0, 0.8], footLRot: [0, 24], footR: [-0.3, 0.05, -0.2], kneeR: [-0.9, 0, 0.8], footRRot: [0, -40] },
     breath: 2.4, breathHz: 0.3, sway: 0.03, swayHz: 0.45, stride: 0.85, lift: 0.05, heavy: true,
   },
   // crossover pack: their own reads on the generic body
@@ -360,11 +360,13 @@ function buildShowClips(char: CharId, P: Profile): void {
       ], 'win', 58);
       break;
     case 'goro': {
-      const upR: PoseSpec & { from: PoseName } = { from: 'introPose', hip: [0.09, -0.12, 0], hipRot: [6, -6, -12], spine: [6, 0, 8], footR: [-0.42, 0.62, 0.02], kneeR: [-1, 0.4, 0.2], footRRot: [10, -20], handL: [0.24, -0.32, 0.22], handR: [-0.28, -0.04, 0.24], open: [1, 1] };
-      const upL: PoseSpec & { from: PoseName } = { from: 'introPose', hip: [-0.09, -0.12, 0], hipRot: [6, -6, 12], spine: [6, 0, -8], footL: [0.42, 0.62, 0.02], kneeL: [1, 0.4, 0.2], footLRot: [10, 20], handL: [0.28, -0.04, 0.24], handR: [-0.24, -0.32, 0.22], open: [1, 1] };
+      const upR: PoseSpec & { from: PoseName } = { from: 'introPose', hip: [0.09, -0.12, 0], hipRot: [6, -6, -12], spine: [6, 0, 8], footR: [-0.42, 0.62, 0.02], kneeR: [-1, 0.4, 0.2], footRRot: [10, -20], handL: [0.24, -0.32, 0.22], handR: [-0.28, -0.04, 0.24], open: [1, 1], rootYaw: 75 };
+      const upL: PoseSpec & { from: PoseName } = { from: 'introPose', hip: [-0.09, -0.12, 0], hipRot: [6, -6, 12], spine: [6, 0, -8], footL: [0.42, 0.62, 0.02], kneeL: [1, 0.4, 0.2], footLRot: [10, 20], handL: [0.28, -0.04, 0.24], handR: [-0.24, -0.32, 0.22], open: [1, 1], rootYaw: 75 };
+      const sumo: PoseSpec & { from: PoseName } = { from: 'stompExt', rootYaw: 75 };
       P.intro = s([
-        [0, 'introPose'], [16, upR, 'out'], [25, 'stompExt', 'in'], [36, 'stompExt'],
-        [48, upL, 'out'], [57, 'stompExt', 'in'], [68, 'stompExt'],
+        // shiko, turned side-on so the leg raise reads from the side camera
+        [0, 'introPose'], [16, upR, 'out'], [25, sumo, 'in'], [36, sumo],
+        [48, upL, 'out'], [57, sumo, 'in'], [68, sumo],
         [82, 'stance'], [90, 'stance'],
       ], 'intro', 90);
       P.win = s([[0, 'stompExt'], [12, 'win', 'back'], [30, 'win']], 'win', 30);
