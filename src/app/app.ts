@@ -496,8 +496,11 @@ export class App implements AppApi {
     if (s) {
       const top = this.ui.top();
       s.advance(dt);
+      // KO slow motion (offline): animation / VFX follow the slowed sim clock; online timeScale stays 1
+      const ts = s.timeScale;
+      if (r) r.timeScale = ts;
       this.safe('renderer.update', () => r?.update(s.prev, s.state, s.alpha, dt));
-      this.safe('vfx.update', () => this.vfx?.update(dt, s.state));
+      this.safe('vfx.update', () => this.vfx?.update(dt * ts, s.state, dt));
       if (top === 'hud' || top === 'pause' || top === 'settings' || top === 'howto' || top === 'movelist' || top === 'remap') {
         this.hud.refresh(dt, s.state, s);
         this.input.setAwakenReady(this.hud.awakenReady);

@@ -317,6 +317,8 @@ export class GameRenderer {
   update(prev: GameState | null, state: GameState, alpha: number, dt: number): void {
     void this.ensureMatch(state);
     dt = Math.min(Math.max(dt, 0), 0.1);
+    const camDt = dt;
+    dt *= Math.min(1, Math.max(0, this.timeScale));
     this.time += dt;
     // events (once per sim frame)
     if (state.frame !== this.lastEventFrame) {
@@ -355,7 +357,7 @@ export class GameRenderer {
     this.updateSummons(state, dt);
     // giant forms: pull the fight camera back
     this.fcam.zoom += (Math.min(2.6, tall) - this.fcam.zoom) * Math.min(1, dt * 3);
-    this.fcam.update(prev, state, alpha, dt);
+    this.fcam.update(prev, state, alpha, camDt);
     this.updateRealm(state, dt);
     // light follows the fight (tight shadow camera)
     if (this.stage) {
@@ -689,6 +691,15 @@ export class GameRenderer {
 
   /** Optional (additive): directional camera punch (render offset over the sim camera), see FightCamera.punch */
   punch(dx: number, dz: number, k: number, dy = 0): void { this.fcam.punch(dx, dz, k, dy); }
+
+  /** Optional (additive): KO zoom toward the impact point (metres), render only */
+  koFocus(x: number, y: number, z: number): void { this.fcam.koFocus(_v.set(x, y, z)); }
+
+  /**
+   * Optional (additive): sim time scale for the animation / VFX side (KO slow motion, MatchSession.timeScale).
+   * Fighters, crowd and springs run on dt x timeScale; the camera keeps real time so its moves stay smooth.
+   */
+  timeScale = 1;
 
   /** Optional (additive): settings "Camera shake" (off / low / full) + reduce flashing scale shake, punches and body flashes */
   setCameraFeel(level: 'off' | 'low' | 'full', reduceFlashing: boolean): void {

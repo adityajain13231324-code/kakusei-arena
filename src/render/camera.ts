@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import type { GameState } from '../sim/types';
 
 const _c = new THREE.Vector3(), _n = new THREE.Vector3(), _p = new THREE.Vector3(), _t = new THREE.Vector3();
+const sm = (u: number): number => u * u * (3 - 2 * u);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _f = new THREE.Vector3(), _side = new THREE.Vector3();
 
 /** critically damped spring for a vector */
@@ -52,6 +53,9 @@ export class FightCamera {
   private kick = new THREE.Vector3();
   private kickV = new THREE.Vector3();
   private fovK = 0; private fovV = 0;
+  // KO focus: render-only push toward the impact point (real time; online too, where the sim never slows)
+  private focusPt = new THREE.Vector3();
+  private focusT = -1;
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
@@ -68,8 +72,11 @@ export class FightCamera {
 
   reset(): void {
     this.pos.init = false; this.look.init = false; this.lastCine = null;
-    this.kick.set(0, 0, 0); this.kickV.set(0, 0, 0); this.fovK = 0; this.fovV = 0;
+    this.kick.set(0, 0, 0); this.kickV.set(0, 0, 0); this.fovK = 0; this.fovV = 0; this.focusT = -1;
   }
+
+  /** KO: ease toward the impact point over 0.25 s, hold ~1.25 s, ease back over 0.6 s (real seconds) */
+  koFocus(p: THREE.Vector3): void { this.focusPt.copy(p); this.focusT = 0; }
 
   /**
    * Directional camera punch: a short kick along the hit direction (dx, dz: attacker -> defender, any length),
@@ -258,9 +265,24 @@ export class FightCamera {
     cam.up.set(0, 1, 0);
     // the look target takes half the kick, so the punch reads as a jolt of the whole frame rather than a pivot
     _t.copy(this.look.x).addScaledVector(this.kick, 0.5);
+    let fk = 0;
+    if (this.focusT >= 0) {
+      this.focusT += dt;
+      const t = this.focusT;
+      if (t < 0.25) fk = sm(t / 0.25);
+      else if (t < 1.5) fk = 1;
+      else if (t < 2.1) fk = 1 - sm((t - 1.5) / 0.6);
+      else this.focusT = -1;
+      if (fk > 0) {
+        _b.subVectors(this.focusPt, cam.position);
+        const d = _b.length();
+        if (d > 1e-4) cam.position.addScaledVector(_b, (Math.max(0, Math.min(d - 3.0, d * 0.22)) * fk) / d);
+        _t.lerp(this.focusPt, 0.55 * fk);
+      }
+    }
     cam.lookAt(_t);
     if (Math.abs(this.roll) > 1e-4) cam.rotateZ(this.roll);
-    const fov = Math.max(20, this.fov + this.fovK);
+    const fov = Math.max(20, this.fov + this.fovK - 4 * fk);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
   }
 

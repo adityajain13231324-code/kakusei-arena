@@ -684,8 +684,8 @@ export class Effects {
     this.fx.post.screenFlash(0xffffff, 0.85, 3.5);
     this.fx.post.vignettePulse(1.0);
     this.fx.post.speedLines(0.7, 0.2);
-    this.glow(7, 0.5, 0xffffff, 0xffa030, 1, 1.4);
-    this.star(6, 0.4, 0xffffff);
+    this.glow(5, 0.32, 0xffffff, 0xffa030, 1, 1.4);
+    this.star(5, 0.34, 0xffffff);
     this.shock(8, 0.7, 0xffe9a0);
     this.shock(5, 0.5, c, true);
     this.sparks(60, 14, 1.4, 0xffffff, 0xff7a1a, 1.1, 0.9, 6);
@@ -706,6 +706,7 @@ export class Effects {
     }
     this.dustRing(x, z, 16, 7, 1.2, 1.0);
     this.fx.r.addShake(0.2, 30);
+    this.fx.r.koFocus(x, 1.1, z); // zoom toward the impact (render only; the sim slows offline, never online)
     this.fx.O.spawn('ko', x, 2.3, z, 1.7, 1.4);
   }
 

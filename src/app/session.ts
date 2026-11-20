@@ -29,6 +29,8 @@ export interface HistEntry { bits: number; n: number }
 
 const TICK = 1 / 60;
 const END_DELAY_TICKS = 190;
+/** KO slow motion (offline only, real seconds): impact hold at 0.5x while the KO hit's hitstop runs, then 0.25x */
+const KO_HOLD_SCALE = 0.5, KO_SLOW_SCALE = 0.25, KO_SLOW_SECS = 1.0, KO_EASE_SECS = 0.35, KO_MAX_SECS = 3;
 const HIST_MASK = Btn.Up | Btn.Down | Btn.Left | Btn.Right | Btn.L | Btn.H | Btn.K | Btn.S | Btn.Guard | Btn.Ult;
 
 export class MatchSession {
@@ -44,6 +46,13 @@ export class MatchSession {
   showHitboxes = false;
   ended = false;
   failed = false;
+  /**
+   * Real-time multiplier for the sim clock (1 = real time). A KO plays the last hit in slow motion by stepping the sim
+   * less often (it stays deterministic: same inputs, same ticks, just fewer per real second; the renderer
+   * interpolates). Online play never slows: NetSession overrides advance() and keeps a fixed 60 Hz for rollback sync.
+   */
+  timeScale = 1;
+  private koT = -1; private koSlow = 0;
   frame: FrameInfo = { moveName: '-', startup: 0, active: 0, recovery: 0, damage: 0, height: '-', dataOnBlock: null, dataOnHit: null, lastAdv: null, lastKind: null, seq: 0 };
   hist: HistEntry[] = [];
   histVersion = 0;
@@ -71,6 +80,7 @@ export class MatchSession {
     this.state = createMatch(this.cfg);
     this.prev = cloneState(this.state);
     this.acc = 0;
+    this.koT = -1; this.timeScale = 1;
     this.frame = { ...this.frame, moveName: '-', lastAdv: null, lastKind: null, seq: this.frame.seq + 1 };
   }
 
@@ -94,17 +104,30 @@ export class MatchSession {
   /** advance by real dt seconds; runs 0..n sim ticks */
   advance(dt: number): void {
     if (this.paused || this.failed) { this.alpha = 1; return; }
-    this.acc += Math.min(dt, 0.25);
+    const real = Math.min(dt, 0.25);
+    this.timeScale = this.slowScale(real);
+    this.acc += real * this.timeScale;
     let guard = 0;
-    for (;;) {
-      const tickDur = this.state.slowmo > 0 ? TICK * 2 : TICK;
-      if (this.acc < tickDur || guard++ > 12) break;
-      this.acc -= tickDur;
+    while (this.acc >= TICK && guard++ <= 12) {
+      this.acc -= TICK;
       this.tick();
       if (this.failed) break;
     }
-    const tickDur = this.state.slowmo > 0 ? TICK * 2 : TICK;
-    this.alpha = Math.min(1, Math.max(0, this.acc / tickDur));
+    this.alpha = Math.min(1, Math.max(0, this.acc / TICK));
+  }
+
+  /** KO slow-motion curve (real seconds): hold 0.5x during the KO hitstop, 0.25x for ~1 s, ease back to 1x */
+  private slowScale(real: number): number {
+    // (the sim's state.slowmo hint is only set on KO; the KO curve below replaces the old flat 0.5x for it)
+    if (this.koT < 0) return 1;
+    this.koT += real;
+    const fs = this.state.fighters;
+    if (this.koSlow === 0 && (fs[0].hitstop > 0 || fs[1].hitstop > 0) && this.koT < 1) return KO_HOLD_SCALE;
+    this.koSlow += real;
+    const u = (this.koSlow - KO_SLOW_SECS) / KO_EASE_SECS;
+    if (u >= 1 || this.koT > KO_MAX_SECS) { this.koT = -1; return 1; }
+    if (u <= 0) return KO_SLOW_SCALE;
+    return KO_SLOW_SCALE + (1 - KO_SLOW_SCALE) * u * u * (3 - 2 * u);
   }
 
   private tick(): void {
@@ -119,6 +142,7 @@ export class MatchSession {
       this.ticks++;
       if (this.infiniteKi) for (const f of this.state.fighters) f.ki = 300;
       this.processFrameData(this.state.events);
+      if (this.mode !== 'online') for (const e of this.state.events) if (e.type === 'ko') { this.koT = 0; this.koSlow = 0; }
       this.hooks.onEvents(this.state.events, this.state);
       if (this.mode !== 'training' && !this.ended && this.state.round.phase === 'matchEnd') {
         if (++this.endTicks >= END_DELAY_TICKS) {

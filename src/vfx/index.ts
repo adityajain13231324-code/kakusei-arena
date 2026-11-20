@@ -105,12 +105,15 @@ export class VfxSystem {
     }
   }
 
-  /** per render frame */
-  update(dt: number, state: GameState): void {
+  /**
+   * per render frame. dt = effect time (slowed during the KO slow motion); realDt (optional, additive) = wall-clock
+   * seconds for the screen-space flashes / lines so they never linger in slow motion.
+   */
+  update(dt: number, state: GameState, realDt = dt): void {
     dt = Math.min(Math.max(dt, 0), 0.05);
     this.lastState = state;
     this.eff.state = state;
-    this.post.update(dt);
+    this.post.update(Math.min(Math.max(realDt, 0), 0.05));
     this.P.update(dt);
     this.D.update(dt);
     this.O.update(dt);
