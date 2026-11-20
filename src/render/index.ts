@@ -178,6 +178,40 @@ export class GameRenderer {
     v.setQuality(this.quality);
     v.setShadows(this.gfx.shadows !== 'off');
     v.setOutlines(this.gfx.outlines);
+    v.animV2 = this.animV2;
+  }
+
+  // ------------------------------------------------------------------ Animation v2 (docs/ANIMATION.md)
+  private animV2 = true;
+  private eachView(fn: (v: FighterView) => void): void {
+    for (const v of this.views) if (v) fn(v);
+    for (const m of this.formViews) for (const v of m.values()) if (v) fn(v);
+    for (const v of this.menuPool.values()) fn(v);
+    for (const c of this.clones) fn(c.view);
+  }
+  /** true = Animation v2 clip layer, false = the v1 pose blender (Training debug comparison, F3) */
+  get animV2On(): boolean { return this.animV2; }
+  setAnimV2(on: boolean): void { this.animV2 = on; this.eachView((v) => { v.animV2 = on; }); }
+  /**
+   * Add authored clips to every live view of a fighter (dev / tests; files go in characters/<id>/anims.glb).
+   * `root` = the rig the clips were made on, at rest (default: the fighter's own model). Returns views updated.
+   */
+  registerClips(char: CharId, clips: THREE.AnimationClip[], root?: THREE.Object3D): number {
+    let n = 0;
+    this.eachView((v) => { if (v.char === char) { v.addClips({ clips, root }); n++; } });
+    return n;
+  }
+  /** one line per active fighter: clip playing (+ authored clip weight) */
+  animDebug(): string {
+    const out: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const v = this.active[i];
+      if (!v) continue;
+      const w = v.clips.weight;
+      if (!v.animV2) { out.push(`P${i + 1} pose ${v.poseName}`); continue; }
+      out.push(`P${i + 1} ${v.anim.clipName}${w > 0.01 ? ` +clip ${(w * 100) | 0}%` : ''}`);
+    }
+    return out.join(' · ');
   }
 
   private setStage(id: StageId, halfM: number): void {

@@ -17,6 +17,8 @@ import * as THREE from 'three';
 import type { CharId, FighterState, PoseName, HitboxDef } from '../../sim/types';
 import { C, NCH, PAIN_POSES } from '../anim/poses';
 import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
+import { Animator } from '../anim/animator';
+import { ExtClipPlayer, type ClipSource } from '../anim/extclips';
 import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
 import { charLook, resolvePalette, type CharLook } from './looks';
 import { makeFighterUniforms, makeFighterToon, makeFighterOutline, type FighterUniforms } from './toon';
@@ -58,6 +60,11 @@ interface Chain {
   childLocal: THREE.Vector3[]; // rest local position of the next joint (or tail) in each bone's space
   segLen: number[];
   p: Float32Array; pp: Float32Array;
+  /** rest-shape targets this frame / last frame (substeps interpolate between them) */
+  tg: Float32Array; tg0: Float32Array;
+  /** last substep length (time-corrected verlet) */
+  h: number;
+  init2: boolean;
   init: boolean;
 }
 
@@ -117,6 +124,13 @@ export class FighterView {
   private quality: Q = 'high';
   private twoHand = false;
   lookup: MoveLookup = defaultMoveLookup;
+  /** Animation v2 clip layer (false = the v1 pose blender, for comparison: F3 in Training debug) */
+  animV2 = true;
+  readonly anim: Animator;
+  /** authored clips (anims.glb) layered over the procedural clips */
+  readonly clips: ExtClipPlayer;
+  private assetScene: THREE.Object3D;
+  private extW = 0;
   visibleWeapon = false;
   private rimBase = new THREE.Color();
   private rimAwk = new THREE.Color();
@@ -137,7 +151,9 @@ export class FighterView {
   private formRim: THREE.Color | null = null; private formRimK = 0; private formOutline: THREE.Color | null = null;
   private sqX = 0; private sqV = 0;
   private rubber = false;
+  /** queued limb stretches this frame (pooled tuples: no per-frame allocation) */
   private stretchQ: Array<[Limb, number]> = [];
+  private stretchN = 0;
   private stretched: THREE.Bone[] = [];
   // ---- Soul Realm looks (Moonless Void veil, Mountain Temple stone skin)
   private veilK = 0; private veilOn = false; private veilLinger = 0; private veilShadowOff = false; private stoneK = 0;
@@ -183,6 +199,11 @@ export class FighterView {
       }
     });
     this.setupRig();
+    this.anim = new Animator(char);
+    this.anim.legScale = this.sL;
+    this.assetScene = asset.scene;
+    this.clips = new ExtClipPlayer(this.bones, this.rootObj, this.hips, this.hipsRest, normBoneName);
+    for (const src of asset.clipSources ?? []) this.addClips(src);
     // ---- materials / meshes
     const meshes: THREE.Mesh[] = [];
     this.model.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
@@ -394,7 +415,7 @@ export class FighterView {
       }
     }
     // spring chains
-    const isSpring = (n: string) => /hair|pony|scarf|tail|cape|ribbon|tassel|sash|skirt/i.test(n);
+    const isSpring = (n: string) => /hair|pony|scarf|tail|cape|ribbon|tassel|sash|skirt|coat|cloth|robe|hood|braid|mane|flap|sleeve/i.test(n);
     for (const [n, b] of this.bones) {
       if (!isSpring(n)) continue;
       const parent = b.parent as THREE.Bone | null;
@@ -418,7 +439,7 @@ export class FighterView {
         segLen.push(childLocal[i].length() * list[i].getWorldScale(_sc).x);
       }
       const np = list.length + 1;
-      this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), init: false });
+      this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), tg: new Float32Array(np * 3), tg0: new Float32Array(np * 3), h: 1 / 120, init: false, init2: false });
     }
   }
 
@@ -449,6 +470,14 @@ export class FighterView {
   }
 
   socket(name: SocketName): THREE.Object3D { return this.sockets[name]; }
+
+  /**
+   * Add authored clips (Animation v2). `root` = the rig the clips were authored on, at rest; omitted = this
+   * fighter's own model (clips made on the same rig). Clip names: docs/ANIMATION.md.
+   */
+  addClips(src: ClipSource | { clips: THREE.AnimationClip[]; root?: THREE.Object3D }): void {
+    try { this.clips.add({ root: src.root ?? this.assetScene, clips: src.clips }); } catch (e) { console.warn('[render] clips not bound', e); }
+  }
 
   /**
    * Ghost look for summoned copies (e.g. clones): translucent + colour tint. opacity 1 & tint null = normal.
@@ -496,7 +525,7 @@ export class FighterView {
   update(f: FighterState, prev: FighterState | null, alpha: number, dt: number, time: number): void {
     for (const b of this.stretched) b.matrixAutoUpdate = true;
     this.stretched.length = 0;
-    this.stretchQ.length = 0;
+    this.stretchN = 0;
     const p = prev ?? f;
     const x = (p.pos.x + (f.pos.x - p.pos.x) * alpha) / 1000;
     const y = (p.pos.y + (f.pos.y - p.pos.y) * alpha) / 1000;
@@ -528,6 +557,12 @@ export class FighterView {
     const fs = s * this.formS;
     this.group.scale.set(fs * (1 + this.sqX * 0.6), fs * (1 - this.sqX), fs * (1 + this.sqX * 0.6));
     // ---- pose
+    if (this.animV2) {
+      this.anim.update(f, prev, alpha, dt, time, this.lookup);
+      this.pose.set(this.anim.out);
+      this.info.pose = this.anim.so.label; this.info.strike = this.anim.so.strike; this.info.snap = true;
+      this.hasPose = true;
+    } else {
     sampleFighter(this.char, f, alpha, time, this.target, this.info, this.lookup);
     if (!this.hasPose || this.info.snap) {
       this.pose.set(this.target);
@@ -536,6 +571,7 @@ export class FighterView {
       const k = 1 - Math.exp(-dt * 16);
       for (let i = 0; i < NCH; i++) this.pose[i] += (this.target[i] - this.pose[i]) * k;
       this.pose[C.weapon] = this.target[C.weapon]; this.pose[C.twoHand] = this.target[C.twoHand];
+    }
     }
     let wv = this.pose[C.weapon] > 0.5;
     if (L.weapon === 'kunai') wv = !!(f.moveId && /kunai|throw|shuriken/i.test(f.moveId)) || this.info.pose === 'throwProjectile';
@@ -547,9 +583,12 @@ export class FighterView {
     for (const m of this.plates) m.visible = plateOn;
     this.group.updateMatrixWorld(true);
     this.applyPose(this.pose);
+    this.extW = 0;
+    if (this.animV2 && this.clips.count && this.clips.apply(this.anim.ext, dt)) { this.extW = this.clips.weight; this.group.updateMatrixWorld(true); }
     this.strikeAssist(f, alpha);
+    this.smear(f, alpha);
     this.simChains(dt);
-    for (const [l, k] of this.stretchQ) this.applyStretch(l, k);
+    for (let i = 0; i < this.stretchN; i++) this.applyStretch(this.stretchQ[i][0], this.stretchQ[i][1]);
     // ---- material uniforms
     const u = this.u;
     u.uWipe.value = this.wipe;
@@ -664,6 +703,12 @@ export class FighterView {
     this.stretched.push(up, l.end);
   }
 
+  private queueStretch(l: Limb, k: number): void {
+    const e = this.stretchQ[this.stretchN];
+    if (e) { e[0] = l; e[1] = k; } else this.stretchQ.push([l, k]);
+    this.stretchN++;
+  }
+
   /** queue a rubber stretch so the limb reaches the hitbox target (_T) */
   private rubberReach(l: Limb): void {
     if (!this.rubber) return;
@@ -671,12 +716,13 @@ export class FighterView {
     l.up.getWorldPosition(_v3);
     const reach = (l.a + l.b) * ws * 0.97;
     const d = _v3.distanceTo(_T);
-    if (d > reach) this.stretchQ.push([l, Math.min(4.5, d / reach)]);
+    if (d > reach) this.queueStretch(l, Math.min(4.5, d / reach));
   }
 
   /** register a hit on this fighter (flash) */
   onHit(strength: number): void {
     this.flash = Math.max(this.flash, 0.25 + strength * 0.25);
+    this.anim.onHit(strength);
   }
 
   // --------------------------------------------------------------------------- pose → bones
@@ -792,7 +838,7 @@ export class FighterView {
       if (k > w) { w = k; hb = h; }
     }
     if (!hb || w <= 0) return;
-    w = Math.min(1, w) * a.w;
+    w = Math.min(1, w) * a.w * (1 - 0.5 * this.extW);
     // hitbox far end (minus a bit of the radius so the fist / foot sits inside it), group-local metres
     const fwd = (hb.x + hb.len * 0.8) / 1000;
     this.rootObj.getWorldQuaternion(_qa);
@@ -810,6 +856,32 @@ export class FighterView {
   }
 
   private aw = 0; private afwd = 0; private ay = 0;
+
+  /**
+   * Smear / impact frames (Animation v2): on heavy, special, Ki and ultimate moves the striking limb stretches
+   * along its length for a few frames around the first active frame (anime smear), reusing the rubber-limb stretch.
+   */
+  private smear(f: FighterState, alpha: number): void {
+    if (!this.animV2 || this.rubber || !f.moveId || f.mode !== 'attack') return;
+    const mv = this.lookup(this.char, f.moveId);
+    if (!mv) return;
+    const sup = mv.strength === 'super' || mv.kind === 'ultimate';
+    if (!(sup || mv.strength === 'heavy' || mv.kind === 'special' || mv.kind === 'ki')) return;
+    const a = this.assistFor(f.moveId);
+    if (!a) return;
+    const fr = f.moveFrame - 1 + alpha; // displayed (interpolated) move frame
+    const start = a.hbs[0].from - 1; // first active moveFrame
+    const u = (fr - (start - 2)) / 4.5;
+    if (u <= 0 || u >= 1) return;
+    const K = 1 + (sup ? 0.34 : 0.24) * Math.sin(Math.PI * u) * (1 - 0.5 * this.extW);
+    switch (a.limb) {
+      case 'handL': if (this.armL) this.queueStretch(this.armL, K); break;
+      case 'handR': if (this.armR) this.queueStretch(this.armR, K); break;
+      case 'both': if (this.armL) this.queueStretch(this.armL, K); if (this.armR) this.queueStretch(this.armR, K); break;
+      case 'footL': if (this.legL) this.queueStretch(this.legL, K); break;
+      case 'footR': if (this.legR) this.queueStretch(this.legR, K); break;
+    }
+  }
 
   /** hitbox point (group-local, unscaled) → world, into _T */
   private assistTarget(lat: number): void {
@@ -897,9 +969,16 @@ export class FighterView {
   }
 
   // --------------------------------------------------------------------------- spring chains
+  /**
+   * Secondary motion: verlet spring chains (hair, ponytail, scarf, cloth bones) pulled toward the animated rest shape.
+   * Integrated in sub-steps of at most 1/120 s with stiffness / drag converted per step, so the motion looks the
+   * same at 30, 60 or 144 fps; the chain root and targets are interpolated across the sub-steps.
+   */
   private simChains(dt: number): void {
     if (!this.chains.length) return;
-    const h = Math.min(dt, 1 / 30);
+    dt = Math.min(dt, 1 / 15);
+    const nSteps = Math.min(8, Math.max(1, Math.ceil(dt * 120 - 1e-6)));
+    const h = dt / nSteps;
     const ws = this.group.scale.x;
     const sp = this.look.spring;
     // collision spheres
@@ -920,21 +999,36 @@ export class FighterView {
           if (i < nb) ch.bones[i].getWorldPosition(_v1); else ch.bones[nb - 1].localToWorld(_v1.copy(ch.childLocal[nb - 1]));
           p[i * 3] = pp[i * 3] = _v1.x; p[i * 3 + 1] = pp[i * 3 + 1] = _v1.y; p[i * 3 + 2] = pp[i * 3 + 2] = _v1.z;
         }
-        ch.init = true;
+        ch.init = true; ch.init2 = false;
         if (dt <= 0) continue;
       }
-      ch.bones[0].getWorldPosition(_v1);
-      p[0] = pp[0] = _v1.x; p[1] = pp[1] = _v1.y; p[2] = pp[2] = _v1.z;
-      const damp = 1 - sp.drag;
+      // rest-shape targets (animated parent) for this frame; last frame's are kept for interpolation
+      const tg = ch.tg, tg0 = ch.tg0;
+      tg0.set(tg);
+      for (let i = 0; i < np; i++) {
+        if (i < nb) ch.bones[i].getWorldPosition(_v2); else ch.bones[nb - 1].localToWorld(_v2.copy(ch.childLocal[nb - 1]));
+        tg[i * 3] = _v2.x; tg[i * 3 + 1] = _v2.y; tg[i * 3 + 2] = _v2.z;
+      }
+      if (!ch.init2) { tg0.set(tg); ch.init2 = true; }
+      // tuning is per 1/60 s step: convert to this sub-step length
+      const r = h * 60;
+      const stiff = 1 - Math.pow(1 - sp.stiffness, r);
+      const damp = Math.pow(1 - sp.drag, r);
+      const vFirst = damp * Math.min(2, h / ch.h);
+      ch.h = h;
+      for (let st = 1; st <= nSteps; st++) {
+      const a = st / nSteps, a0 = 1 - a;
+      const vScale = st === 1 ? vFirst : damp;
+      p[0] = pp[0] = tg0[0] * a0 + tg[0] * a; p[1] = pp[1] = tg0[1] * a0 + tg[1] * a; p[2] = pp[2] = tg0[2] * a0 + tg[2] * a;
       for (let i = 1; i < np; i++) {
         const k = i * 3;
-        if (i < nb) ch.bones[i].getWorldPosition(_v2); else ch.bones[nb - 1].localToWorld(_v2.copy(ch.childLocal[nb - 1]));
-        const vx = (p[k] - pp[k]) * damp, vy = (p[k + 1] - pp[k + 1]) * damp, vz = (p[k + 2] - pp[k + 2]) * damp;
+        const tx = tg0[k] * a0 + tg[k] * a, ty = tg0[k + 1] * a0 + tg[k + 1] * a, tz = tg0[k + 2] * a0 + tg[k + 2] * a;
+        const vx = (p[k] - pp[k]) * vScale, vy = (p[k + 1] - pp[k + 1]) * vScale, vz = (p[k + 2] - pp[k + 2]) * vScale;
         pp[k] = p[k]; pp[k + 1] = p[k + 1]; pp[k + 2] = p[k + 2];
         p[k] += vx; p[k + 1] += vy - sp.gravity * h * h; p[k + 2] += vz;
-        p[k] += (_v2.x - p[k]) * sp.stiffness; p[k + 1] += (_v2.y - p[k + 1]) * sp.stiffness; p[k + 2] += (_v2.z - p[k + 2]) * sp.stiffness;
+        p[k] += (tx - p[k]) * stiff; p[k + 1] += (ty - p[k + 1]) * stiff; p[k + 2] += (tz - p[k + 2]) * stiff;
       }
-      for (let it = 0; it < 3; it++) {
+      for (let it = 0; it < 2; it++) {
         for (let i = 1; i < np; i++) {
           const a = (i - 1) * 3, b = i * 3;
           const seg = ch.segLen[i - 1] * ws;
@@ -953,6 +1047,7 @@ export class FighterView {
           collide(p, k, _cB, rChest);
           if (p[k + 1] < 0.03) p[k + 1] = 0.03;
         }
+      }
       }
       // orient bones toward the simulated points
       for (let i = 0; i < nb; i++) {
