@@ -6,6 +6,7 @@ import { Engine } from './engine';
 import { Music } from './music';
 import { Sfx } from './sfx';
 import { CHAR_REALM } from './crossover';
+import type { MatchInfo } from './layer';
 
 export type UiSound = 'move' | 'select' | 'back' | 'start' | 'error' | 'hover' | 'press';
 export type MusicTrack = 'menu' | 'rooftop' | 'shrine' | 'training' | 'victory' | 'none';
@@ -22,6 +23,7 @@ export class AudioSystem {
   unlock(): void {
     this.e.resume();
     if (this.wd === null && this.e.ctx) this.wd = window.setInterval(() => { if (!this.paused) this.sfx.watchdog(); }, 250);
+    if (this.e.ctx) this.sfx.layer.warmUi();
     if (this.pendingMusic && this.e.ctx) { const t = this.pendingMusic; this.pendingMusic = null; this.mus.set(t); }
   }
 
@@ -67,6 +69,17 @@ export class AudioSystem {
     this.mus.realmWatch(!!state.realm || state.clash.active, dt);
   }
 
+  /**
+   * VS / loading screen: pick the stage reverb and decode the fight SFX, the announcer and both fighters' voices in the
+   * background. Never awaited by the match start; whatever is not decoded yet just stays silent (synth plays anyway).
+   */
+  prepareMatch(info: MatchInfo): void {
+    try {
+      this.e.init(); // a suspended context is fine for decoding; unlock() resumes it on the next gesture
+      void this.sfx.layer.prepare(info).catch(() => undefined);
+    } catch { /* audio unavailable */ }
+  }
+
   ui(s: UiSound): void {
     this.e.resume();
     this.sfx.ui(s);
@@ -78,9 +91,10 @@ export class AudioSystem {
     this.mus.set(t);
   }
 
-  setVolumes(master: number, music: number, sfx: number): void {
+  setVolumes(master: number, music: number, sfx: number, voice?: number, announcer?: number): void {
     const c = (v: number) => Math.max(0, Math.min(1, v));
-    this.e.vols = { master: c(master), music: c(music), sfx: c(sfx) };
+    const old = this.e.vols;
+    this.e.vols = { master: c(master), music: c(music), sfx: c(sfx), voice: c(voice ?? old.voice), announcer: c(announcer ?? old.announcer) };
     this.e.applyVolumes();
   }
 
@@ -91,6 +105,7 @@ export class AudioSystem {
     const t = e.now;
     if (p) {
       this.sfx.stopAll();
+      this.sfx.layer.pauseOpen();
       e.sfxPause.gain.setTargetAtTime(0, t, 0.03);
       e.musicLP.frequency.setTargetAtTime(450, t, 0.08);
       e.musicBus.gain.setTargetAtTime(e.vols.music * 0.35, t, 0.08);

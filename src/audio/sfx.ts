@@ -2,6 +2,7 @@
 import type { Element, GameState, SimEvent, Strength } from '../sim/types';
 import { Engine } from './engine';
 import { XSfx } from './crossover';
+import { SampleLayer } from './layer';
 
 const LVL: Record<Strength, number> = { light: 0, medium: 1, heavy: 2, super: 3 };
 const EV_IDX: Record<string, number> = {};
@@ -16,7 +17,12 @@ interface Loop { g: GainNode; srcs: Array<OscillatorNode | AudioBufferSourceNode
 const NOTE = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 
 export class Sfx {
-  announcer = true;
+  /** Sound v2 sample layer (impacts, whooshes, voices ...); the synth below always plays too */
+  readonly layer: SampleLayer;
+  private annHandled = false;
+  private _announcer = true;
+  get announcer(): boolean { return this._announcer; }
+  set announcer(v: boolean) { this._announcer = v; this.layer.announcer = v; }
   private seen = new Int32Array(48).fill(-1);
   private seenN = 0;
   private kiLoop: Loop | null = null;
@@ -28,7 +34,7 @@ export class Sfx {
   private lastBurnT = 0;
 
   private x: XSfx;
-  constructor(private e: Engine) { this.x = new XSfx(e); }
+  constructor(private e: Engine) { this.x = new XSfx(e); this.layer = new SampleLayer(e); }
 
   // ------------------------------------------------------------ small building blocks
   private wet(): AudioNode { return this.e.sfxWet; }
@@ -139,7 +145,7 @@ export class Sfx {
   }
 
   private speak(text: string): void {
-    if (!this.announcer) return;
+    if (!this.announcer || this.annHandled) return;
     try {
       const ss = window.speechSynthesis;
       if (!ss) return;
@@ -165,9 +171,11 @@ export class Sfx {
     if (!e.ready) return;
     this.lastHandle = e.now;
     this.updateLoops(state);
+    this.layer.update(state);
     for (let i = 0; i < events.length; i++) {
       const ev = events[i]!;
       if (this.dedupe(ev)) continue;
+      this.annHandled = this.layer.onEvent(ev, state);
       this.play(ev, state);
     }
   }
@@ -465,6 +473,7 @@ export class Sfx {
   stopAll(): void {
     this.kiLoop = this.stopLoop(this.kiLoop);
     this.clashLoop = this.stopLoop(this.clashLoop);
+    this.layer.stopAll();
     try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
   }
 
@@ -474,6 +483,7 @@ export class Sfx {
     const e = this.e;
     if (!e.ready) return;
     const t = e.now + 0.002;
+    this.layer.ui(s);
     // tiny feedback sounds never pile up: at most one per 45 ms
     if ((s === 'hover' || s === 'press') && t - this.lastUi < 0.045) return;
     this.lastUi = t;

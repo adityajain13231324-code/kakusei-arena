@@ -42,7 +42,7 @@ export class SettingsScreen extends BaseScreen {
     /** a manual graphics tweak: relabel (matching preset or Custom), persist, apply live */
     const gsave = (): void => { relabel(g); g.benchDone = true; this.save(); };
     const pct = (v: number) => Math.round(v * 100) + '%';
-    const vol = (k: 'master' | 'music' | 'sfx', label: string): SRow => ({
+    const vol = (k: 'master' | 'music' | 'sfx' | 'voice' | 'announcerVol', label: string): SRow => ({
       label, value: () => pct(s[k]), slider: () => s[k],
       setFrac: (f) => { s[k] = Math.round(f * 20) / 20; this.save(); },
       left: () => { s[k] = Math.max(0, Math.round((s[k] - 0.05) * 100) / 100); this.save(); },
@@ -73,7 +73,7 @@ export class SettingsScreen extends BaseScreen {
     });
     const presetRow = choice<GfxPreset>('Preset', PRESET_ORDER, () => g.preset, (v) => { applyPreset(g, v); g.benchDone = true; }, up, () => this.save());
     this.rows = [
-      { section: 'AUDIO', ...vol('master', 'Master volume') } as SRow, vol('music', 'Music'), vol('sfx', 'Sound effects'),
+      { section: 'AUDIO', ...vol('master', 'Master volume') } as SRow, vol('music', 'Music'), vol('sfx', 'Sound effects'), vol('voice', 'Fighter voices'), vol('announcerVol', 'Announcer'),
       { section: 'DISPLAY', ...presetRow } as SRow,
       num('Render scale', 0.5, 1.5, 0.05, () => g.renderScale, (v) => { g.renderScale = v; }, gsave),
       choice<FpsCap>('FPS cap', FPS_CAPS, () => g.fpsCap, (v) => { g.fpsCap = v; }, (v) => (v ? String(v) : 'UNLIMITED'), gsave),

@@ -10,6 +10,8 @@ export type TouchSetting = 'auto' | 'on' | 'off';
 
 export interface SettingsData {
   master: number; music: number; sfx: number; // 0..1
+  /** Sound v2 mixer: fighter voices and announcer volume (0..1); old saves get the defaults */
+  voice: number; announcerVol: number;
   /** graphics preset + toggles (src/app/gfx.ts) */
   gfx: GfxSettings;
   reduceFlashing: boolean;
@@ -27,7 +29,7 @@ const KEY = 'kakusei-arena.settings.v1';
 
 export function defaultSettings(): SettingsData {
   return {
-    master: 0.8, music: 0.7, sfx: 0.9,
+    master: 0.8, music: 0.7, sfx: 0.9, voice: 0.9, announcerVol: 0.9,
     gfx: defaultGfx(), reduceFlashing: false, announcer: true, broadcastMode: 'off', hudScale: 1, touch: 'auto',
     scheme: ['pro', 'pro'],
     keys: { p1: cloneBindings(DEFAULT_P1), p2: cloneBindings(DEFAULT_P2) },
@@ -55,6 +57,7 @@ export class SettingsStore {
       const d = this.data;
       const num = (v: unknown, f: number) => (typeof v === 'number' && isFinite(v) ? Math.min(1, Math.max(0, v)) : f);
       d.master = num(j.master, d.master); d.music = num(j.music, d.music); d.sfx = num(j.sfx, d.sfx);
+      d.voice = num(j.voice, d.voice); d.announcerVol = num(j.announcerVol, d.announcerVol);
       if (j.gfx) sanitizeGfx(j.gfx, d.gfx);
       else {
         // pre-P8 saves: a fixed quality choice becomes the matching preset (and skips the first-launch benchmark)

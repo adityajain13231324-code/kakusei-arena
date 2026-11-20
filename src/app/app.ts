@@ -172,7 +172,7 @@ export class App implements AppApi {
   // ------------------------------------------------------------ settings / sizing
   applySettings(): void {
     const s = this.settings.data;
-    this.safe('audio.setVolumes', () => this.audio.setVolumes(s.master, s.music, s.sfx));
+    this.safe('audio.setVolumes', () => this.audio.setVolumes(s.master, s.music, s.sfx, s.voice, s.announcerVol));
     this.applyGfx(s.gfx);
     this.ui.root.style.setProperty('--hud-scale', String(s.hudScale));
     this.fpsEl.classList.toggle('on', s.gfx.showFps);
@@ -328,6 +328,7 @@ export class App implements AppApi {
       return;
     }
     const label = arcade ? `ARCADE  FIGHT ${f.ladderIndex + 1} / ${f.ladder.length}` : f.mode === 'versus' ? 'VERSUS' : 'TRAINING';
+    this.safe('audio.prepareMatch', () => this.audio.prepareMatch({ p1: f.p1, p2, stage, mode: f.mode }));
     this.ui.go('vs', { p1: f.p1, p2, stage, label, cpu: arcade });
     this.input.setContext('menu');
     const load = this.safe('loadMatch', () => this.renderer?.loadMatch(session.state));
@@ -407,6 +408,7 @@ export class App implements AppApi {
         this.safe('audio.handleEvents', () => this.audio.handleEvents(ev, st));
         this.hud.handleEvents(ev, st);
       });
+      this.safe('audio.prepareMatch', () => this.audio.prepareMatch({ p1: cfg.p1, p2: cfg.p2, stage: cfg.stage, mode: 'online' }));
       this.ui.go('vs', { p1: cfg.p1, p2: cfg.p2, stage: cfg.stage, label: o.label, cpu: false });
       this.input.setContext('menu');
       const load = this.safe('loadMatch', () => this.renderer?.loadMatch(session.state));
