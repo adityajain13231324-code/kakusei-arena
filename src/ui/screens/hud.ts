@@ -373,7 +373,7 @@ class TrainingPanel {
     // on touch screens the open panel sits under the action buttons: start collapsed (the TRAINING tab re-opens it)
     let coarse = false;
     try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch { /* ignore */ }
-    this.root.classList.toggle('closed', coarse && window.innerWidth < 1100);
+    this.root.classList.toggle('closed', coarse || window.innerWidth < 1100);
     this.refreshLabels();
   }
   cycle(d: -1 | 1): void {

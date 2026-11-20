@@ -205,7 +205,7 @@ export class App implements AppApi {
       return;
     }
     if (!onMenu) { this.bench = null; this.applySettings(); return; } // left the menu: discard, retry next launch
-    if (document.hidden || dt > 0.1) { this.bench.restart(); return; }
+    if (document.hidden) { this.bench.restart(); return; }
     const next = this.bench.step(dt);
     if (this.bench.done) {
       const r = this.bench.result;

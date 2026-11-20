@@ -1107,3 +1107,74 @@ html, body {
 /* P8: FPS counter (Graphics > Show FPS), safe-area aware */
 .fps-badge { position: absolute; right: calc(0.6em + env(safe-area-inset-right, 0px)); top: calc(0.4em + env(safe-area-inset-top, 0px)); display: none; padding: 0.1em 0.6em; font: 700 1em/1.2 var(--f-hud); letter-spacing: 0.06em; color: #8dffa8; background: rgba(0,0,0,.6); z-index: 91; pointer-events: none; }
 .fps-badge.on { display: block; }
+
+/* ================================================================ P8: compact HUD
+   Small bars hugging the top/bottom edges, short callouts, one-line ticker between the Ki meters.
+   --hud-scale (Settings > HUD scale, 0.7-1.2) scales everything inside .hud; safe-area insets keep it off notches. */
+.screen.hud { font-size: calc(1em * var(--hud-scale, 1)); --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --st: env(safe-area-inset-top, 0px); --sb: env(safe-area-inset-bottom, 0px); }
+.hud .realm-card { font-size: calc(1em / var(--hud-scale, 1)); }
+.hud-top { left: calc(0.6em + var(--sl)); right: calc(0.6em + var(--sr)); top: calc(0.35em + var(--st)); gap: 0.5em; }
+.side { gap: 0.5em; align-items: stretch; }
+.side .frame { width: 3.5em; height: 3.5em; padding: 0.15em; box-shadow: 0.12em 0.12em 0 var(--ink), 0 0 0.8em color-mix(in srgb, var(--c) 45%, transparent); }
+.side .frame::after { inset: 0.15em; border-width: 0.1em; }
+.hud-portrait { inset: 0.15em; }
+.hud-portrait .kanji { font-size: 1.1em; }
+.who { margin-bottom: 0.05em; gap: 0.4em; }
+.hn-given { font-size: 1.35em; }
+.hn-family { font-size: 0.62em; letter-spacing: 0.2em; }
+.hn-scheme { font-size: 0.55em; padding: 0.05em 0.55em; }
+.hp { height: 1.5em; border-width: 0.14em; box-shadow: 0.1em 0.1em 0 var(--ink); }
+.p1 .hp { clip-path: polygon(0 0, 100% 0, calc(100% - 1em) 100%, 0 100%); }
+.p2 .hp { clip-path: polygon(1em 0, 100% 0, 100% 100%, 0 100%); }
+.hp-pct { font-size: 0.72em; left: 0.5em; } .p2 .hp-pct { left: auto; right: 0.5em; }
+.sub { margin-top: 0.2em; gap: 0.6em; }
+.p1 .sub { padding-right: 0.8em; } .p2 .sub { padding-left: 0.8em; }
+.pips i { width: 0.8em; height: 0.8em; border-width: 0.12em; }
+.fchip { font-size: 0.6em; }
+.mid { width: 5.2em; }
+.timer-frame { height: 2.6em; border-width: 0.15em; box-shadow: 0.12em 0.12em 0 var(--ink); }
+.timer { font-size: 2.1em; }
+.rnd { margin-top: 0.15em; font-size: 0.55em; letter-spacing: 0.22em; }
+.pause-btn { margin-top: 0.2em; width: 2.4em; height: 1.5em; gap: 0.2em; border-width: 0.12em; }
+.pause-btn i { width: 0.26em; height: 0.7em; }
+.realm-tag b { font-size: 0.7em; }
+/* Ki meters: bottom corners */
+.kiblock { bottom: calc(0.45em + var(--sb)); width: 11.5em; }
+.kiblock.p1 { left: calc(0.6em + var(--sl)); } .kiblock.p2 { right: calc(0.6em + var(--sr)); }
+.ki-head { margin-bottom: 0.1em; gap: 0.4em; }
+.ki-head b { font-size: 0.8em; } .ki-head em { font-size: 0.8em; }
+.ki-seg { height: 0.8em; border-width: 0.12em; }
+.awk { padding: 0.02em 0.5em 0.02em 0.25em; } .awk b { font-size: 1em; } .awk span { font-size: 0.62em; } .awk small { font-size: 0.62em; }
+.kiblock .soul { font-size: 0.62em; }
+.combo { top: 5.4em; } .combo.c1 { left: calc(0.9em + var(--sl)); } .combo.c2 { right: calc(0.9em + var(--sr)); }
+.combo b { font-size: 2.4em; } .combo span { font-size: 0.85em; }
+/* callouts: shorter + smaller */
+.callout { top: 30%; }
+.callout.big span { font-size: 5.4em; }
+.callout.fight span { font-size: 6.2em; } .callout.ko span { font-size: 7.4em; }
+.callout.perfect { top: 46%; } .callout.perfect span { font-size: 3.6em; }
+.callout.awaken span { font-size: 4.8em; } .callout.clash { top: 17%; } .callout.clash span { font-size: 3.6em; }
+.callout.mini { top: 19%; padding: 0 calc(2em + var(--sl)) 0 calc(2em + var(--sr)); } .callout.mini span { font-size: 2em; }
+.callout.guardcrush { top: 23%; } .callout.ultimate { top: 24%; } .callout.ultimate span { font-size: 2.6em; }
+.callout.form { top: 28%; } .callout.form span { font-size: 3.8em; } .callout.infinity { top: 27%; }
+.callout.big.round span { font-size: 4.6em; }
+.clash { transform-origin: center top; }
+/* training panel: tucked under the HP bar, collapsible */
+.tpanel { font-size: 0.7em; }
+.tp-collapse { right: calc(0.9em + var(--sr)); top: 6.5em; padding: 0.25em 0.8em; }
+.tp-body { right: calc(0.9em + var(--sr)); top: 9em; width: 17em; max-height: 60vh; overflow-y: auto; }
+/* broadcast: one-line ticker between the Ki meters; the commentator panel (Full mode) sits above it */
+.bc-ticker { left: calc(12.6em + var(--sl)); right: calc(12.6em + var(--sr)); bottom: calc(0.45em + var(--sb)); height: 1.55em; border-top-width: 0.1em; font-size: 0.85em; box-shadow: 0 0 0.6em rgba(0,0,0,.5); }
+.bc-tag { font-size: 1em; padding: 0 1.2em 0 0.7em; }
+.bc-panel { bottom: calc(2.4em + var(--sb)); width: 21em; height: 4em; font-size: 0.85em; grid-template-columns: 3.2em 1fr 3.2em; padding: 0.3em 0.4em; }
+.bc-av { width: 3.2em; height: 3.2em; }
+.bc-txt { -webkit-line-clamp: 2; }
+/* phones / short windows: Ki meters sit under the health bars (touch pads own the bottom corners) */
+@media (max-height: 470px), (hover: none) and (pointer: coarse) {
+  .kiblock { bottom: auto; top: calc(3.2em + var(--st)); width: 10.5em; }
+  .kiblock.p1 { left: calc(4.1em + var(--sl)); } .kiblock.p2 { right: calc(4.1em + var(--sr)); }
+  .ki-seg { height: 0.7em; }
+  .kiblock .soul { bottom: auto; top: 100%; margin: 0.2em 0 0; }
+  .combo { top: 6.6em; }
+  .tp-collapse { top: 5.6em; } .tp-body { top: 8em; }
+}
