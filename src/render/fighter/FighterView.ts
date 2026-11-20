@@ -60,6 +60,11 @@ interface Chain {
   childLocal: THREE.Vector3[]; // rest local position of the next joint (or tail) in each bone's space
   segLen: number[];
   p: Float32Array; pp: Float32Array;
+  /** rest-shape targets this frame / last frame (substeps interpolate between them) */
+  tg: Float32Array; tg0: Float32Array;
+  /** last substep length (time-corrected verlet) */
+  h: number;
+  init2: boolean;
   init: boolean;
 }
 
@@ -408,7 +413,7 @@ export class FighterView {
       }
     }
     // spring chains
-    const isSpring = (n: string) => /hair|pony|scarf|tail|cape|ribbon|tassel|sash|skirt/i.test(n);
+    const isSpring = (n: string) => /hair|pony|scarf|tail|cape|ribbon|tassel|sash|skirt|coat|cloth|robe|hood|braid|mane|flap|sleeve/i.test(n);
     for (const [n, b] of this.bones) {
       if (!isSpring(n)) continue;
       const parent = b.parent as THREE.Bone | null;
@@ -432,7 +437,7 @@ export class FighterView {
         segLen.push(childLocal[i].length() * list[i].getWorldScale(_sc).x);
       }
       const np = list.length + 1;
-      this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), init: false });
+      this.chains.push({ bones: list, restQ: list.map((x) => x.quaternion.clone()), childLocal, segLen, p: new Float32Array(np * 3), pp: new Float32Array(np * 3), tg: new Float32Array(np * 3), tg0: new Float32Array(np * 3), h: 1 / 120, init: false, init2: false });
     }
   }
 
@@ -929,9 +934,16 @@ export class FighterView {
   }
 
   // --------------------------------------------------------------------------- spring chains
+  /**
+   * Secondary motion: verlet spring chains (hair, ponytail, scarf, cloth bones) pulled toward the animated rest shape.
+   * Integrated in sub-steps of at most 1/120 s with stiffness / drag converted per step, so the motion looks the
+   * same at 30, 60 or 144 fps; the chain root and targets are interpolated across the sub-steps.
+   */
   private simChains(dt: number): void {
     if (!this.chains.length) return;
-    const h = Math.min(dt, 1 / 30);
+    dt = Math.min(dt, 1 / 15);
+    const nSteps = Math.min(8, Math.max(1, Math.ceil(dt * 120 - 1e-6)));
+    const h = dt / nSteps;
     const ws = this.group.scale.x;
     const sp = this.look.spring;
     // collision spheres
@@ -952,21 +964,36 @@ export class FighterView {
           if (i < nb) ch.bones[i].getWorldPosition(_v1); else ch.bones[nb - 1].localToWorld(_v1.copy(ch.childLocal[nb - 1]));
           p[i * 3] = pp[i * 3] = _v1.x; p[i * 3 + 1] = pp[i * 3 + 1] = _v1.y; p[i * 3 + 2] = pp[i * 3 + 2] = _v1.z;
         }
-        ch.init = true;
+        ch.init = true; ch.init2 = false;
         if (dt <= 0) continue;
       }
-      ch.bones[0].getWorldPosition(_v1);
-      p[0] = pp[0] = _v1.x; p[1] = pp[1] = _v1.y; p[2] = pp[2] = _v1.z;
-      const damp = 1 - sp.drag;
+      // rest-shape targets (animated parent) for this frame; last frame's are kept for interpolation
+      const tg = ch.tg, tg0 = ch.tg0;
+      tg0.set(tg);
+      for (let i = 0; i < np; i++) {
+        if (i < nb) ch.bones[i].getWorldPosition(_v2); else ch.bones[nb - 1].localToWorld(_v2.copy(ch.childLocal[nb - 1]));
+        tg[i * 3] = _v2.x; tg[i * 3 + 1] = _v2.y; tg[i * 3 + 2] = _v2.z;
+      }
+      if (!ch.init2) { tg0.set(tg); ch.init2 = true; }
+      // tuning is per 1/60 s step: convert to this sub-step length
+      const r = h * 60;
+      const stiff = 1 - Math.pow(1 - sp.stiffness, r);
+      const damp = Math.pow(1 - sp.drag, r);
+      const vFirst = damp * Math.min(2, h / ch.h);
+      ch.h = h;
+      for (let st = 1; st <= nSteps; st++) {
+      const a = st / nSteps, a0 = 1 - a;
+      const vScale = st === 1 ? vFirst : damp;
+      p[0] = pp[0] = tg0[0] * a0 + tg[0] * a; p[1] = pp[1] = tg0[1] * a0 + tg[1] * a; p[2] = pp[2] = tg0[2] * a0 + tg[2] * a;
       for (let i = 1; i < np; i++) {
         const k = i * 3;
-        if (i < nb) ch.bones[i].getWorldPosition(_v2); else ch.bones[nb - 1].localToWorld(_v2.copy(ch.childLocal[nb - 1]));
-        const vx = (p[k] - pp[k]) * damp, vy = (p[k + 1] - pp[k + 1]) * damp, vz = (p[k + 2] - pp[k + 2]) * damp;
+        const tx = tg0[k] * a0 + tg[k] * a, ty = tg0[k + 1] * a0 + tg[k + 1] * a, tz = tg0[k + 2] * a0 + tg[k + 2] * a;
+        const vx = (p[k] - pp[k]) * vScale, vy = (p[k + 1] - pp[k + 1]) * vScale, vz = (p[k + 2] - pp[k + 2]) * vScale;
         pp[k] = p[k]; pp[k + 1] = p[k + 1]; pp[k + 2] = p[k + 2];
         p[k] += vx; p[k + 1] += vy - sp.gravity * h * h; p[k + 2] += vz;
-        p[k] += (_v2.x - p[k]) * sp.stiffness; p[k + 1] += (_v2.y - p[k + 1]) * sp.stiffness; p[k + 2] += (_v2.z - p[k + 2]) * sp.stiffness;
+        p[k] += (tx - p[k]) * stiff; p[k + 1] += (ty - p[k + 1]) * stiff; p[k + 2] += (tz - p[k + 2]) * stiff;
       }
-      for (let it = 0; it < 3; it++) {
+      for (let it = 0; it < 2; it++) {
         for (let i = 1; i < np; i++) {
           const a = (i - 1) * 3, b = i * 3;
           const seg = ch.segLen[i - 1] * ws;
@@ -985,6 +1012,7 @@ export class FighterView {
           collide(p, k, _cB, rChest);
           if (p[k + 1] < 0.03) p[k + 1] = 0.03;
         }
+      }
       }
       // orient bones toward the simulated points
       for (let i = 0; i < nb; i++) {
