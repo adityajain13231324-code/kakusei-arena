@@ -46,6 +46,8 @@ export function elemCol(el: string | undefined): [number, number] { return ELEM_
 
 const LVL: Record<Strength, number> = { light: 0, medium: 1, heavy: 2, super: 3 };
 const tmpV = new THREE.Vector3();
+/** camera shake per strength tier: [metres, frames] */
+const SHAKE: ReadonlyArray<readonly [number, number]> = [[0.012, 3], [0.03, 5], [0.065, 8], [0.13, 14]];
 
 export class Effects {
   // current origin (metres) for the *Burst helpers
@@ -88,6 +90,32 @@ export class Effects {
         .ph(drag, grav).ttl(rr(0.5, 1) * life).tx(T.STREAK, 0.045)
         .sz(size * 0.3, size * 0.08, size * 0.5, size * 0.2).col(c0, c1, 1, 0, 1.6);
       P.spec.pe = 1.6;
+      P.emit(true);
+    }
+  }
+  /** radial streaks in the camera plane (speed-line burst around the contact point) */
+  streaks(n: number, speed: number, len: number, c0: number, c1: number, life: number): void {
+    const P = this.fx.P;
+    const cr = this.fx.cam.matrixWorld.elements;
+    const rx = cr[0]!, ry = cr[1]!, rz = cr[2]!, ux = cr[4]!, uy = cr[5]!, uz = cr[6]!;
+    const cnt = this.n(n), off = rr(0, 6.2832);
+    for (let i = 0; i < cnt; i++) {
+      const a = off + (i / cnt) * 6.2832 + rr(-0.22, 0.22), sp = speed * rr(0.6, 1);
+      const ca = Math.cos(a) * sp, sa = Math.sin(a) * sp;
+      P.spec.reset().at(this.x, this.y, this.z).v(rx * ca + ux * sa, ry * ca + uy * sa, rz * ca + uz * sa).ph(5, 0)
+        .ttl(rr(0.6, 1) * life).tx(T.STREAK, 0.1).sz(0.05, 0.012, len, len * 0.3).col(c0, c1, 1, 0, 1.7);
+      P.emit(true);
+    }
+  }
+  /** slow glowing embers that drift up and linger after a heavy hit */
+  embers(n: number, c0: number, c1: number, life: number): void {
+    const P = this.fx.P;
+    for (let i = 0; i < this.n(n); i++) {
+      randDir();
+      P.spec.reset().at(this.x + PR.dx * 0.12, this.y + PR.dy * 0.12, this.z + PR.dz * 0.12)
+        .v(PR.dx * 1.8 + this.ax * 0.9, Math.abs(PR.dy) * 1.5 + 0.4, PR.dz * 1.8 + this.az * 0.9).ph(2.6, -0.5)
+        .ttl(rr(0.55, 1) * life).tx(T.SOFT).sz(rr(0.05, 0.1), 0.01).col(c0, c1, 1, 0, 1.6);
+      P.spec.pe = 2;
       P.emit(true);
     }
   }
@@ -264,30 +292,54 @@ export class Effects {
   }
 
   // ------------------------------------------------------------ event effects
-  hit(ev: SimEvent, counter: boolean): void {
+  /**
+   * Hit spark, tiered by strength (P8 Feel):
+   *  light   - small quick star + a few short sparks
+   *  medium  - bigger crossed double star + radial streaks
+   *  heavy   - large burst + shock ring + lingering embers
+   *  super   - ultimates / supers: the biggest (two rings, long streaks, ember cloud, orb flash)
+   *  counter - one tier bigger and red / gold: spinning spiky star, gold + red double ring, "COUNTER!"
+   * Particle counts go through n() (particles setting); screen flashes respect reduceFlashing in PostFx.
+   * `force` = strength tier override (ultimate hits), -1 = from the event.
+   */
+  hit(ev: SimEvent, counter: boolean, force = -1): void {
     const fx = this.fx;
     this.dirFrom(ev);
     this.origin(ev.pos, 0.3);
-    let lvl = LVL[ev.strength ?? 'medium'];
-    if (counter) lvl = Math.min(3, lvl + 1);
+    const base = force >= 0 ? force : LVL[ev.strength ?? 'medium'];
+    const lvl = counter ? Math.min(3, base + 1) : base;
     const el = ev.element;
     const col = elemCol(el);
-    const sparkN = [9, 15, 26, 44][lvl]!, speed = [5, 7, 9.5, 13][lvl]!;
-    this.sparks(sparkN, speed, 0.9, 0xfff6c8, col[0], [0.5, 0.7, 0.95, 1.3][lvl]!, 0.45);
-    if (lvl >= 1) this.sparks(sparkN * 0.4, speed * 0.6, 1.2, 0xffffff, 0xffb347, 0.35, 0.4, 12);
-    this.glow([0.8, 1.2, 1.9, 3.0][lvl]!, [0.1, 0.13, 0.17, 0.26][lvl]!, 0xffffff, col[0], 1, 1.5);
-    this.star([0.8, 1.25, 2.0, 3.2][lvl]!, [0.11, 0.15, 0.2, 0.28][lvl]!, counter ? 0xffe14a : lvl >= 2 ? 0xffffff : 0xfff2c0);
-    if (lvl >= 2) this.shock([2.0, 3.0][lvl - 2]!, 0.28, col[0]);
+    const tint = counter ? 0xff4a2a : col[0];
+    const roll = rr(-0.4, 0.4);
+    // core flash + star (quick on light, held a little longer as strength grows)
+    this.glow([0.7, 1.15, 1.9, 3.1][lvl]!, [0.08, 0.12, 0.17, 0.26][lvl]!, 0xffffff, tint, 1, 1.5);
+    this.star([0.75, 1.25, 2.05, 3.3][lvl]!, [0.09, 0.14, 0.2, 0.3][lvl]!, counter ? 0xffe14a : lvl >= 2 ? 0xffffff : 0xfff2c0, roll);
+    if (lvl >= 1) this.star([0, 0.8, 1.35, 2.2][lvl]!, [0, 0.11, 0.15, 0.22][lvl]!, counter ? 0xff7a2a : 0xffffff, roll + 0.785, 0.8);
+    // sparks: a few short ones on light, more / faster / longer-lived as strength grows
+    const sparkN = [7, 12, 22, 40][lvl]!, speed = [5, 7, 9.5, 13][lvl]!;
+    this.sparks(sparkN, speed, 0.9, 0xfff6c8, tint, [0.45, 0.65, 0.95, 1.3][lvl]!, [0.28, 0.38, 0.48, 0.6][lvl]!);
+    if (lvl >= 1) this.streaks([0, 6, 10, 16][lvl]!, [0, 9, 12, 16][lvl]!, [0, 0.35, 0.55, 0.9][lvl]!, 0xffffff, tint, [0, 0.12, 0.16, 0.22][lvl]!);
+    if (lvl >= 2) {
+      this.shock(lvl === 2 ? 2.2 : 3.2, lvl === 2 ? 0.26 : 0.32, tint);
+      this.embers(lvl === 2 ? 10 : 22, counter ? 0xffd040 : 0xfff0b0, counter ? 0xff2a10 : col[0], lvl === 2 ? 1.1 : 1.6);
+      this.sparks(sparkN * 0.35, speed * 0.55, 1.3, 0xffffff, 0xffb347, 0.35, 0.45, 12);
+    }
+    if (lvl >= 3) {
+      this.shock(4.6, 0.42, 0xffffff, false, 0.7);
+      fx.F.spawn('orb', this.x, this.y, this.z, 2.6, 0.32, 0xffffff, roll, 0.85);
+    }
     if (counter) {
-      this.star(3.4, 0.3, 0xff3a2a, rr(-0.3, 0.3), 0.9, 2.5);
-      this.shock(3.6, 0.35, 0xffe14a);
-      fx.post.screenFlash(0xffffff, 0.3, 14);
+      this.star(3.4, 0.32, 0xff3a2a, rr(-0.3, 0.3), 0.95, 3.2);
+      this.shock(3.6, 0.36, 0xffe14a);
+      fx.D.spawn('ring', this.x, this.y, this.z, 0.5, 2.4, 0.24, 0xff3a2a, 0, 0, 0.85, true);
+      fx.post.screenFlash(0xfff0d0, 0.3, 14);
       fx.post.vignettePulse(0.6);
     }
     if (el && el !== 'none') this.elemental(el, [0.6, 0.85, 1.15, 1.5][lvl]!);
     this.flipHit(ev, lvl, el);
-    const sh = [[0.012, 3], [0.03, 5], [0.065, 8], [0.13, 14]][lvl]!;
-    fx.r.addShake(sh[0]!, sh[1]!);
+    const sh = SHAKE[lvl]!;
+    fx.r.addShake(sh[0], sh[1]);
     if (counter || lvl >= 3) fx.post.impact(3);
     else if (lvl >= 2) fx.post.impact(2);
     const otg = ev.tag === 'otg';
@@ -352,15 +404,22 @@ export class Effects {
     fx.O.spawn('guardcrush', tmpV.x, tmpV.y, tmpV.z, 1.25, 1.0);
   }
 
+  /**
+   * Guard spark: a flat blue-white hex 'shield plane' facing the attacker + a thin flat ring, sparks glancing back off it.
+   * Deliberately flat and cool (no star, no warm core) so a block never reads as a hit.
+   */
   block(ev: SimEvent): void {
     this.dirFrom(ev);
     this.origin(ev.pos, 0.3);
     const k = LVL[ev.strength ?? 'medium'];
-    this.sparks(8 + k * 4, 5 + k, 1.0, 0xdff4ff, 0x3a8cff, 0.45, 0.35, 6);
-    this.glow(0.9 + k * 0.25, 0.12, 0xdff4ff, 0x3a8cff, 0.9);
-    this.shock(1.0 + k * 0.35, 0.2, 0x8fd3ff);
-    this.fx.D.spawn('ring', this.x, this.y, this.z, 0.2, 1.1 + k * 0.3, 0.18, 0xffffff, 0, 0, 0.8, true);
-    this.fx.r.addShake(0.006 + k * 0.006, 3);
+    const nx = this.ax || 1, nz = this.az, roll = rr(0, 1.05);
+    this.fx.D.spawn('hex', this.x, this.y, this.z, 0.35 + k * 0.08, 1.0 + k * 0.32, 0.16 + k * 0.03, 0xcfeaff, 2, roll, 0.95, true, nx, 0, nz);
+    this.fx.D.spawn('ring', this.x, this.y, this.z, 0.25, 1.3 + k * 0.35, 0.2, 0x8fd3ff, 2, 0, 0.75, true, nx, 0, nz);
+    this.glow(0.7 + k * 0.2, 0.09, 0xeaf6ff, 0x3a8cff, 0.75);
+    // glance back toward the attacker and out to the sides
+    this.ax = -this.ax * 0.6; this.az = -this.az * 0.6;
+    this.sparks(6 + k * 4, 5 + k * 1.2, 1.15, 0xffffff, 0x5aa8ff, 0.4, 0.3, 6);
+    this.fx.r.addShake(0.005 + k * 0.005, 3);
   }
 
   parry(ev: SimEvent): void {
@@ -567,8 +626,7 @@ export class Effects {
   }
 
   ultimateHit(ev: SimEvent): void {
-    const e: SimEvent = { ...ev, strength: 'super' };
-    this.hit(e, false);
+    this.hit(ev, false, 3);
     this.fx.post.vignettePulse(0.8);
   }
 
