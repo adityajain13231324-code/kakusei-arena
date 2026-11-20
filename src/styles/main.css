@@ -1176,5 +1176,6 @@ html, body {
   .ki-seg { height: 0.7em; }
   .kiblock .soul { bottom: auto; top: 100%; margin: 0.2em 0 0; }
   .combo { top: 6.6em; }
-  .tp-collapse { top: 5.6em; } .tp-body { top: 8em; }
+  /* below the P2 Ki block + soul chip (they share the right edge here) */
+  .tp-collapse { top: 9.4em; } .tp-body { top: 11.8em; max-height: 50vh; }
 }
