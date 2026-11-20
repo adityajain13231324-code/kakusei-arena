@@ -3,7 +3,6 @@ import { ACTIONS, ACTION_LABEL, DEFAULT_P1, DEFAULT_P2, cloneBindings, keyLabel 
 import type { Action } from '../../input/bindings';
 import type { MenuAction } from '../../input';
 import { defaultSettings } from '../../app/settings';
-import type { BroadcastMode } from '../../app/settings';
 import { PRESET_ORDER, applyPreset, relabel } from '../../app/gfx';
 import type { CrowdQ, FpsCap, GfxPreset, Level3, ShadowQ } from '../../app/gfx';
 import { h, sfx } from '../dom';
@@ -20,8 +19,6 @@ interface SRow {
   section?: string;
 }
 
-const BC_MODES: BroadcastMode[] = ['off', 'ticker', 'full'];
-const BC_LABEL: Record<BroadcastMode, string> = { off: 'OFF', ticker: 'TICKER', full: 'FULL' };
 const FPS_CAPS: FpsCap[] = [30, 60, 120, 0];
 
 export class SettingsScreen extends BaseScreen {
@@ -95,7 +92,6 @@ export class SettingsScreen extends BaseScreen {
       toggle('Post FX: speed lines', () => g.speedLines, (v) => { g.speedLines = v; }, gsave),
       toggle('Post FX: color grade', () => g.colorGrade, (v) => { g.colorGrade = v; }, gsave),
       { section: 'HUD', ...num('HUD scale', 0.7, 1.2, 0.05, () => s.hudScale, (v) => { s.hudScale = v; }, () => this.save()) } as SRow,
-      choice<BroadcastMode>('Broadcast', BC_MODES, () => s.broadcastMode, (v) => { s.broadcastMode = v; }, (v) => BC_LABEL[v], () => this.save()),
       { section: 'GAMEPLAY', ...toggle('Announcer voice', () => s.announcer, (v) => { s.announcer = v; }, () => this.save()) } as SRow,
       { section: 'CONTROLS', label: 'Touch controls', value: () => s.touch.toUpperCase(),
         left: () => { s.touch = this.cycle(T, s.touch, -1); this.save(); }, right: () => { s.touch = this.cycle(T, s.touch, 1); this.save(); } },

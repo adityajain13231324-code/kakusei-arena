@@ -28,7 +28,7 @@ const KEY = 'kakusei-arena.settings.v1';
 export function defaultSettings(): SettingsData {
   return {
     master: 0.8, music: 0.7, sfx: 0.9,
-    gfx: defaultGfx(), reduceFlashing: false, announcer: true, broadcastMode: 'ticker', hudScale: 1, touch: 'auto',
+    gfx: defaultGfx(), reduceFlashing: false, announcer: true, broadcastMode: 'off', hudScale: 1, touch: 'auto',
     scheme: ['pro', 'pro'],
     keys: { p1: cloneBindings(DEFAULT_P1), p2: cloneBindings(DEFAULT_P2) },
   };
@@ -63,8 +63,7 @@ export class SettingsStore {
       }
       if (typeof j.reduceFlashing === 'boolean') d.reduceFlashing = j.reduceFlashing;
       if (typeof j.announcer === 'boolean') d.announcer = j.announcer;
-      if (j.broadcastMode === 'off' || j.broadcastMode === 'ticker' || j.broadcastMode === 'full') d.broadcastMode = j.broadcastMode;
-      else if (typeof (j as { broadcast?: unknown }).broadcast === 'boolean') d.broadcastMode = (j as { broadcast: boolean }).broadcast ? 'ticker' : 'off';
+      // the news ticker / commentator layer was removed (owner request, P8): saved modes are ignored, it stays off
       if (typeof j.hudScale === 'number' && isFinite(j.hudScale)) d.hudScale = Math.round(Math.min(1.2, Math.max(0.7, j.hudScale)) * 20) / 20;
       if (j.touch === 'auto' || j.touch === 'on' || j.touch === 'off') d.touch = j.touch;
       if (Array.isArray(j.scheme) && j.scheme.length === 2) {
