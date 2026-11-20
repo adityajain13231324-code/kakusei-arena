@@ -23,7 +23,7 @@ export interface ExtRequest {
   t: number;
   /** loop by render time (idle, guard...) */
   loop: boolean;
-  /** locomotion: clip time = cycle phase (0..1) instead of t */
+  /** locomotion: clip time = cycle phase (cycles; NaN = use t) */
   phase: number;
   /** crossfade frames */
   fade: number;
@@ -37,7 +37,7 @@ function noise(n: number): number {
 export class Animator {
   readonly out = new Float32Array(NCH);
   readonly so: SampleOut = { label: 'idle', strike: false };
-  readonly ext: ExtRequest = { name: '', alt: '', mv: null, t: 0, loop: false, phase: -1, fade: 3 };
+  readonly ext: ExtRequest = { name: '', alt: '', mv: null, t: 0, loop: false, phase: NaN, fade: 3 };
   private cur = new Float32Array(NCH);
   private from = new Float32Array(NCH);
   private lib: ClipLib;
@@ -94,7 +94,7 @@ export class Animator {
     if (Math.abs(lv) > 1) ctx.lat = lv > 0 ? 1 : -1;
     // ---- pick the clip
     const ext = this.ext;
-    ext.mv = null; ext.loop = false; ext.phase = -1; ext.alt = '';
+    ext.mv = null; ext.loop = false; ext.phase = NaN; ext.alt = '';
     let clip: Clip = lib.idle;
     let t = modeT;
     let restart = false;

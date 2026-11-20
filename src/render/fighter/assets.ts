@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { CharId } from '../../sim/types';
+import type { ClipSource } from '../anim/extclips';
 
 export type ModelRes = 2048 | 1024;
 
@@ -31,6 +32,8 @@ export interface CharAsset {
   plates: THREE.Group | null;
   katana: WeaponGeo | null;
   height: number;
+  /** authored animation clips (model.glb animations, characters/<id>/anims.glb); empty = procedural clips only */
+  clipSources?: ClipSource[];
 }
 
 function baseUrl(): string {
@@ -68,9 +71,11 @@ function loadMannequin(id: CharId, res: ModelRes): Promise<CharAsset> {
     mannequinP = loadGLB(`${baseUrl()}characters/_mannequin/model.glb`).then((g) => prepareScene(g.scene, true).scene);
     mannequinP.catch(() => { mannequinP = null; });
   }
-  return mannequinP.then((scene) => {
+  return Promise.all([mannequinP, loadAnims(`${baseUrl()}characters/${id}/`)]).then(([scene, anims]) => {
     const box = new THREE.Box3().setFromObject(scene);
-    return { id, res, mannequin: true, form: null, scene, awakenTex: null, plates: null, katana: null, height: Math.max(1, box.max.y) };
+    // clips authored for this fighter on the mannequin rig (characters/<id>/anims.glb), retargeted by bone name
+    const clipSources: ClipSource[] = anims ? [anims] : [];
+    return { id, res, mannequin: true, form: null, scene, awakenTex: null, plates: null, katana: null, height: Math.max(1, box.max.y), clipSources };
   });
 }
 
@@ -157,6 +162,19 @@ async function loadGLB(url: string) {
   }
 }
 
+/**
+ * Optional clip library characters/<id>/anims.glb (Animation v2, docs/ANIMATION.md). A missing file is not an error:
+ * resolves null and the procedural clips play. manifest.json "anims": false skips the probe.
+ */
+async function loadAnims(dir: string): Promise<ClipSource | null> {
+  try {
+    const g = await loadGLB(`${dir}anims.glb`);
+    if (!g.animations?.length) return null;
+    g.scene.updateMatrixWorld(true);
+    return { root: g.scene, clips: g.animations };
+  } catch { return null; }
+}
+
 async function loadImpl(id: CharId, res: ModelRes): Promise<CharAsset> {
   const dir = `${baseUrl()}characters/${id}/`;
   const sfx = res === 1024 ? '_1024' : '';
@@ -164,13 +182,14 @@ async function loadImpl(id: CharId, res: ModelRes): Promise<CharAsset> {
   const gltf0 = await loadGLB(`${dir}model${sfx}.glb`).catch((e) => (sfx ? loadGLB(`${dir}model.glb`) : Promise.reject(e)));
   const model = Promise.resolve(gltf0);
   // manifest (optional): { awakened_parts?: 'file.glb', awakened_texture?: false }
-  const manifest = await fetch(`${dir}manifest.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { awakened_parts?: string; awakened_texture?: boolean; triangles_by_mesh?: Record<string, number> };
+  const manifest = await fetch(`${dir}manifest.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})) as { awakened_parts?: string; awakened_texture?: boolean; triangles_by_mesh?: Record<string, number>; anims?: boolean };
   const partsFile = manifest.awakened_parts ?? (manifest.triangles_by_mesh?.ShoulderPlates ? 'shoulder_plates.glb' : null);
-  const [gltf, awk, plates] = await Promise.all([
+  const [gltf, awk, plates, anims] = await Promise.all([
     model,
     manifest.awakened_texture === false ? Promise.resolve(null) : loadTex(`${dir}tex_awakened${sfx}.png`).then((t) => t ?? (sfx ? loadTex(`${dir}tex_awakened.png`) : null)),
     // optional awakened attachment on the same rig (e.g. Goro's shoulder plates)
     partsFile ? loadGLB(`${dir}${partsFile}`).catch(() => null) : Promise.resolve(null),
+    manifest.anims === false ? Promise.resolve(null) : loadAnims(dir),
   ]);
   const { scene, height } = prepareScene(gltf.scene, true);
   let katana: WeaponGeo | null = null;
@@ -179,7 +198,10 @@ async function loadImpl(id: CharId, res: ModelRes): Promise<CharAsset> {
     if (!katana && m.isMesh && /katana|sword|blade/i.test(m.name + ' ' + (m.parent?.name ?? ''))) katana = buildKatana(m);
   });
   if (plates) plates.scene.traverse((o: THREE.Object3D) => { const m = o as THREE.Mesh; if (m.isMesh) { fixInsideOut(m.geometry); ensureOutlineNormals(m.geometry); } });
-  return { id, res, mannequin: false, form: null, scene, awakenTex: awk, plates: plates ? plates.scene : null, katana, height };
+  const clipSources: ClipSource[] = [];
+  if (gltf.animations?.length) clipSources.push({ root: scene, clips: gltf.animations });
+  if (anims) clipSources.push(anims);
+  return { id, res, mannequin: false, form: null, scene, awakenTex: awk, plates: plates ? plates.scene : null, katana, height, clipSources };
 }
 
 /** per-view clone (skeleton re-bound, geometry & textures shared) */

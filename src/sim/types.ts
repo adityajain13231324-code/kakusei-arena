@@ -206,6 +206,16 @@ export interface MoveDef {
   needClones?: number;
   /** stance swap: starting this move cycles fighter.form through this list (Zoro's 1/2/3-sword styles) */
   cycleForms?: string[];
+
+  // ---- render-only animation hints (Animation v2, see docs/ANIMATION.md). The sim never reads these. ----
+  /** name of an authored animation clip (characters/<id>/anims.glb) to play for this move; default = the move id */
+  clip?: string;
+  /**
+   * where the clip's key moments are, in CLIP seconds. The renderer time-warps the clip so `startup` lands on the
+   * move's first active frame, `activeEnd` on its last active frame and `end` (default: clip length) on its last frame.
+   * Omitted = the clip is stretched evenly over startup + active + recovery.
+   */
+  clipTiming?: { startup: number; activeEnd?: number; end?: number };
 }
 
 export interface CharDef {

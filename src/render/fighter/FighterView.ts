@@ -18,6 +18,7 @@ import type { CharId, FighterState, PoseName, HitboxDef } from '../../sim/types'
 import { C, NCH, PAIN_POSES } from '../anim/poses';
 import { sampleFighter, defaultMoveLookup, type MoveLookup, type SampleInfo } from '../anim/sampler';
 import { Animator } from '../anim/animator';
+import { ExtClipPlayer, type ClipSource } from '../anim/extclips';
 import { type CharAsset, cloneCharacter, clonePlates, normBoneName, kunaiGeometry, katanaGeometry } from './assets';
 import { charLook, resolvePalette, type CharLook } from './looks';
 import { makeFighterUniforms, makeFighterToon, makeFighterOutline, type FighterUniforms } from './toon';
@@ -121,6 +122,10 @@ export class FighterView {
   /** Animation v2 clip layer (false = the v1 pose blender, for comparison: F3 in Training debug) */
   animV2 = true;
   readonly anim: Animator;
+  /** authored clips (anims.glb) layered over the procedural clips */
+  readonly clips: ExtClipPlayer;
+  private assetScene: THREE.Object3D;
+  private extW = 0;
   visibleWeapon = false;
   private rimBase = new THREE.Color();
   private rimAwk = new THREE.Color();
@@ -189,6 +194,9 @@ export class FighterView {
     this.setupRig();
     this.anim = new Animator(char);
     this.anim.legScale = this.sL;
+    this.assetScene = asset.scene;
+    this.clips = new ExtClipPlayer(this.bones, this.rootObj, this.hips, this.hipsRest, normBoneName);
+    for (const src of asset.clipSources ?? []) this.addClips(src);
     // ---- materials / meshes
     const meshes: THREE.Mesh[] = [];
     this.model.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
@@ -457,6 +465,14 @@ export class FighterView {
   socket(name: SocketName): THREE.Object3D { return this.sockets[name]; }
 
   /**
+   * Add authored clips (Animation v2). `root` = the rig the clips were authored on, at rest; omitted = this
+   * fighter's own model (clips made on the same rig). Clip names: docs/ANIMATION.md.
+   */
+  addClips(src: ClipSource | { clips: THREE.AnimationClip[]; root?: THREE.Object3D }): void {
+    try { this.clips.add({ root: src.root ?? this.assetScene, clips: src.clips }); } catch (e) { console.warn('[render] clips not bound', e); }
+  }
+
+  /**
    * Ghost look for summoned copies (e.g. clones): translucent + colour tint. opacity 1 & tint null = normal.
    * Uses the hit-flash mix for the tint, so flashes still work on top.
    */
@@ -560,6 +576,8 @@ export class FighterView {
     for (const m of this.plates) m.visible = plateOn;
     this.group.updateMatrixWorld(true);
     this.applyPose(this.pose);
+    this.extW = 0;
+    if (this.animV2 && this.clips.count && this.clips.apply(this.anim.ext, dt)) { this.extW = this.clips.weight; this.group.updateMatrixWorld(true); }
     this.strikeAssist(f, alpha);
     this.simChains(dt);
     for (const [l, k] of this.stretchQ) this.applyStretch(l, k);
@@ -806,7 +824,7 @@ export class FighterView {
       if (k > w) { w = k; hb = h; }
     }
     if (!hb || w <= 0) return;
-    w = Math.min(1, w) * a.w;
+    w = Math.min(1, w) * a.w * (1 - 0.5 * this.extW);
     // hitbox far end (minus a bit of the radius so the fist / foot sits inside it), group-local metres
     const fwd = (hb.x + hb.len * 0.8) / 1000;
     this.rootObj.getWorldQuaternion(_qa);
