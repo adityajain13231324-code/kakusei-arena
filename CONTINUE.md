@@ -78,12 +78,16 @@ Each item: previews in `public/characters/previews/` or `public/props/previews/`
 ## 7. When you finish a task
 Commit on `astra/continue`, push, and add a line under "Log" below: date, task, what changed, anything left.
 
-## Current status (2026-11-19, end of cloud chat)
-- `main`: 9 fighters (Kaito, Shiori, Ren, Goro + crossover Gojo, Naruto, Zoro, Luffy, Eren — crossover use grey mannequin until owner drops licensed models in `public/characters/<id>/`), Soul Realm framework + 5 crossover realms (visuals + music), fightkaro-style UI with CROSSOVER row, motion pass, guard crush, OTG, CPU AI, online rollback, QA fixes. Astra's Mika/Lyra/Kitsu merged (not playable yet).
-- Branch `claude-wip-3`: UNFINISHED balance pass + Soul Realms for the original 4 (stopped mid-work, typechecks, NOT verified). Run all tests; finish it or drop it.
-- NEXT: `docs/PLAN_V3.md` → "★ NEXT: Polish Pass P8" (animation v2, compact HUD, sound v2 with real SFX + voices, graphics settings, feel, ship to Vercel). Meshy: sign in at meshy.ai in the browser you use with Claude (credits per model; only original assets — no likenesses of the licensed characters).
+## Current status (2026-11-20, Claude Code)
+- Branch `claude/wip3-merge` (pushed, = `main` + everything below; PR into `main` when the owner has play-tested): claude-wip-3 finished (Soul Realms for Kaito/Shiori/Ren/Goro: worlds, music, UI, VFX, veil/stone-skin/burn looks; balance re-run, Luffy HP 990), P8 compact HUD + graphics settings, news ticker/commentator REMOVED (owner request), Sound v2 (Kenney CC0 SFX + Kokoro voices layered on the synth, mixer sliders, ducking, stage reverb; owner music/announcer drop-in — see `docs/AUDIO.md`), owner art (painted skies, stage textures, VFX flipbooks — `docs/OWNER-ART.md`), Animation v2 (procedural clip layer + clip drop-in — `docs/ANIMATION.md`; F3 in Training toggles v1/v2).
+- Tests: typecheck, `npm test` 987 + audio 887, `test:ai`, `test:net` 46, build — all green.
+- NOT verified: anything audible (nobody has listened to Sound v2), real-hardware fps (agent browsers were software GL), touch controls on a phone.
+- Open: 5 crossover-vs-crossover cells outside 35–65% (docs/BALANCE.md); bloom toggle has no pass; AA applies after restart; realm worlds ignore realm-sky setting; HUD realm countdown sometimes 1 s low; crossover win clips thin; smear is limb stretch only.
+- Owner is generating music (Google Flow) + announcer (AI Studio): list in `Desktop/Claude/fighting game/AUDIO_TO_GENERATE.md`; drop into `public/music/` and `public/voice/ann_*.mp3` by name.
+- NEXT in P8: Feel (row 6: hit sparks, hitstop curves, camera punch, slow-mo KO, parry flash), then Ship (row 7: Vercel + real devices).
 
 ## Log
 - 2026-11-18 — Claude (lead): all modules on `main`. The v2 renderer, model upgrade and UI polish helpers were STOPPED mid-work and their work committed as-is. State at handoff: typecheck 0 errors, sim tests 256/256, build OK, a live match runs with GLB fighters, HUD, commentator + ticker, crowd (see `docs/screenshots/live-match-v2.png`), no console errors in a smoke test. NOT verified: every pose on bones, awakened swap, Goro plates, menu 3D scenes, phone layout, All 4 models ARE at v2 (manifest version 2, 21–25k tris each) — T3 is a visual quality check, not a rebuild. Match camera looked close/dark in the smoke test — check framing + lighting in T2/T4.
 
 - 2026-11-19 - Astra A1 first batch: Mika, Lyra and rigged Kitsu built with the v2 pipeline; normal/mobile atlases, awakened variants, expression strips and three.js previews validated. Assets only on astra/assets-ch2. A2, A3 and remaining fighters are next.
+- 2026-11-20 — Claude: finished claude-wip-3 and P8 rows 1, 3, 4, 5 on `claude/wip3-merge` (see Current status). Owner's 2D art integrated; character turnarounds are in `tools/assets/refs/` for Astra.
