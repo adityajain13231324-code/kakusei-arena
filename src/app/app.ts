@@ -110,6 +110,12 @@ export class App implements AppApi {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'F1') { e.preventDefault(); this.toggleDebug(); }
       if (e.code === 'F2' && this.session?.mode === 'training') { e.preventDefault(); this.session.showHitboxes = !this.session.showHitboxes; }
+      // Animation v2 vs the v1 pose blender, for comparison (Training, with F1 or F2 debug on)
+      if (e.code === 'F3' && this.session?.mode === 'training' && (this.debugOn || this.session.showHitboxes) && this.renderer) {
+        e.preventDefault();
+        this.renderer.setAnimV2(!this.renderer.animV2On);
+        this.toast(this.renderer.animV2On ? 'Animation: v2 clips (F3)' : 'Animation: v1 poses (F3)');
+      }
     });
     window.addEventListener('gamepadconnected', () => this.toast('Gamepad connected'));
     const unlock = () => { this.safe('audio.unlock', () => this.audio.unlock()); };
@@ -512,7 +518,8 @@ export class App implements AppApi {
       this.debugEl.textContent =
         `fps      ${this.fpsAvg.toFixed(0)}\nframe    ${this.workAvg.toFixed(2)} ms\nsim      ${(s?.simMs ?? 0).toFixed(2)} ms\n` +
         `draws    ${st.drawCalls}\ntris     ${st.triangles}\nframe#   ${s?.state.frame ?? '-'}\nscreen   ${this.ui.top()}\n` +
-        `pads     ${this.input.padCount}${this.warned.size ? '\nwarn     ' + [...this.warned].join(', ') : ''}`;
+        `pads     ${this.input.padCount}${this.warned.size ? '\nwarn     ' + [...this.warned].join(', ') : ''}` +
+        (s && r ? `\nanim     ${r.animV2On ? 'v2 clips' : 'v1 poses'}${s.mode === 'training' ? ' (F3)' : ''}\n         ${r.animDebug()}` : '');
     }
     if (this.ui.top() === 'charselect' || this.ui.top() === 'vs' || this.ui.top() === 'interlude') {
       if ((this.debugT2 -= dt) <= 0) { this.debugT2 = 1.5; refreshPortraits(); }

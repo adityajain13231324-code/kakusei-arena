@@ -86,7 +86,7 @@ export class InputManager {
   private onKeyDown(e: KeyboardEvent): void {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'range' || t.tagName === 'TEXTAREA')) return;
-    if (e.code === 'F1' || e.code === 'F2') return; // app-level
+    if (e.code === 'F1' || e.code === 'F2' || e.code === 'F3') return; // app-level
     if (this.capture) {
       e.preventDefault();
       const cb = this.capture;
