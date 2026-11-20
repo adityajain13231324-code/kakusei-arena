@@ -8,3 +8,5 @@ npm run dev
 ```
 
 Design doc: `docs/KAKUSEI_ARENA_PROJECT_PLAN.md`. Module contracts: `CONTRACTS.md`.
+
+Audio: sample-based Sound v2 (SFX + voices) lives in `public/sfx`, `public/voice`, indexed by `public/audio-manifest.json`; credits and licences in `public/CREDITS-audio.md`; generators in `tools/audio/`.

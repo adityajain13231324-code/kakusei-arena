@@ -1,0 +1,2060 @@
+{
+ "entries": {
+  "announcer_round_1": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_round_1.mp3"
+   ],
+   "texts": [
+    "Round one."
+   ]
+  },
+  "announcer_round_2": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_round_2.mp3"
+   ],
+   "texts": [
+    "Round two."
+   ]
+  },
+  "announcer_round_3": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_round_3.mp3"
+   ],
+   "texts": [
+    "Round three."
+   ]
+  },
+  "announcer_final_round": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_final_round.mp3"
+   ],
+   "texts": [
+    "Final round."
+   ]
+  },
+  "announcer_fight": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_fight.mp3"
+   ],
+   "texts": [
+    "Fight!"
+   ]
+  },
+  "announcer_ko": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_ko.mp3"
+   ],
+   "texts": [
+    "K.O.!"
+   ]
+  },
+  "announcer_double_ko": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_double_ko.mp3"
+   ],
+   "texts": [
+    "Double K.O.!"
+   ]
+  },
+  "announcer_perfect": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_perfect.mp3"
+   ],
+   "texts": [
+    "Perfect!"
+   ]
+  },
+  "announcer_time": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_time.mp3"
+   ],
+   "texts": [
+    "Time!"
+   ]
+  },
+  "announcer_draw_game": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_draw_game.mp3"
+   ],
+   "texts": [
+    "Draw game."
+   ]
+  },
+  "announcer_p1_wins": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_p1_wins.mp3"
+   ],
+   "texts": [
+    "Player one wins."
+   ]
+  },
+  "announcer_p2_wins": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_p2_wins.mp3"
+   ],
+   "texts": [
+    "Player two wins."
+   ]
+  },
+  "announcer_you_win": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_you_win.mp3"
+   ],
+   "texts": [
+    "You win!"
+   ]
+  },
+  "announcer_you_lose": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_you_lose.mp3"
+   ],
+   "texts": [
+    "You lose."
+   ]
+  },
+  "announcer_counter": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_counter.mp3"
+   ],
+   "texts": [
+    "Counter!"
+   ]
+  },
+  "announcer_guard_crush": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_guard_crush.mp3"
+   ],
+   "texts": [
+    "Guard crush!"
+   ]
+  },
+  "announcer_awakening": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_awakening.mp3"
+   ],
+   "texts": [
+    "Awakening!"
+   ]
+  },
+  "announcer_soul_realm": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_soul_realm.mp3"
+   ],
+   "texts": [
+    "Soul Realm!"
+   ]
+  },
+  "announcer_domain_expansion": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_domain_expansion.mp3"
+   ],
+   "texts": [
+    "Domain expansion!"
+   ]
+  },
+  "announcer_realm_clash": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_realm_clash.mp3"
+   ],
+   "texts": [
+    "Realm clash!"
+   ]
+  },
+  "announcer_ready": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_ready.mp3"
+   ],
+   "texts": [
+    "Ready?"
+   ]
+  },
+  "announcer_wins": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_wins.mp3"
+   ],
+   "texts": [
+    "Wins!"
+   ]
+  },
+  "announcer_name_kaito": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_kaito.mp3"
+   ],
+   "texts": [
+    "Kaito."
+   ]
+  },
+  "announcer_win_kaito": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_kaito.mp3"
+   ],
+   "texts": [
+    "Kaito wins!"
+   ]
+  },
+  "announcer_name_shiori": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_shiori.mp3"
+   ],
+   "texts": [
+    "Shiori."
+   ]
+  },
+  "announcer_win_shiori": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_shiori.mp3"
+   ],
+   "texts": [
+    "Shiori wins!"
+   ]
+  },
+  "announcer_name_ren": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_ren.mp3"
+   ],
+   "texts": [
+    "Ren."
+   ]
+  },
+  "announcer_win_ren": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_ren.mp3"
+   ],
+   "texts": [
+    "Ren wins!"
+   ]
+  },
+  "announcer_name_goro": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_goro.mp3"
+   ],
+   "texts": [
+    "Goro."
+   ]
+  },
+  "announcer_win_goro": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_goro.mp3"
+   ],
+   "texts": [
+    "Goro wins!"
+   ]
+  },
+  "announcer_name_gojo": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_gojo.mp3"
+   ],
+   "texts": [
+    "Gojo."
+   ]
+  },
+  "announcer_win_gojo": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_gojo.mp3"
+   ],
+   "texts": [
+    "Gojo wins!"
+   ]
+  },
+  "announcer_name_naruto": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_naruto.mp3"
+   ],
+   "texts": [
+    "Naruto."
+   ]
+  },
+  "announcer_win_naruto": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_naruto.mp3"
+   ],
+   "texts": [
+    "Naruto wins!"
+   ]
+  },
+  "announcer_name_zoro": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_zoro.mp3"
+   ],
+   "texts": [
+    "Zoro."
+   ]
+  },
+  "announcer_win_zoro": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_zoro.mp3"
+   ],
+   "texts": [
+    "Zoro wins!"
+   ]
+  },
+  "announcer_name_luffy": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_luffy.mp3"
+   ],
+   "texts": [
+    "Luffy."
+   ]
+  },
+  "announcer_win_luffy": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_luffy.mp3"
+   ],
+   "texts": [
+    "Luffy wins!"
+   ]
+  },
+  "announcer_name_eren": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_name_eren.mp3"
+   ],
+   "texts": [
+    "Eren."
+   ]
+  },
+  "announcer_win_eren": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "announcer",
+   "line_type": "announcer",
+   "files": [
+    "voice/announcer_win_eren.mp3"
+   ],
+   "texts": [
+    "Eren wins!"
+   ]
+  },
+  "voice_kaito_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "kaito",
+   "line_type": "intro",
+   "files": [
+    "voice/kaito_intro_0.mp3",
+    "voice/kaito_intro_1.mp3"
+   ],
+   "texts": [
+    "Time to heat things up!",
+    "You're not ready for me!"
+   ]
+  },
+  "voice_kaito_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "kaito",
+   "line_type": "win",
+   "files": [
+    "voice/kaito_win_0.mp3",
+    "voice/kaito_win_1.mp3"
+   ],
+   "texts": [
+    "That's how it's done!",
+    "Burned out already?"
+   ]
+  },
+  "voice_kaito_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "kaito",
+   "line_type": "attack",
+   "files": [
+    "voice/kaito_attack_0.mp3",
+    "voice/kaito_attack_1.mp3",
+    "voice/kaito_attack_2.mp3",
+    "voice/kaito_attack_3.mp3",
+    "voice/kaito_attack_4.mp3",
+    "voice/kaito_attack_5.mp3",
+    "voice/kaito_attack_6.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Hyah!",
+    "Take this!",
+    "Burn!",
+    "Haaa!",
+    "Here I come!",
+    "Yaah!"
+   ]
+  },
+  "voice_kaito_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "kaito",
+   "line_type": "hurt",
+   "files": [
+    "voice/kaito_hurt_0.mp3",
+    "voice/kaito_hurt_1.mp3",
+    "voice/kaito_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh!",
+    "Argh!",
+    "Gah!"
+   ]
+  },
+  "voice_kaito_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "kaito",
+   "line_type": "ko",
+   "files": [
+    "voice/kaito_ko_0.mp3",
+    "voice/kaito_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaaagh!",
+    "Noooo!"
+   ]
+  },
+  "voice_kaito_special_phoenix_cannon": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "kaito",
+   "line_type": "special",
+   "files": [
+    "voice/kaito_special_phoenix_cannon.mp3"
+   ],
+   "texts": [
+    "Phoenix Cannon!"
+   ]
+  },
+  "voice_kaito_special_rising_phoenix": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "kaito",
+   "line_type": "special",
+   "files": [
+    "voice/kaito_special_rising_phoenix.mp3"
+   ],
+   "texts": [
+    "Rising Phoenix!"
+   ]
+  },
+  "voice_kaito_special_blaze_knuckle": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "kaito",
+   "line_type": "special",
+   "files": [
+    "voice/kaito_special_blaze_knuckle.mp3"
+   ],
+   "texts": [
+    "Blaze Knuckle!"
+   ]
+  },
+  "voice_kaito_special_homura_shot": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "kaito",
+   "line_type": "special",
+   "files": [
+    "voice/kaito_special_homura_shot.mp3"
+   ],
+   "texts": [
+    "Homura Shot!"
+   ]
+  },
+  "voice_kaito_ultimate_hundred_sun_barrage": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "kaito",
+   "line_type": "ultimate",
+   "files": [
+    "voice/kaito_ultimate_hundred_sun_barrage.mp3"
+   ],
+   "texts": [
+    "Hundred Sun Barrage!"
+   ]
+  },
+  "voice_kaito_ultimate_crimson_sun_barrage": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "kaito",
+   "line_type": "ultimate",
+   "files": [
+    "voice/kaito_ultimate_crimson_sun_barrage.mp3"
+   ],
+   "texts": [
+    "Crimson Sun Barrage!"
+   ]
+  },
+  "voice_kaito_realm_sun_forge": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "kaito",
+   "line_type": "realm",
+   "files": [
+    "voice/kaito_realm_sun_forge.mp3"
+   ],
+   "texts": [
+    "Sun Forge!"
+   ]
+  },
+  "voice_shiori_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "shiori",
+   "line_type": "intro",
+   "files": [
+    "voice/shiori_intro_0.mp3",
+    "voice/shiori_intro_1.mp3"
+   ],
+   "texts": [
+    "I will end this quietly.",
+    "The shadows are with me."
+   ]
+  },
+  "voice_shiori_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "shiori",
+   "line_type": "win",
+   "files": [
+    "voice/shiori_win_0.mp3",
+    "voice/shiori_win_1.mp3"
+   ],
+   "texts": [
+    "It is over.",
+    "Rest now."
+   ]
+  },
+  "voice_shiori_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "shiori",
+   "line_type": "attack",
+   "files": [
+    "voice/shiori_attack_0.mp3",
+    "voice/shiori_attack_1.mp3",
+    "voice/shiori_attack_2.mp3",
+    "voice/shiori_attack_3.mp3",
+    "voice/shiori_attack_4.mp3",
+    "voice/shiori_attack_5.mp3",
+    "voice/shiori_attack_6.mp3"
+   ],
+   "texts": [
+    "Hah.",
+    "Hyah!",
+    "Hup!",
+    "Ha!",
+    "Yah!",
+    "Gone.",
+    "Haa!"
+   ]
+  },
+  "voice_shiori_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "shiori",
+   "line_type": "hurt",
+   "files": [
+    "voice/shiori_hurt_0.mp3",
+    "voice/shiori_hurt_1.mp3",
+    "voice/shiori_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh.",
+    "Nngh!",
+    "Ah!"
+   ]
+  },
+  "voice_shiori_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "shiori",
+   "line_type": "ko",
+   "files": [
+    "voice/shiori_ko_0.mp3",
+    "voice/shiori_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaah!",
+    "Ahh..."
+   ]
+  },
+  "voice_shiori_special_shadow_stitch": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "shiori",
+   "line_type": "special",
+   "files": [
+    "voice/shiori_special_shadow_stitch.mp3"
+   ],
+   "texts": [
+    "Shadow Stitch!"
+   ]
+  },
+  "voice_shiori_special_smoke_swap": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "shiori",
+   "line_type": "special",
+   "files": [
+    "voice/shiori_special_smoke_swap.mp3"
+   ],
+   "texts": [
+    "Smoke Swap!"
+   ]
+  },
+  "voice_shiori_special_crow_dive": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "shiori",
+   "line_type": "special",
+   "files": [
+    "voice/shiori_special_crow_dive.mp3"
+   ],
+   "texts": [
+    "Crow Dive!"
+   ]
+  },
+  "voice_shiori_special_moonless_fan": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "shiori",
+   "line_type": "special",
+   "files": [
+    "voice/shiori_special_moonless_fan.mp3"
+   ],
+   "texts": [
+    "Moonless Fan!"
+   ]
+  },
+  "voice_shiori_ultimate_night_without_moon": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "shiori",
+   "line_type": "ultimate",
+   "files": [
+    "voice/shiori_ultimate_night_without_moon.mp3"
+   ],
+   "texts": [
+    "Night Without Moon!"
+   ]
+  },
+  "voice_shiori_ultimate_moonless_night": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "shiori",
+   "line_type": "ultimate",
+   "files": [
+    "voice/shiori_ultimate_moonless_night.mp3"
+   ],
+   "texts": [
+    "Moonless Night!"
+   ]
+  },
+  "voice_shiori_realm_moonless_void": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "shiori",
+   "line_type": "realm",
+   "files": [
+    "voice/shiori_realm_moonless_void.mp3"
+   ],
+   "texts": [
+    "Moonless Void!"
+   ]
+  },
+  "voice_ren_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "ren",
+   "line_type": "intro",
+   "files": [
+    "voice/ren_intro_0.mp3",
+    "voice/ren_intro_1.mp3"
+   ],
+   "texts": [
+    "Come.",
+    "Draw your blade."
+   ]
+  },
+  "voice_ren_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "ren",
+   "line_type": "win",
+   "files": [
+    "voice/ren_win_0.mp3",
+    "voice/ren_win_1.mp3"
+   ],
+   "texts": [
+    "Too slow.",
+    "Done."
+   ]
+  },
+  "voice_ren_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "ren",
+   "line_type": "attack",
+   "files": [
+    "voice/ren_attack_0.mp3",
+    "voice/ren_attack_1.mp3",
+    "voice/ren_attack_2.mp3",
+    "voice/ren_attack_3.mp3",
+    "voice/ren_attack_4.mp3",
+    "voice/ren_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Hup!",
+    "Ha!",
+    "Hyah!",
+    "Yah!",
+    "Haa!"
+   ]
+  },
+  "voice_ren_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "ren",
+   "line_type": "hurt",
+   "files": [
+    "voice/ren_hurt_0.mp3",
+    "voice/ren_hurt_1.mp3",
+    "voice/ren_hurt_2.mp3"
+   ],
+   "texts": [
+    "Tch!",
+    "Ugh.",
+    "Hngh!"
+   ]
+  },
+  "voice_ren_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "ren",
+   "line_type": "ko",
+   "files": [
+    "voice/ren_ko_0.mp3",
+    "voice/ren_ko_1.mp3"
+   ],
+   "texts": [
+    "Gaaah!",
+    "Ahh!"
+   ]
+  },
+  "voice_ren_special_quick_draw": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "ren",
+   "line_type": "special",
+   "files": [
+    "voice/ren_special_quick_draw.mp3"
+   ],
+   "texts": [
+    "Quick Draw!"
+   ]
+  },
+  "voice_ren_special_falling_petal": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "ren",
+   "line_type": "special",
+   "files": [
+    "voice/ren_special_falling_petal.mp3"
+   ],
+   "texts": [
+    "Falling Petal!"
+   ]
+  },
+  "voice_ren_special_moon_step": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "ren",
+   "line_type": "special",
+   "files": [
+    "voice/ren_special_moon_step.mp3"
+   ],
+   "texts": [
+    "Moon Step!"
+   ]
+  },
+  "voice_ren_special_moonlight_severance": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "ren",
+   "line_type": "special",
+   "files": [
+    "voice/ren_special_moonlight_severance.mp3"
+   ],
+   "texts": [
+    "Moonlight Severance!"
+   ]
+  },
+  "voice_ren_ultimate_thousand_petal_severance": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "ren",
+   "line_type": "ultimate",
+   "files": [
+    "voice/ren_ultimate_thousand_petal_severance.mp3"
+   ],
+   "texts": [
+    "Thousand Petal Severance!"
+   ]
+  },
+  "voice_ren_ultimate_silent_moon_requiem": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "ren",
+   "line_type": "ultimate",
+   "files": [
+    "voice/ren_ultimate_silent_moon_requiem.mp3"
+   ],
+   "texts": [
+    "Silent Moon Requiem!"
+   ]
+  },
+  "voice_ren_realm_petal_storm_dojo": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "ren",
+   "line_type": "realm",
+   "files": [
+    "voice/ren_realm_petal_storm_dojo.mp3"
+   ],
+   "texts": [
+    "Petal Storm Dojo!"
+   ]
+  },
+  "voice_goro_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "goro",
+   "line_type": "intro",
+   "files": [
+    "voice/goro_intro_0.mp3",
+    "voice/goro_intro_1.mp3"
+   ],
+   "texts": [
+    "Stand before the mountain!",
+    "Come, little one!"
+   ]
+  },
+  "voice_goro_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "goro",
+   "line_type": "win",
+   "files": [
+    "voice/goro_win_0.mp3",
+    "voice/goro_win_1.mp3"
+   ],
+   "texts": [
+    "The mountain does not fall!",
+    "Crushed!"
+   ]
+  },
+  "voice_goro_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "goro",
+   "line_type": "attack",
+   "files": [
+    "voice/goro_attack_0.mp3",
+    "voice/goro_attack_1.mp3",
+    "voice/goro_attack_2.mp3",
+    "voice/goro_attack_3.mp3",
+    "voice/goro_attack_4.mp3",
+    "voice/goro_attack_5.mp3"
+   ],
+   "texts": [
+    "Hrraah!",
+    "Raaah!",
+    "Smash!",
+    "Hooah!",
+    "Get over here!",
+    "Haah!"
+   ]
+  },
+  "voice_goro_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "goro",
+   "line_type": "hurt",
+   "files": [
+    "voice/goro_hurt_0.mp3",
+    "voice/goro_hurt_1.mp3",
+    "voice/goro_hurt_2.mp3"
+   ],
+   "texts": [
+    "Uhh!",
+    "Grr!",
+    "Ugh!"
+   ]
+  },
+  "voice_goro_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "goro",
+   "line_type": "ko",
+   "files": [
+    "voice/goro_ko_0.mp3",
+    "voice/goro_ko_1.mp3"
+   ],
+   "texts": [
+    "Raaaargh!",
+    "Aaaargh!"
+   ]
+  },
+  "voice_goro_special_earthsplitter": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "goro",
+   "line_type": "special",
+   "files": [
+    "voice/goro_special_earthsplitter.mp3"
+   ],
+   "texts": [
+    "Earthsplitter!"
+   ]
+  },
+  "voice_goro_special_avalanche_charge": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "goro",
+   "line_type": "special",
+   "files": [
+    "voice/goro_special_avalanche_charge.mp3"
+   ],
+   "texts": [
+    "Avalanche Charge!"
+   ]
+  },
+  "voice_goro_special_titan_roar": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "goro",
+   "line_type": "special",
+   "files": [
+    "voice/goro_special_titan_roar.mp3"
+   ],
+   "texts": [
+    "Titan Roar!"
+   ]
+  },
+  "voice_goro_special_titan_quake": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "goro",
+   "line_type": "special",
+   "files": [
+    "voice/goro_special_titan_quake.mp3"
+   ],
+   "texts": [
+    "Titan Quake!"
+   ]
+  },
+  "voice_goro_ultimate_tectonic_suplex": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "goro",
+   "line_type": "ultimate",
+   "files": [
+    "voice/goro_ultimate_tectonic_suplex.mp3"
+   ],
+   "texts": [
+    "Tectonic Suplex!"
+   ]
+  },
+  "voice_goro_ultimate_continental_drop": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "goro",
+   "line_type": "ultimate",
+   "files": [
+    "voice/goro_ultimate_continental_drop.mp3"
+   ],
+   "texts": [
+    "Continental Drop!"
+   ]
+  },
+  "voice_goro_realm_mountain_temple": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "goro",
+   "line_type": "realm",
+   "files": [
+    "voice/goro_realm_mountain_temple.mp3"
+   ],
+   "texts": [
+    "Mountain Temple!"
+   ]
+  },
+  "voice_gojo_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "gojo",
+   "line_type": "intro",
+   "files": [
+    "voice/gojo_intro_0.mp3",
+    "voice/gojo_intro_1.mp3"
+   ],
+   "texts": [
+    "This will be easy.",
+    "Let's have some fun."
+   ]
+  },
+  "voice_gojo_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "gojo",
+   "line_type": "win",
+   "files": [
+    "voice/gojo_win_0.mp3",
+    "voice/gojo_win_1.mp3"
+   ],
+   "texts": [
+    "Not even close.",
+    "Better luck next time."
+   ]
+  },
+  "voice_gojo_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "gojo",
+   "line_type": "attack",
+   "files": [
+    "voice/gojo_attack_0.mp3",
+    "voice/gojo_attack_1.mp3",
+    "voice/gojo_attack_2.mp3",
+    "voice/gojo_attack_3.mp3",
+    "voice/gojo_attack_4.mp3",
+    "voice/gojo_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Heh!",
+    "Here!",
+    "Take this!",
+    "Hyah!",
+    "Haa!"
+   ]
+  },
+  "voice_gojo_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "gojo",
+   "line_type": "hurt",
+   "files": [
+    "voice/gojo_hurt_0.mp3",
+    "voice/gojo_hurt_1.mp3",
+    "voice/gojo_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh!",
+    "Tch!",
+    "Gah!"
+   ]
+  },
+  "voice_gojo_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "gojo",
+   "line_type": "ko",
+   "files": [
+    "voice/gojo_ko_0.mp3",
+    "voice/gojo_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaagh!",
+    "Ahh!"
+   ]
+  },
+  "voice_gojo_special_blue": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "gojo",
+   "line_type": "special",
+   "files": [
+    "voice/gojo_special_blue.mp3"
+   ],
+   "texts": [
+    "Blue!"
+   ]
+  },
+  "voice_gojo_special_red": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "gojo",
+   "line_type": "special",
+   "files": [
+    "voice/gojo_special_red.mp3"
+   ],
+   "texts": [
+    "Red!"
+   ]
+  },
+  "voice_gojo_special_blink": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "gojo",
+   "line_type": "special",
+   "files": [
+    "voice/gojo_special_blink.mp3"
+   ],
+   "texts": [
+    "Blink!"
+   ]
+  },
+  "voice_gojo_special_six_eyes_counter": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "gojo",
+   "line_type": "special",
+   "files": [
+    "voice/gojo_special_six_eyes_counter.mp3"
+   ],
+   "texts": [
+    "Six Eyes Counter!"
+   ]
+  },
+  "voice_gojo_ultimate_hollow_purple": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "gojo",
+   "line_type": "ultimate",
+   "files": [
+    "voice/gojo_ultimate_hollow_purple.mp3"
+   ],
+   "texts": [
+    "Hollow Purple!"
+   ]
+  },
+  "voice_gojo_ultimate_maximum_output_blue": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "gojo",
+   "line_type": "ultimate",
+   "files": [
+    "voice/gojo_ultimate_maximum_output_blue.mp3"
+   ],
+   "texts": [
+    "Maximum Output: Blue!"
+   ]
+  },
+  "voice_gojo_realm_domain_expansion_infinite_void": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "gojo",
+   "line_type": "realm",
+   "files": [
+    "voice/gojo_realm_domain_expansion_infinite_void.mp3"
+   ],
+   "texts": [
+    "Domain Expansion: Infinite Void!"
+   ]
+  },
+  "voice_naruto_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "naruto",
+   "line_type": "intro",
+   "files": [
+    "voice/naruto_intro_0.mp3",
+    "voice/naruto_intro_1.mp3"
+   ],
+   "texts": [
+    "Let's go!",
+    "Here I come!"
+   ]
+  },
+  "voice_naruto_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "naruto",
+   "line_type": "win",
+   "files": [
+    "voice/naruto_win_0.mp3",
+    "voice/naruto_win_1.mp3"
+   ],
+   "texts": [
+    "I did it!",
+    "Yes! We won!"
+   ]
+  },
+  "voice_naruto_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "naruto",
+   "line_type": "attack",
+   "files": [
+    "voice/naruto_attack_0.mp3",
+    "voice/naruto_attack_1.mp3",
+    "voice/naruto_attack_2.mp3",
+    "voice/naruto_attack_3.mp3",
+    "voice/naruto_attack_4.mp3",
+    "voice/naruto_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Hyah!",
+    "Take this!",
+    "Yaaah!",
+    "Go!",
+    "Haa!"
+   ]
+  },
+  "voice_naruto_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "naruto",
+   "line_type": "hurt",
+   "files": [
+    "voice/naruto_hurt_0.mp3",
+    "voice/naruto_hurt_1.mp3",
+    "voice/naruto_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh!",
+    "Argh!",
+    "Gah!"
+   ]
+  },
+  "voice_naruto_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "naruto",
+   "line_type": "ko",
+   "files": [
+    "voice/naruto_ko_0.mp3",
+    "voice/naruto_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaaagh!",
+    "Noooo!"
+   ]
+  },
+  "voice_naruto_special_rasengan": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "naruto",
+   "line_type": "special",
+   "files": [
+    "voice/naruto_special_rasengan.mp3"
+   ],
+   "texts": [
+    "Rasengan!"
+   ]
+  },
+  "voice_naruto_special_shadow_clone_jutsu": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "naruto",
+   "line_type": "special",
+   "files": [
+    "voice/naruto_special_shadow_clone_jutsu.mp3"
+   ],
+   "texts": [
+    "Shadow Clone Jutsu!"
+   ]
+  },
+  "voice_naruto_special_clone_rush": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "naruto",
+   "line_type": "special",
+   "files": [
+    "voice/naruto_special_clone_rush.mp3"
+   ],
+   "texts": [
+    "Clone Rush!"
+   ]
+  },
+  "voice_naruto_special_rasen_shuriken": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "naruto",
+   "line_type": "special",
+   "files": [
+    "voice/naruto_special_rasen_shuriken.mp3"
+   ],
+   "texts": [
+    "Rasen-Shuriken!"
+   ]
+  },
+  "voice_naruto_ultimate_rasengan_barrage": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "naruto",
+   "line_type": "ultimate",
+   "files": [
+    "voice/naruto_ultimate_rasengan_barrage.mp3"
+   ],
+   "texts": [
+    "Rasengan Barrage!"
+   ]
+  },
+  "voice_naruto_realm_tailed_beast_bomb": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "naruto",
+   "line_type": "realm",
+   "files": [
+    "voice/naruto_realm_tailed_beast_bomb.mp3"
+   ],
+   "texts": [
+    "Tailed Beast Bomb!"
+   ]
+  },
+  "voice_zoro_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "zoro",
+   "line_type": "intro",
+   "files": [
+    "voice/zoro_intro_0.mp3",
+    "voice/zoro_intro_1.mp3"
+   ],
+   "texts": [
+    "Let's do this.",
+    "Bring it."
+   ]
+  },
+  "voice_zoro_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "zoro",
+   "line_type": "win",
+   "files": [
+    "voice/zoro_win_0.mp3",
+    "voice/zoro_win_1.mp3"
+   ],
+   "texts": [
+    "Is that all?",
+    "Hmph. Easy."
+   ]
+  },
+  "voice_zoro_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "zoro",
+   "line_type": "attack",
+   "files": [
+    "voice/zoro_attack_0.mp3",
+    "voice/zoro_attack_1.mp3",
+    "voice/zoro_attack_2.mp3",
+    "voice/zoro_attack_3.mp3",
+    "voice/zoro_attack_4.mp3",
+    "voice/zoro_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Hyah!",
+    "Haaa!",
+    "Hup!",
+    "Ha!",
+    "Yah!"
+   ]
+  },
+  "voice_zoro_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "zoro",
+   "line_type": "hurt",
+   "files": [
+    "voice/zoro_hurt_0.mp3",
+    "voice/zoro_hurt_1.mp3",
+    "voice/zoro_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh!",
+    "Tch!",
+    "Gah!"
+   ]
+  },
+  "voice_zoro_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "zoro",
+   "line_type": "ko",
+   "files": [
+    "voice/zoro_ko_0.mp3",
+    "voice/zoro_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaagh!",
+    "Gaaah!"
+   ]
+  },
+  "voice_zoro_special_oni_giri": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "zoro",
+   "line_type": "special",
+   "files": [
+    "voice/zoro_special_oni_giri.mp3"
+   ],
+   "texts": [
+    "Oni Giri!"
+   ]
+  },
+  "voice_zoro_special_tatsumaki": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "zoro",
+   "line_type": "special",
+   "files": [
+    "voice/zoro_special_tatsumaki.mp3"
+   ],
+   "texts": [
+    "Tatsumaki!"
+   ]
+  },
+  "voice_zoro_special_pound_cannon": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "zoro",
+   "line_type": "special",
+   "files": [
+    "voice/zoro_special_pound_cannon.mp3"
+   ],
+   "texts": [
+    "Pound Cannon!"
+   ]
+  },
+  "voice_zoro_special_lion_s_song": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "zoro",
+   "line_type": "special",
+   "files": [
+    "voice/zoro_special_lion_s_song.mp3"
+   ],
+   "texts": [
+    "Lion's Song!"
+   ]
+  },
+  "voice_zoro_ultimate_asura_ichibugin": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "zoro",
+   "line_type": "ultimate",
+   "files": [
+    "voice/zoro_ultimate_asura_ichibugin.mp3"
+   ],
+   "texts": [
+    "Asura: Ichibugin!"
+   ]
+  },
+  "voice_zoro_realm_king_of_hell": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "zoro",
+   "line_type": "realm",
+   "files": [
+    "voice/zoro_realm_king_of_hell.mp3"
+   ],
+   "texts": [
+    "King of Hell!"
+   ]
+  },
+  "voice_luffy_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "luffy",
+   "line_type": "intro",
+   "files": [
+    "voice/luffy_intro_0.mp3",
+    "voice/luffy_intro_1.mp3"
+   ],
+   "texts": [
+    "Let's have a fight!",
+    "Here I come!"
+   ]
+  },
+  "voice_luffy_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "luffy",
+   "line_type": "win",
+   "files": [
+    "voice/luffy_win_0.mp3",
+    "voice/luffy_win_1.mp3"
+   ],
+   "texts": [
+    "Yeah! I won!",
+    "Ha ha ha! That was fun!"
+   ]
+  },
+  "voice_luffy_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "luffy",
+   "line_type": "attack",
+   "files": [
+    "voice/luffy_attack_0.mp3",
+    "voice/luffy_attack_1.mp3",
+    "voice/luffy_attack_2.mp3",
+    "voice/luffy_attack_3.mp3",
+    "voice/luffy_attack_4.mp3",
+    "voice/luffy_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Yaah!",
+    "Take this!",
+    "Hyaa!",
+    "Rah!",
+    "Hoo!"
+   ]
+  },
+  "voice_luffy_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "luffy",
+   "line_type": "hurt",
+   "files": [
+    "voice/luffy_hurt_0.mp3",
+    "voice/luffy_hurt_1.mp3",
+    "voice/luffy_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ow!",
+    "Ugh!",
+    "Gah!"
+   ]
+  },
+  "voice_luffy_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "luffy",
+   "line_type": "ko",
+   "files": [
+    "voice/luffy_ko_0.mp3",
+    "voice/luffy_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaaagh!",
+    "Noooo!"
+   ]
+  },
+  "voice_luffy_special_gum_gum_pistol": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "luffy",
+   "line_type": "special",
+   "files": [
+    "voice/luffy_special_gum_gum_pistol.mp3"
+   ],
+   "texts": [
+    "Gum-Gum Pistol!"
+   ]
+  },
+  "voice_luffy_special_gum_gum_gatling": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "luffy",
+   "line_type": "special",
+   "files": [
+    "voice/luffy_special_gum_gum_gatling.mp3"
+   ],
+   "texts": [
+    "Gum-Gum Gatling!"
+   ]
+  },
+  "voice_luffy_special_gum_gum_rocket": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "luffy",
+   "line_type": "special",
+   "files": [
+    "voice/luffy_special_gum_gum_rocket.mp3"
+   ],
+   "texts": [
+    "Gum-Gum Rocket!"
+   ]
+  },
+  "voice_luffy_special_gum_gum_bell": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "luffy",
+   "line_type": "special",
+   "files": [
+    "voice/luffy_special_gum_gum_bell.mp3"
+   ],
+   "texts": [
+    "Gum-Gum Bell!"
+   ]
+  },
+  "voice_luffy_ultimate_king_kong_gun": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "luffy",
+   "line_type": "ultimate",
+   "files": [
+    "voice/luffy_ultimate_king_kong_gun.mp3"
+   ],
+   "texts": [
+    "King Kong Gun!"
+   ]
+  },
+  "voice_luffy_realm_gear_fifth": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "luffy",
+   "line_type": "realm",
+   "files": [
+    "voice/luffy_realm_gear_fifth.mp3"
+   ],
+   "texts": [
+    "Gear Fifth!"
+   ]
+  },
+  "voice_eren_intro": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "eren",
+   "line_type": "intro",
+   "files": [
+    "voice/eren_intro_0.mp3",
+    "voice/eren_intro_1.mp3"
+   ],
+   "texts": [
+    "I won't back down.",
+    "I'll fight to the end."
+   ]
+  },
+  "voice_eren_win": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "eren",
+   "line_type": "win",
+   "files": [
+    "voice/eren_win_0.mp3",
+    "voice/eren_win_1.mp3"
+   ],
+   "texts": [
+    "It's finished.",
+    "I did it."
+   ]
+  },
+  "voice_eren_attack": {
+   "category": "voice",
+   "gain": 0.75,
+   "fighter": "eren",
+   "line_type": "attack",
+   "files": [
+    "voice/eren_attack_0.mp3",
+    "voice/eren_attack_1.mp3",
+    "voice/eren_attack_2.mp3",
+    "voice/eren_attack_3.mp3",
+    "voice/eren_attack_4.mp3",
+    "voice/eren_attack_5.mp3"
+   ],
+   "texts": [
+    "Hah!",
+    "Haaa!",
+    "Raaah!",
+    "Hyah!",
+    "Yaah!",
+    "Hup!"
+   ]
+  },
+  "voice_eren_hurt": {
+   "category": "voice",
+   "gain": 0.8,
+   "fighter": "eren",
+   "line_type": "hurt",
+   "files": [
+    "voice/eren_hurt_0.mp3",
+    "voice/eren_hurt_1.mp3",
+    "voice/eren_hurt_2.mp3"
+   ],
+   "texts": [
+    "Ugh!",
+    "Gah!",
+    "Argh!"
+   ]
+  },
+  "voice_eren_ko": {
+   "category": "voice",
+   "gain": 0.9,
+   "fighter": "eren",
+   "line_type": "ko",
+   "files": [
+    "voice/eren_ko_0.mp3",
+    "voice/eren_ko_1.mp3"
+   ],
+   "texts": [
+    "Aaaagh!",
+    "Aaargh!"
+   ]
+  },
+  "voice_eren_special_thunder_spear": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "eren",
+   "line_type": "special",
+   "files": [
+    "voice/eren_special_thunder_spear.mp3"
+   ],
+   "texts": [
+    "Thunder Spear!"
+   ]
+  },
+  "voice_eren_special_grapple_dash": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "eren",
+   "line_type": "special",
+   "files": [
+    "voice/eren_special_grapple_dash.mp3"
+   ],
+   "texts": [
+    "Grapple Dash!"
+   ]
+  },
+  "voice_eren_special_hardened_fist": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "eren",
+   "line_type": "special",
+   "files": [
+    "voice/eren_special_hardened_fist.mp3"
+   ],
+   "texts": [
+    "Hardened Fist!"
+   ]
+  },
+  "voice_eren_special_spinning_slash": {
+   "category": "voice",
+   "gain": 0.95,
+   "fighter": "eren",
+   "line_type": "special",
+   "files": [
+    "voice/eren_special_spinning_slash.mp3"
+   ],
+   "texts": [
+    "Spinning Slash!"
+   ]
+  },
+  "voice_eren_ultimate_nape_barrage": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "eren",
+   "line_type": "ultimate",
+   "files": [
+    "voice/eren_ultimate_nape_barrage.mp3"
+   ],
+   "texts": [
+    "Nape Barrage!"
+   ]
+  },
+  "voice_eren_realm_the_paths": {
+   "category": "voice",
+   "gain": 1.0,
+   "fighter": "eren",
+   "line_type": "realm",
+   "files": [
+    "voice/eren_realm_the_paths.mp3"
+   ],
+   "texts": [
+    "The Paths!"
+   ]
+  }
+ },
+ "dropped": [],
+ "flags": [],
+ "blends": {
+  "announcer": {
+   "mix": [
+    [
+     "am_onyx",
+     0.7
+    ],
+    [
+     "am_michael",
+     0.3
+    ]
+   ],
+   "speed": 1.0,
+   "pitch": 1.0
+  },
+  "kaito": {
+   "mix": [
+    [
+     "am_liam",
+     0.6
+    ],
+    [
+     "am_adam",
+     0.4
+    ]
+   ],
+   "speed": 1.08,
+   "pitch": 1.0
+  },
+  "shiori": {
+   "mix": [
+    [
+     "af_nicole",
+     0.6
+    ],
+    [
+     "af_sarah",
+     0.4
+    ]
+   ],
+   "speed": 0.95,
+   "pitch": 1.0
+  },
+  "ren": {
+   "mix": [
+    [
+     "bm_lewis",
+     0.6
+    ],
+    [
+     "bm_daniel",
+     0.4
+    ]
+   ],
+   "speed": 0.92,
+   "pitch": 1.0
+  },
+  "goro": {
+   "mix": [
+    [
+     "am_fenrir",
+     0.5
+    ],
+    [
+     "am_santa",
+     0.5
+    ]
+   ],
+   "speed": 0.88,
+   "pitch": 0.92
+  },
+  "gojo": {
+   "mix": [
+    [
+     "am_echo",
+     0.6
+    ],
+    [
+     "am_michael",
+     0.4
+    ]
+   ],
+   "speed": 1.0,
+   "pitch": 1.0
+  },
+  "naruto": {
+   "mix": [
+    [
+     "am_puck",
+     0.5
+    ],
+    [
+     "am_eric",
+     0.5
+    ]
+   ],
+   "speed": 1.1,
+   "pitch": 1.04
+  },
+  "zoro": {
+   "mix": [
+    [
+     "bm_george",
+     0.6
+    ],
+    [
+     "am_adam",
+     0.4
+    ]
+   ],
+   "speed": 0.95,
+   "pitch": 0.95
+  },
+  "luffy": {
+   "mix": [
+    [
+     "am_puck",
+     0.6
+    ],
+    [
+     "am_eric",
+     0.4
+    ]
+   ],
+   "speed": 1.1,
+   "pitch": 1.07
+  },
+  "eren": {
+   "mix": [
+    [
+     "am_adam",
+     0.6
+    ],
+    [
+     "am_eric",
+     0.4
+    ]
+   ],
+   "speed": 1.0,
+   "pitch": 1.0
+  }
+ }
+}

@@ -1,0 +1,425 @@
+{
+ "hit_light_flesh": {
+  "category": "impact",
+  "gain": 0.7,
+  "files": [
+   "sfx/hit_light_flesh_0.mp3",
+   "sfx/hit_light_flesh_1.mp3",
+   "sfx/hit_light_flesh_2.mp3",
+   "sfx/hit_light_flesh_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_medium_flesh": {
+  "category": "impact",
+  "gain": 0.85,
+  "files": [
+   "sfx/hit_medium_flesh_0.mp3",
+   "sfx/hit_medium_flesh_1.mp3",
+   "sfx/hit_medium_flesh_2.mp3",
+   "sfx/hit_medium_flesh_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_heavy_flesh": {
+  "category": "impact",
+  "gain": 1.0,
+  "files": [
+   "sfx/hit_heavy_flesh_0.mp3",
+   "sfx/hit_heavy_flesh_1.mp3",
+   "sfx/hit_heavy_flesh_2.mp3",
+   "sfx/hit_heavy_flesh_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_light_metal": {
+  "category": "impact",
+  "gain": 0.7,
+  "files": [
+   "sfx/hit_light_metal_0.mp3",
+   "sfx/hit_light_metal_1.mp3",
+   "sfx/hit_light_metal_2.mp3",
+   "sfx/hit_light_metal_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_medium_metal": {
+  "category": "impact",
+  "gain": 0.85,
+  "files": [
+   "sfx/hit_medium_metal_0.mp3",
+   "sfx/hit_medium_metal_1.mp3",
+   "sfx/hit_medium_metal_2.mp3",
+   "sfx/hit_medium_metal_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_heavy_metal": {
+  "category": "impact",
+  "gain": 1.0,
+  "files": [
+   "sfx/hit_heavy_metal_0.mp3",
+   "sfx/hit_heavy_metal_1.mp3",
+   "sfx/hit_heavy_metal_2.mp3",
+   "sfx/hit_heavy_metal_3.mp3"
+  ],
+  "note": ""
+ },
+ "hit_light_stone": {
+  "category": "impact",
+  "gain": 0.75,
+  "files": [
+   "sfx/hit_light_stone_0.mp3",
+   "sfx/hit_light_stone_1.mp3",
+   "sfx/hit_light_stone_2.mp3"
+  ],
+  "note": "layered Kenney mining+punch"
+ },
+ "hit_medium_stone": {
+  "category": "impact",
+  "gain": 0.9,
+  "files": [
+   "sfx/hit_medium_stone_0.mp3",
+   "sfx/hit_medium_stone_1.mp3",
+   "sfx/hit_medium_stone_2.mp3"
+  ],
+  "note": "layered"
+ },
+ "hit_heavy_stone": {
+  "category": "impact",
+  "gain": 1.0,
+  "files": [
+   "sfx/hit_heavy_stone_0.mp3",
+   "sfx/hit_heavy_stone_1.mp3",
+   "sfx/hit_heavy_stone_2.mp3"
+  ],
+  "note": "layered"
+ },
+ "block_light": {
+  "category": "block",
+  "gain": 0.7,
+  "files": [
+   "sfx/block_light_0.mp3",
+   "sfx/block_light_1.mp3",
+   "sfx/block_light_2.mp3"
+  ],
+  "note": ""
+ },
+ "block_medium": {
+  "category": "block",
+  "gain": 0.85,
+  "files": [
+   "sfx/block_medium_0.mp3",
+   "sfx/block_medium_1.mp3",
+   "sfx/block_medium_2.mp3",
+   "sfx/block_medium_3.mp3"
+  ],
+  "note": ""
+ },
+ "block_heavy": {
+  "category": "block",
+  "gain": 1.0,
+  "files": [
+   "sfx/block_heavy_0.mp3",
+   "sfx/block_heavy_1.mp3",
+   "sfx/block_heavy_2.mp3"
+  ],
+  "note": ""
+ },
+ "parry": {
+  "category": "block",
+  "gain": 0.9,
+  "files": [
+   "sfx/parry_0.mp3",
+   "sfx/parry_1.mp3",
+   "sfx/parry_2.mp3",
+   "sfx/parry_3.mp3"
+  ],
+  "note": "bright parry/counter"
+ },
+ "guard_crush": {
+  "category": "block",
+  "gain": 1.0,
+  "files": [
+   "sfx/guard_crush_0.mp3",
+   "sfx/guard_crush_1.mp3",
+   "sfx/guard_crush_2.mp3"
+  ],
+  "note": "glass + heavy plate + thump"
+ },
+ "whoosh_jab": {
+  "category": "whoosh",
+  "gain": 0.6,
+  "files": [
+   "sfx/whoosh_jab_0.mp3",
+   "sfx/whoosh_jab_1.mp3",
+   "sfx/whoosh_jab_2.mp3",
+   "sfx/whoosh_jab_3.mp3"
+  ],
+  "note": "short fast swish for jabs"
+ },
+ "whoosh_punch": {
+  "category": "whoosh",
+  "gain": 0.65,
+  "files": [
+   "sfx/whoosh_punch_0.mp3",
+   "sfx/whoosh_punch_1.mp3",
+   "sfx/whoosh_punch_2.mp3",
+   "sfx/whoosh_punch_3.mp3"
+  ],
+  "note": ""
+ },
+ "whoosh_kick": {
+  "category": "whoosh",
+  "gain": 0.7,
+  "files": [
+   "sfx/whoosh_kick_0.mp3",
+   "sfx/whoosh_kick_1.mp3",
+   "sfx/whoosh_kick_2.mp3",
+   "sfx/whoosh_kick_3.mp3"
+  ],
+  "note": ""
+ },
+ "whoosh_heavy": {
+  "category": "whoosh",
+  "gain": 0.8,
+  "files": [
+   "sfx/whoosh_heavy_0.mp3",
+   "sfx/whoosh_heavy_1.mp3",
+   "sfx/whoosh_heavy_2.mp3",
+   "sfx/whoosh_heavy_3.mp3"
+  ],
+  "note": "heavy limb / grapple"
+ },
+ "whoosh_sword": {
+  "category": "whoosh",
+  "gain": 0.7,
+  "files": [
+   "sfx/whoosh_sword_0.mp3",
+   "sfx/whoosh_sword_1.mp3",
+   "sfx/whoosh_sword_2.mp3",
+   "sfx/whoosh_sword_3.mp3"
+  ],
+  "note": "sword slash"
+ },
+ "whoosh_sword_long": {
+  "category": "whoosh",
+  "gain": 0.75,
+  "files": [
+   "sfx/whoosh_sword_long_0.mp3",
+   "sfx/whoosh_sword_long_1.mp3",
+   "sfx/whoosh_sword_long_2.mp3"
+  ],
+  "note": "long sword / iai"
+ },
+ "foot_concrete": {
+  "category": "foot",
+  "gain": 0.5,
+  "files": [
+   "sfx/foot_concrete_0.mp3",
+   "sfx/foot_concrete_1.mp3",
+   "sfx/foot_concrete_2.mp3",
+   "sfx/foot_concrete_3.mp3",
+   "sfx/foot_concrete_4.mp3"
+  ],
+  "note": "rooftop"
+ },
+ "foot_wood": {
+  "category": "foot",
+  "gain": 0.5,
+  "files": [
+   "sfx/foot_wood_0.mp3",
+   "sfx/foot_wood_1.mp3",
+   "sfx/foot_wood_2.mp3",
+   "sfx/foot_wood_3.mp3",
+   "sfx/foot_wood_4.mp3"
+  ],
+  "note": "shrine floor"
+ },
+ "foot_stone": {
+  "category": "foot",
+  "gain": 0.55,
+  "files": [
+   "sfx/foot_stone_0.mp3",
+   "sfx/foot_stone_1.mp3",
+   "sfx/foot_stone_2.mp3",
+   "sfx/foot_stone_3.mp3"
+  ],
+  "note": "shrine stone; derived from concrete+mining"
+ },
+ "fall_body": {
+  "category": "fall",
+  "gain": 0.9,
+  "files": [
+   "sfx/fall_body_0.mp3",
+   "sfx/fall_body_1.mp3",
+   "sfx/fall_body_2.mp3",
+   "sfx/fall_body_3.mp3"
+  ],
+  "note": "body fall / knockdown"
+ },
+ "fall_knockdown_heavy": {
+  "category": "fall",
+  "gain": 1.0,
+  "files": [
+   "sfx/fall_knockdown_heavy_0.mp3",
+   "sfx/fall_knockdown_heavy_1.mp3",
+   "sfx/fall_knockdown_heavy_2.mp3"
+  ],
+  "note": ""
+ },
+ "cloth": {
+  "category": "cloth",
+  "gain": 0.55,
+  "files": [
+   "sfx/cloth_0.mp3",
+   "sfx/cloth_1.mp3",
+   "sfx/cloth_2.mp3",
+   "sfx/cloth_3.mp3"
+  ],
+  "note": ""
+ },
+ "cloth_belt": {
+  "category": "cloth",
+  "gain": 0.55,
+  "files": [
+   "sfx/cloth_belt_0.mp3",
+   "sfx/cloth_belt_1.mp3",
+   "sfx/cloth_belt_2.mp3"
+  ],
+  "note": ""
+ },
+ "ko_blast": {
+  "category": "impact",
+  "gain": 1.0,
+  "files": [
+   "sfx/ko_blast_0.mp3",
+   "sfx/ko_blast_1.mp3",
+   "sfx/ko_blast_2.mp3"
+  ],
+  "note": "K.O. / ultimate finisher boom"
+ },
+ "fx_awaken": {
+  "category": "fx",
+  "gain": 0.8,
+  "files": [
+   "sfx/fx_awaken_0.mp3",
+   "sfx/fx_awaken_1.mp3",
+   "sfx/fx_awaken_2.mp3"
+  ],
+  "note": "awakening charge"
+ },
+ "ui_hover": {
+  "category": "ui",
+  "gain": 0.5,
+  "files": [
+   "sfx/ui_hover_0.mp3",
+   "sfx/ui_hover_1.mp3",
+   "sfx/ui_hover_2.mp3"
+  ],
+  "note": ""
+ },
+ "ui_select": {
+  "category": "ui",
+  "gain": 0.7,
+  "files": [
+   "sfx/ui_select_0.mp3",
+   "sfx/ui_select_1.mp3",
+   "sfx/ui_select_2.mp3",
+   "sfx/ui_select_3.mp3"
+  ],
+  "note": ""
+ },
+ "ui_back": {
+  "category": "ui",
+  "gain": 0.7,
+  "files": [
+   "sfx/ui_back_0.mp3",
+   "sfx/ui_back_1.mp3",
+   "sfx/ui_back_2.mp3"
+  ],
+  "note": ""
+ },
+ "ui_confirm": {
+  "category": "ui",
+  "gain": 0.8,
+  "files": [
+   "sfx/ui_confirm_0.mp3",
+   "sfx/ui_confirm_1.mp3",
+   "sfx/ui_confirm_2.mp3",
+   "sfx/ui_confirm_3.mp3"
+  ],
+  "note": ""
+ },
+ "ui_error": {
+  "category": "ui",
+  "gain": 0.7,
+  "files": [
+   "sfx/ui_error_0.mp3",
+   "sfx/ui_error_1.mp3",
+   "sfx/ui_error_2.mp3",
+   "sfx/ui_error_3.mp3"
+  ],
+  "note": ""
+ },
+ "ui_slider_tick": {
+  "category": "ui",
+  "gain": 0.4,
+  "files": [
+   "sfx/ui_slider_tick_0.mp3",
+   "sfx/ui_slider_tick_1.mp3",
+   "sfx/ui_slider_tick_2.mp3"
+  ],
+  "note": ""
+ },
+ "ui_toggle": {
+  "category": "ui",
+  "gain": 0.6,
+  "files": [
+   "sfx/ui_toggle_0.mp3",
+   "sfx/ui_toggle_1.mp3",
+   "sfx/ui_toggle_2.mp3"
+  ],
+  "note": ""
+ },
+ "ui_open": {
+  "category": "ui",
+  "gain": 0.6,
+  "files": [
+   "sfx/ui_open_0.mp3",
+   "sfx/ui_open_1.mp3",
+   "sfx/ui_open_2.mp3"
+  ],
+  "note": ""
+ },
+ "crowd_cheer": {
+  "category": "crowd",
+  "gain": 0.8,
+  "files": [
+   "sfx/crowd_cheer_0.mp3",
+   "sfx/crowd_cheer_1.mp3",
+   "sfx/crowd_cheer_2.mp3"
+  ],
+  "note": "synthesized"
+ },
+ "crowd_gasp": {
+  "category": "crowd",
+  "gain": 0.8,
+  "files": [
+   "sfx/crowd_gasp_0.mp3",
+   "sfx/crowd_gasp_1.mp3",
+   "sfx/crowd_gasp_2.mp3"
+  ],
+  "note": "synthesized"
+ },
+ "crowd_boo": {
+  "category": "crowd",
+  "gain": 0.7,
+  "files": [
+   "sfx/crowd_boo_0.mp3",
+   "sfx/crowd_boo_1.mp3",
+   "sfx/crowd_boo_2.mp3"
+  ],
+  "note": "synthesized"
+ }
+}
